@@ -1,29 +1,34 @@
 package com.kamal.jarvis;
 
+import android.Manifest;
 import android.app.Activity;
-import android.os.Bundle;
-import android.content.Intent;
 import android.content.ActivityNotFoundException;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.net.Uri;
+import android.os.Bundle;
+import android.provider.Settings;
 import android.speech.RecognizerIntent;
 import android.speech.tts.TextToSpeech;
-import android.net.Uri;
 import android.view.Gravity;
-import android.view.View;
 import android.graphics.Color;
 import android.graphics.Typeface;
-import android.widget.LinearLayout;
-import android.widget.TextView;
-import android.widget.EditText;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.TextView;
 import android.widget.Toast;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
 
     private static final int VOICE_REQUEST = 1001;
+    private static final int MICROPHONE_PERMISSION = 2001;
 
     private TextView output;
     private EditText commandInput;
@@ -37,80 +42,195 @@ public class MainActivity extends Activity {
         createInterface();
     }
 
+    // =========================
+    // VOICE
+    // =========================
+
     private void createVoice() {
 
         jarvisVoice = new TextToSpeech(this, status -> {
 
             if (status == TextToSpeech.SUCCESS) {
-                jarvisVoice.setLanguage(Locale.getDefault());
+
+                int result = jarvisVoice.setLanguage(
+                        new Locale("ar", "MA")
+                );
+
+                if (result == TextToSpeech.LANG_MISSING_DATA
+                        || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+
+                    jarvisVoice.setLanguage(
+                            Locale.getDefault()
+                    );
+                }
+
                 jarvisVoice.setSpeechRate(0.95f);
             }
-
         });
     }
+
+    // =========================
+    // INTERFACE
+    // =========================
 
     private void createInterface() {
 
         LinearLayout main = new LinearLayout(this);
-        main.setOrientation(LinearLayout.VERTICAL);
-        main.setPadding(30, 40, 30, 25);
-        main.setBackgroundColor(Color.rgb(7, 11, 22));
+
+        main.setOrientation(
+                LinearLayout.VERTICAL
+        );
+
+        main.setPadding(
+                30,
+                40,
+                30,
+                25
+        );
+
+        main.setBackgroundColor(
+                Color.rgb(7, 11, 22)
+        );
+
+        // TITLE
 
         TextView title = new TextView(this);
-        title.setText("KAMAL JARVIS");
-        title.setTextColor(Color.WHITE);
+
+        title.setText(
+                "KAMAL JARVIS"
+        );
+
+        title.setTextColor(
+                Color.WHITE
+        );
+
         title.setTextSize(29);
-        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        title.setGravity(Gravity.CENTER);
-        title.setPadding(0, 10, 0, 10);
+
+        title.setTypeface(
+                Typeface.DEFAULT,
+                Typeface.BOLD
+        );
+
+        title.setGravity(
+                Gravity.CENTER
+        );
+
+        title.setPadding(
+                0,
+                10,
+                0,
+                10
+        );
+
+        // STATUS
 
         TextView status = new TextView(this);
-        status.setText("● JARVIS ONLINE");
-        status.setTextColor(Color.rgb(80, 255, 140));
+
+        status.setText(
+                "● JARVIS ONLINE"
+        );
+
+        status.setTextColor(
+                Color.rgb(80, 255, 140)
+        );
+
         status.setTextSize(16);
-        status.setGravity(Gravity.CENTER);
-        status.setPadding(0, 5, 0, 20);
+
+        status.setGravity(
+                Gravity.CENTER
+        );
+
+        status.setPadding(
+                0,
+                5,
+                0,
+                20
+        );
+
+        // OUTPUT
 
         output = new TextView(this);
+
         output.setText(
-                "JARVIS:\n" +
+                "JARVIS:\n\n" +
                 "مرحبا كمال.\n\n" +
-                "أنا جاهز لاستقبال أوامرك."
+                "أنا JARVIS.\n" +
+                "جاهز لاستقبال أوامرك."
         );
-        output.setTextColor(Color.WHITE);
+
+        output.setTextColor(
+                Color.WHITE
+        );
+
         output.setTextSize(17);
-        output.setPadding(20, 20, 20, 20);
+
+        output.setPadding(
+                20,
+                20,
+                20,
+                20
+        );
 
         ScrollView scroll = new ScrollView(this);
+
         scroll.addView(output);
 
+        // INPUT
+
         commandInput = new EditText(this);
-        commandInput.setHint("اكتب أمرك هنا...");
-        commandInput.setHintTextColor(Color.GRAY);
-        commandInput.setTextColor(Color.WHITE);
+
+        commandInput.setHint(
+                "اكتب أمرك هنا..."
+        );
+
+        commandInput.setHintTextColor(
+                Color.GRAY
+        );
+
+        commandInput.setTextColor(
+                Color.WHITE
+        );
+
         commandInput.setTextSize(16);
+
         commandInput.setSingleLine(true);
 
+        // EXECUTE BUTTON
+
         Button executeButton = new Button(this);
-        executeButton.setText("تنفيذ الأمر");
+
+        executeButton.setText(
+                "تنفيذ الأمر"
+        );
 
         executeButton.setOnClickListener(v -> {
 
-            String command = commandInput
-                    .getText()
-                    .toString()
-                    .trim();
+            String command =
+                    commandInput
+                            .getText()
+                            .toString()
+                            .trim();
 
             if (!command.isEmpty()) {
+
                 executeCommand(command);
             }
 
         });
 
-        Button voiceButton = new Button(this);
-        voiceButton.setText("🎙 التحدث مع JARVIS");
+        // VOICE BUTTON
 
-        voiceButton.setOnClickListener(v -> startVoiceRecognition());
+        Button voiceButton = new Button(this);
+
+        voiceButton.setText(
+                "🎙 التحدث مع JARVIS"
+        );
+
+        voiceButton.setOnClickListener(v ->
+                startVoiceRecognition()
+        );
+
+        // ADD VIEWS
 
         main.addView(title);
         main.addView(status);
@@ -131,253 +251,70 @@ public class MainActivity extends Activity {
         setContentView(main);
     }
 
+    // =========================
+    // COMMAND SYSTEM
+    // =========================
+
     private void executeCommand(String command) {
 
-        String lower = command.toLowerCase(Locale.ROOT);
+        String lower =
+                command
+                        .toLowerCase(
+                                Locale.ROOT
+                        )
+                        .trim();
 
-        addMessage("أنت:\n" + command);
+        addMessage(
+                "أنت:\n" + command
+        );
 
-        if (lower.contains("مرحبا")
-                || lower.contains("سلام")
-                || lower.contains("hello")) {
+        // GREETING
 
-            respond("مرحبا كمال. أنا JARVIS، جاهز لخدمتك.");
+        if (containsAny(
+                lower,
+                "مرحبا",
+                "سلام",
+                "السلام عليكم",
+                "hello",
+                "hi"
+        )) {
 
+            respond(
+                    "مرحبا كمال. أنا JARVIS، جاهز لخدمتك."
+            );
         }
 
-        else if (lower.contains("الوقت")
-                || lower.contains("ساعة")
-                || lower.contains("time")) {
+        // TIME
 
-            java.text.SimpleDateFormat format =
-                    new java.text.SimpleDateFormat(
+        else if (containsAny(
+                lower,
+                "الوقت",
+                "ساعة",
+                "شحال فالوقت",
+                "time"
+        )) {
+
+            SimpleDateFormat format =
+                    new SimpleDateFormat(
                             "HH:mm",
                             Locale.getDefault()
                     );
 
-            String time = format.format(
-                    new java.util.Date()
-            );
-
-            respond("الوقت الآن هو " + time);
-
-        }
-
-        else if (lower.contains("يوتيوب")
-                || lower.contains("youtube")) {
-
-            respond("سأفتح يوتيوب.");
-
-            try {
-
-                Intent intent = new Intent(
-                        Intent.ACTION_VIEW,
-                        Uri.parse("https://www.youtube.com")
-                );
-
-                startActivity(intent);
-
-            } catch (Exception e) {
-
-                respond("تعذر فتح يوتيوب.");
-
-            }
-
-        }
-
-        else if (lower.contains("جوجل")
-                || lower.contains("google")) {
-
-            respond("سأفتح جوجل.");
-
-            try {
-
-                Intent intent = new Intent(
-                        Intent.ACTION_VIEW,
-                        Uri.parse("https://www.google.com")
-                );
-
-                startActivity(intent);
-
-            } catch (Exception e) {
-
-                respond("تعذر فتح جوجل.");
-
-            }
-
-        }
-
-        else if (lower.contains("افتح الهاتف")
-                || lower.contains("الهاتف")
-                || lower.contains("phone")) {
-
-            respond("سأحاول فتح تطبيق الهاتف.");
-
-            try {
-
-                Intent intent = new Intent(
-                        Intent.ACTION_DIAL
-                );
-
-                startActivity(intent);
-
-            } catch (Exception e) {
-
-                respond("تعذر فتح الهاتف.");
-
-            }
-
-        }
-
-        else if (lower.contains("افتح الإعدادات")
-                || lower.contains("الإعدادات")
-                || lower.contains("settings")) {
-
-            respond("سأفتح إعدادات الهاتف.");
-
-            try {
-
-                Intent intent = new Intent(
-                        android.provider.Settings.ACTION_SETTINGS
-                );
-
-                startActivity(intent);
-
-            } catch (Exception e) {
-
-                respond("تعذر فتح الإعدادات.");
-
-            }
-
-        }
-
-        else if (lower.contains("توقف")
-                || lower.contains("اسكت")
-                || lower.contains("stop")) {
-
-            respond("حسناً.");
-
-        }
-
-        else {
-
-            respond(
-                    "وصلني أمرك، لكن هذه المهارة غير مضافة لي بعد.\n\n" +
-                    "سنضيف لها مهارات حقيقية في المراحل القادمة."
-            );
-        }
-
-        commandInput.setText("");
-    }
-
-    private void startVoiceRecognition() {
-
-        Intent intent = new Intent(
-                RecognizerIntent.ACTION_RECOGNIZE_SPEECH
-        );
-
-        intent.putExtra(
-                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-        );
-
-        intent.putExtra(
-                RecognizerIntent.EXTRA_LANGUAGE,
-                "ar-MA"
-        );
-
-        intent.putExtra(
-                RecognizerIntent.EXTRA_PROMPT,
-                "تكلم مع JARVIS..."
-        );
-
-        try {
-
-            startActivityForResult(
-                    intent,
-                    VOICE_REQUEST
-            );
-
-        } catch (ActivityNotFoundException e) {
-
-            Toast.makeText(
-                    this,
-                    "التعرف على الصوت غير متوفر في الهاتف",
-                    Toast.LENGTH_LONG
-            ).show();
-
-        }
-    }
-
-    @Override
-    protected void onActivityResult(
-            int requestCode,
-            int resultCode,
-            Intent data
-    ) {
-
-        super.onActivityResult(
-                requestCode,
-                resultCode,
-                data
-        );
-
-        if (requestCode == VOICE_REQUEST
-                && resultCode == RESULT_OK
-                && data != null) {
-
-            ArrayList<String> results =
-                    data.getStringArrayListExtra(
-                            RecognizerIntent.EXTRA_RESULTS
+            String time =
+                    format.format(
+                            new Date()
                     );
 
-            if (results != null
-                    && !results.isEmpty()) {
-
-                String command = results.get(0);
-
-                commandInput.setText(command);
-
-                executeCommand(command);
-            }
-        }
-    }
-
-    private void respond(String message) {
-
-        addMessage("JARVIS:\n" + message);
-
-        if (jarvisVoice != null) {
-
-            jarvisVoice.speak(
-                    message,
-                    TextToSpeech.QUEUE_FLUSH,
-                    null,
-                    "JARVIS_RESPONSE"
+            respond(
+                    "الوقت الآن هو " + time
             );
         }
-    }
 
-    private void addMessage(String message) {
+        // DATE
 
-        String current = output.getText().toString();
-
-        output.setText(
-                current +
-                "\n\n--------------------\n\n" +
-                message
-        );
-    }
-
-    @Override
-    protected void onDestroy() {
-
-        if (jarvisVoice != null) {
-
-            jarvisVoice.stop();
-            jarvisVoice.shutdown();
-        }
-
-        super.onDestroy();
-    }
-}
+        else if (containsAny(
+                lower,
+                "التاريخ",
+                "اليوم",
+                "شنو النهار",
+                "
