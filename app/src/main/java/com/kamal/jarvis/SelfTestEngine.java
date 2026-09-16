@@ -14,38 +14,28 @@ public class SelfTestEngine {
 
         this.context = context.getApplicationContext();
 
-        memoryManager =
-                new MemoryManager(this.context);
-
-        skillManager =
-                new SkillManager(this.context);
-
-        capabilityManager =
-                new CapabilityManager(this.context);
+        memoryManager = new MemoryManager(this.context);
+        skillManager = new SkillManager(this.context);
+        capabilityManager = new CapabilityManager(this.context);
     }
+
+    // ==========================================
+    // RUN ALL TESTS
+    // ==========================================
 
     public String runAllTests() {
 
-        StringBuilder report =
-                new StringBuilder();
+        StringBuilder report = new StringBuilder();
 
         int passed = 0;
         int failed = 0;
 
-        report.append(
-                "JARVIS SELF TEST ENGINE\n"
-        );
+        report.append("JARVIS SELF TEST ENGINE\n");
+        report.append("============================\n\n");
 
-        report.append(
-                "============================\n\n"
-        );
+        TestResult memory = testMemory();
 
-        TestResult memory =
-                testMemory();
-
-        report.append(
-                format(memory)
-        );
+        report.append(format(memory));
 
         if (memory.passed) {
             passed++;
@@ -53,12 +43,9 @@ public class SelfTestEngine {
             failed++;
         }
 
-        TestResult skills =
-                testSkills();
+        TestResult skills = testSkills();
 
-        report.append(
-                format(skills)
-        );
+        report.append(format(skills));
 
         if (skills.passed) {
             passed++;
@@ -66,12 +53,9 @@ public class SelfTestEngine {
             failed++;
         }
 
-        TestResult capabilities =
-                testCapabilities();
+        TestResult capabilities = testCapabilities();
 
-        report.append(
-                format(capabilities)
-        );
+        report.append(format(capabilities));
 
         if (capabilities.passed) {
             passed++;
@@ -79,12 +63,9 @@ public class SelfTestEngine {
             failed++;
         }
 
-        TestResult evolution =
-                testEvolution();
+        TestResult evolution = testEvolution();
 
-        report.append(
-                format(evolution)
-        );
+        report.append(format(evolution));
 
         if (evolution.passed) {
             passed++;
@@ -92,55 +73,46 @@ public class SelfTestEngine {
             failed++;
         }
 
-        report.append(
-                "============================\n"
-        );
-
-        report.append(
-                "PASSED: "
-        );
-
+        report.append("============================\n");
+        report.append("PASSED: ");
         report.append(passed);
-
         report.append("\n");
 
-        report.append(
-                "FAILED: "
-        );
-
+        report.append("FAILED: ");
         report.append(failed);
-
         report.append("\n\n");
 
         if (failed == 0) {
 
-            report.append(
-                    "SYSTEM STATUS: HEALTHY ✓"
-            );
+            report.append("SYSTEM STATUS: HEALTHY ✓");
 
         } else {
 
-            report.append(
-                    "SYSTEM STATUS: ISSUES DETECTED ⚠"
-            );
+            report.append("SYSTEM STATUS: ISSUES DETECTED ⚠");
         }
 
         return report.toString();
     }
 
     // ==========================================
-    // MEMORY
+    // COMPATIBILITY METHOD
+    // ==========================================
+
+    public String testSystem() {
+
+        return runAllTests();
+    }
+
+    // ==========================================
+    // MEMORY TEST
     // ==========================================
 
     private TestResult testMemory() {
 
         try {
 
-            String key =
-                    "__jarvis_self_test__";
-
-            String value =
-                    "JARVIS_TEST_OK";
+            String key = "__jarvis_self_test__";
+            String value = "JARVIS_TEST_OK";
 
             memoryManager.saveMemory(
                     key,
@@ -178,7 +150,7 @@ public class SelfTestEngine {
     }
 
     // ==========================================
-    // SKILLS
+    // SKILLS TEST
     // ==========================================
 
     private TestResult testSkills() {
@@ -215,7 +187,7 @@ public class SelfTestEngine {
     }
 
     // ==========================================
-    // CAPABILITIES
+    // CAPABILITIES TEST
     // ==========================================
 
     private TestResult testCapabilities() {
@@ -252,7 +224,7 @@ public class SelfTestEngine {
     }
 
     // ==========================================
-    // EVOLUTION ENGINE
+    // EVOLUTION TEST
     // ==========================================
 
     private TestResult testEvolution() {
@@ -265,8 +237,8 @@ public class SelfTestEngine {
             String status =
                     engine.getEvolutionStatus();
 
-            if (status != null &&
-                    !status.trim().isEmpty()) {
+            if (status != null
+                    && !status.trim().isEmpty()) {
 
                 return new TestResult(
                         "EVOLUTION",
@@ -297,17 +269,10 @@ public class SelfTestEngine {
 
     public boolean isHealthy() {
 
-        TestResult memory =
-                testMemory();
-
-        TestResult skills =
-                testSkills();
-
-        TestResult capabilities =
-                testCapabilities();
-
-        TestResult evolution =
-                testEvolution();
+        TestResult memory = testMemory();
+        TestResult skills = testSkills();
+        TestResult capabilities = testCapabilities();
+        TestResult evolution = testEvolution();
 
         return memory.passed
                 && skills.passed
@@ -319,9 +284,7 @@ public class SelfTestEngine {
     // TEST SINGLE SYSTEM
     // ==========================================
 
-    public String testSystem(
-            String system
-    ) {
+    public String testSystem(String system) {
 
         if (system == null) {
 
@@ -370,9 +333,7 @@ public class SelfTestEngine {
     // FORMAT
     // ==========================================
 
-    private String format(
-            TestResult result
-    ) {
+    private String format(TestResult result) {
 
         if (result.passed) {
 
@@ -391,12 +352,10 @@ public class SelfTestEngine {
     }
 
     // ==========================================
-    // ERROR
+    // ERROR HANDLER
     // ==========================================
 
-    private String safeError(
-            Exception e
-    ) {
+    private String safeError(Exception e) {
 
         if (e == null) {
 
@@ -406,8 +365,8 @@ public class SelfTestEngine {
         String message =
                 e.getMessage();
 
-        if (message == null ||
-                message.trim().isEmpty()) {
+        if (message == null
+                || message.trim().isEmpty()) {
 
             return e.getClass()
                     .getSimpleName();
@@ -417,7 +376,7 @@ public class SelfTestEngine {
     }
 
     // ==========================================
-    // RESULT OBJECT
+    // TEST RESULT
     // ==========================================
 
     private static class TestResult {
