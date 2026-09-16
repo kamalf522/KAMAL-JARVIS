@@ -190,11 +190,31 @@ public class TaskManager {
         saveTasks();
     }
 
+    /*
+     * Compatibility method.
+     * بعض الأنظمة القديمة داخل JARVIS
+     * كتستعمل clearCompleted().
+     */
+    public synchronized void clearCompleted() {
+
+        clearCompletedTasks();
+    }
+
     public synchronized void clearAllTasks() {
 
         tasks.clear();
 
         saveTasks();
+    }
+
+    /*
+     * Compatibility method.
+     * بعض الأنظمة القديمة داخل JARVIS
+     * كتستعمل clearAll().
+     */
+    public synchronized void clearAll() {
+
+        clearAllTasks();
     }
 
     public boolean isHealthy() {
