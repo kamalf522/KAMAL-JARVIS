@@ -34,9 +34,7 @@ public class CapabilityManager {
 
     private void initialize() {
 
-        if (!preferences.contains(
-                KEY_CAPABILITIES
-        )) {
+        if (!preferences.contains(KEY_CAPABILITIES)) {
 
             preferences.edit()
                     .putString(
@@ -49,15 +47,11 @@ public class CapabilityManager {
         }
     }
 
-    // =========================================================
-    // DEFAULT CAPABILITIES
-    // =========================================================
-
     private void registerDefaultCapabilities() {
 
         addCapability(
                 "voice",
-                "التعرف على صوت كمال وتحويل الكلام إلى أوامر"
+                "التعرف على الصوت وتحويل الكلام إلى أوامر"
         );
 
         addCapability(
@@ -67,7 +61,7 @@ public class CapabilityManager {
 
         addCapability(
                 "text_to_speech",
-                "التحدث مع كمال بالصوت"
+                "التحدث بالصوت"
         );
 
         addCapability(
@@ -87,12 +81,12 @@ public class CapabilityManager {
 
         addCapability(
                 "web",
-                "فتح والوصول إلى خدمات الإنترنت"
+                "الوصول إلى خدمات الإنترنت"
         );
 
         addCapability(
                 "android_settings",
-                "الوصول إلى إعدادات Android المتاحة"
+                "الوصول إلى إعدادات Android"
         );
 
         addCapability(
@@ -102,28 +96,24 @@ public class CapabilityManager {
 
         addCapability(
                 "self_diagnosis",
-                "فحص قدرات JARVIS وتحديد النواقص"
+                "تشخيص حالة JARVIS"
         );
 
         addCapability(
                 "planning",
-                "إنشاء أهداف وخطط للتطوير"
+                "إنشاء الأهداف والخطط"
         );
 
         addCapability(
                 "approval",
-                "إدارة العمليات التي تحتاج موافقة كمال"
+                "إدارة العمليات التي تحتاج موافقة"
         );
 
         addCapability(
                 "history",
-                "تسجيل عمليات وتطور JARVIS"
+                "تسجيل العمليات"
         );
     }
-
-    // =========================================================
-    // ADD
-    // =========================================================
 
     public boolean addCapability(
             String name,
@@ -205,10 +195,6 @@ public class CapabilityManager {
         }
     }
 
-    // =========================================================
-    // REMOVE
-    // =========================================================
-
     public boolean removeCapability(
             String name
     ) {
@@ -232,8 +218,7 @@ public class CapabilityManager {
                     i++) {
 
                 JSONObject capability =
-                        capabilities
-                                .getJSONObject(i);
+                        capabilities.getJSONObject(i);
 
                 if (capability
                         .getString("name")
@@ -265,10 +250,6 @@ public class CapabilityManager {
         }
     }
 
-    // =========================================================
-    // STATUS
-    // =========================================================
-
     public boolean hasCapability(
             String name
     ) {
@@ -277,17 +258,10 @@ public class CapabilityManager {
             return false;
         }
 
-        try {
-
-            return hasCapability(
-                    getCapabilities(),
-                    name
-            );
-
-        } catch (Exception e) {
-
-            return false;
-        }
+        return hasCapability(
+                getCapabilities(),
+                name
+        );
     }
 
     private boolean hasCapability(
@@ -302,8 +276,7 @@ public class CapabilityManager {
                     i++) {
 
                 JSONObject capability =
-                        capabilities
-                                .getJSONObject(i);
+                        capabilities.getJSONObject(i);
 
                 if (capability
                         .getString("name")
@@ -320,10 +293,6 @@ public class CapabilityManager {
 
         return false;
     }
-
-    // =========================================================
-    // SET STATUS
-    // =========================================================
 
     public boolean setStatus(
             String name,
@@ -346,8 +315,7 @@ public class CapabilityManager {
                     i++) {
 
                 JSONObject capability =
-                        capabilities
-                                .getJSONObject(i);
+                        capabilities.getJSONObject(i);
 
                 if (capability
                         .getString("name")
@@ -379,10 +347,6 @@ public class CapabilityManager {
         return false;
     }
 
-    // =========================================================
-    // SUCCESS
-    // =========================================================
-
     public void recordSuccess(
             String name
     ) {
@@ -392,10 +356,6 @@ public class CapabilityManager {
                 true
         );
     }
-
-    // =========================================================
-    // FAILURE
-    // =========================================================
 
     public void recordFailure(
             String name
@@ -426,8 +386,7 @@ public class CapabilityManager {
                     i++) {
 
                 JSONObject capability =
-                        capabilities
-                                .getJSONObject(i);
+                        capabilities.getJSONObject(i);
 
                 if (capability
                         .getString("name")
@@ -468,10 +427,6 @@ public class CapabilityManager {
         }
     }
 
-    // =========================================================
-    // GET CAPABILITY
-    // =========================================================
-
     public JSONObject getCapability(
             String name
     ) {
@@ -490,8 +445,7 @@ public class CapabilityManager {
                     i++) {
 
                 JSONObject capability =
-                        capabilities
-                                .getJSONObject(i);
+                        capabilities.getJSONObject(i);
 
                 if (capability
                         .getString("name")
@@ -508,10 +462,6 @@ public class CapabilityManager {
 
         return null;
     }
-
-    // =========================================================
-    // REPORT
-    // =========================================================
 
     public String getReport() {
 
@@ -541,8 +491,7 @@ public class CapabilityManager {
                     i++) {
 
                 JSONObject capability =
-                        capabilities
-                                .getJSONObject(i);
+                        capabilities.getJSONObject(i);
 
                 report.append(
                         "━━━━━━━━━━━━━━\n"
@@ -556,6 +505,19 @@ public class CapabilityManager {
                         capability.optString(
                                 "name",
                                 "Unknown"
+                        )
+                );
+
+                report.append("\n");
+
+                report.append(
+                        "الوصف: "
+                );
+
+                report.append(
+                        capability.optString(
+                                "description",
+                                ""
                         )
                 );
 
@@ -611,29 +573,21 @@ public class CapabilityManager {
         return report.toString();
     }
 
-    // =========================================================
-    // COUNT
-    // =========================================================
-
     public int getCapabilityCount() {
 
-        return getCapabilities()
-                .length();
+        return getCapabilities().length();
     }
 
-    // =========================================================
-    // EXPORT
-    // =========================================================
+    // دالة توافق مع باقي النظام
+    public int getCount() {
+
+        return getCapabilityCount();
+    }
 
     public String exportCapabilities() {
 
-        return getCapabilities()
-                .toString();
+        return getCapabilities().toString();
     }
-
-    // =========================================================
-    // STORAGE
-    // =========================================================
 
     private JSONArray getCapabilities() {
 
@@ -664,10 +618,6 @@ public class CapabilityManager {
                 )
                 .apply();
     }
-
-    // =========================================================
-    // TIME
-    // =========================================================
 
     private String now() {
 
