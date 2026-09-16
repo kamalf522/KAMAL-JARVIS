@@ -16,613 +16,523 @@ public class CommandRouter {
     private final EvolutionEngine evolutionEngine;
 
     public CommandRouter(Context context) {
-        this.context = context;
-        this.memoryManager = new MemoryManager(context);
-        this.evolutionEngine =
-                new EvolutionEngine(
-                        context,
-                        memoryManager
-                );
+        this.context = context.getApplicationContext();
+
+        memoryManager = new MemoryManager(this.context);
+        evolutionEngine = new EvolutionEngine(this.context);
     }
 
     public String execute(String command) {
 
-        if (command == null ||
-                command.trim().isEmpty()) {
-
+        if (command == null || command.trim().isEmpty()) {
             return "ما سمعت حتى أمر.";
         }
 
-        String input =
-                command.trim();
+        String original = command.trim();
+        String cmd = original.toLowerCase(Locale.ROOT);
 
-        String lower =
-                input.toLowerCase(
-                        Locale.getDefault()
-                );
+        // =========================
+        // تحية
+        // =========================
 
-        // =====================================================
-        // GREETINGS
-        // =====================================================
-
-        if (containsAny(
-                lower,
+        if (containsAny(cmd,
                 "سلام",
                 "السلام عليكم",
                 "مرحبا",
                 "اهلا",
                 "أهلا",
                 "hello",
-                "hi"
-        )) {
+                "hi")) {
 
-            return "مرحبا كمال. JARVIS حاضر.";
+            return "مرحبا كمال. JARVIS حاضر ومستعد.";
         }
 
-        // =====================================================
-        // HELP
-        // =====================================================
+        // =========================
+        // مساعدة
+        // =========================
 
-        if (containsAny(
-                lower,
+        if (containsAny(cmd,
                 "مساعدة",
                 "ساعدني",
-                "شنو تقدر",
-                "ماذا تستطيع",
-                "الأوامر"
-        )) {
+                "شنو نقدر ندير",
+                "الأوامر",
+                "الاوامر")) {
 
             return getHelp();
         }
 
-        // =====================================================
-        // EVOLUTION
-        // =====================================================
+        // =========================
+        // حالة النظام
+        // =========================
 
-        if (containsAny(
-                lower,
-                "طور نفسك",
-                "طوّر نفسك",
-                "ابدأ التطور",
-                "ابدأ تطوير نفسك",
-                "تطور",
-                "التطور"
-        )) {
-
-            return evolutionEngine
-                    .runEvolutionCycle();
-        }
-
-        // =====================================================
-        // SELF DIAGNOSIS
-        // =====================================================
-
-        if (containsAny(
-                lower,
-                "شخص نفسك",
-                "شخص ذاتك",
-                "فحص نفسك",
-                "افحص نفسك",
-                "شنو ناقصك",
-                "ما الذي ينقصك"
-        )) {
-
-            return evolutionEngine
-                    .selfDiagnosis();
-        }
-
-        // =====================================================
-        // EVOLUTION STATUS
-        // =====================================================
-
-        if (containsAny(
-                lower,
-                "حالة التطور",
+        if (containsAny(cmd,
                 "حالة النظام",
-                "وضع التطور",
-                "تقدمك",
-                "تقدم النظام"
-        )) {
+                "حالتك",
+                "ستاتوس",
+                "status",
+                "كيف داير")) {
 
-            return evolutionEngine
-                    .getEvolutionStatus();
+            return evolutionEngine.getEvolutionStatus();
         }
 
-        // =====================================================
-        // EVOLUTION HISTORY
-        // =====================================================
+        // =========================
+        // القدرات
+        // =========================
 
-        if (containsAny(
-                lower,
-                "سجل التطور",
+        if (containsAny(cmd,
+                "شنو هي القدرات ديالك",
+                "ما هي قدراتك",
+                "شنو قدراتك",
+                "القدرات ديالك",
+                "قدراتك",
+                "capabilities")) {
+
+            return evolutionEngine.getCapabilitiesStatus();
+        }
+
+        // =========================
+        // المهارات
+        // =========================
+
+        if (containsAny(cmd,
+                "شنو هي المهارات ديالك",
+                "شنو المهارات ديالك",
+                "ما هي مهاراتك",
+                "المهارات ديالك",
+                "مهاراتك",
+                "skills")) {
+
+            return evolutionEngine.getSkillsStatus();
+        }
+
+        // =========================
+        // التشخيص الذاتي
+        // =========================
+
+        if (containsAny(cmd,
+                "شخص نفسك",
+                "شخص النظام",
+                "التشخيص",
+                "التشخيص الذاتي",
+                "شنو ناقصك",
+                "شنو ناقص",
+                "ما الذي ينقصك",
+                "self diagnosis",
+                "diagnosis")) {
+
+            return evolutionEngine.selfDiagnosis();
+        }
+
+        // =========================
+        // بدء التطور
+        // =========================
+
+        if (containsAny(cmd,
+                "طور نفسك",
+                "طور ذاتك",
+                "ابدأ التطور",
+                "بدا التطور",
+                "ابدأ دورة التطور",
+                "دورة التطور",
+                "evolve",
+                "evolution")) {
+
+            return evolutionEngine.runEvolutionCycle();
+        }
+
+        // =========================
+        // حالة التطور
+        // =========================
+
+        if (containsAny(cmd,
+                "حالة التطور",
+                "ستاتوس التطور",
+                "فين وصل التطور",
+                "تطورك")) {
+
+            return evolutionEngine.getEvolutionStatus();
+        }
+
+        // =========================
+        // تاريخ التطور
+        // =========================
+
+        if (containsAny(cmd,
                 "تاريخ التطور",
-                "ماذا طورت",
-                "شنو طورت"
-        )) {
+                "سجل التطور",
+                "تاريخك",
+                "سجل العمليات",
+                "history")) {
 
-            return evolutionEngine
-                    .getEvolutionHistory();
+            return evolutionEngine.getEvolutionHistory();
         }
 
-        // =====================================================
-        // ADD SKILL
-        // =====================================================
+        // =========================
+        // إضافة مهارة
+        // =========================
 
-        if (lower.startsWith("أضف مهارة")) {
+        if (cmd.startsWith("أضف مهارة")
+                || cmd.startsWith("اضف مهارة")) {
 
             String skill =
-                    input.substring(
-                            "أضف مهارة".length()
-                    ).trim();
+                    original
+                            .replaceFirst(
+                                    "(?i)^أضف مهارة\\s*",
+                                    ""
+                            )
+                            .replaceFirst(
+                                    "(?i)^اضف مهارة\\s*",
+                                    ""
+                            )
+                            .trim();
 
             if (skill.isEmpty()) {
-
-                return "قول لي اسم المهارة التي تريد إضافتها.";
+                return "قول ليا اسم المهارة اللي بغيتي نضيف.";
             }
 
-            boolean added =
-                    evolutionEngine.registerSkill(
-                            skill,
-                            "مهارة أضافها كمال إلى JARVIS."
-                    );
+            evolutionEngine.registerSkill(
+                    skill,
+                    "مهارة أضافها كمال إلى نظام JARVIS."
+            );
 
-            if (added) {
-
-                return "تمت إضافة المهارة: "
-                        + skill;
-            }
-
-            return "هذه المهارة موجودة بالفعل.";
+            return "تم تسجيل المهارة: " + skill;
         }
 
-        if (lower.startsWith("اضف مهارة")) {
+        // =========================
+        // هدف جديد
+        // =========================
 
-            String skill =
-                    input.substring(
-                            "اضف مهارة".length()
-                    ).trim();
-
-            if (skill.isEmpty()) {
-
-                return "قول لي اسم المهارة التي تريد إضافتها.";
-            }
-
-            boolean added =
-                    evolutionEngine.registerSkill(
-                            skill,
-                            "مهارة أضافها كمال إلى JARVIS."
-                    );
-
-            if (added) {
-
-                return "تمت إضافة المهارة: "
-                        + skill;
-            }
-
-            return "هذه المهارة موجودة بالفعل.";
-        }
-
-        // =====================================================
-        // ADD GOAL
-        // =====================================================
-
-        if (lower.startsWith("هدف جديد")) {
+        if (cmd.startsWith("هدف جديد")
+                || cmd.startsWith("اضف هدف")
+                || cmd.startsWith("أضف هدف")) {
 
             String goal =
-                    input.substring(
-                            "هدف جديد".length()
-                    ).trim();
+                    original
+                            .replaceFirst(
+                                    "(?i)^هدف جديد\\s*",
+                                    ""
+                            )
+                            .replaceFirst(
+                                    "(?i)^اضف هدف\\s*",
+                                    ""
+                            )
+                            .replaceFirst(
+                                    "(?i)^أضف هدف\\s*",
+                                    ""
+                            )
+                            .trim();
 
             if (goal.isEmpty()) {
-
-                return "قول لي الهدف الذي تريد أن أعمل عليه.";
+                return "قول ليا شنو هو الهدف.";
             }
 
-            boolean created =
-                    evolutionEngine
-                            .createEvolutionGoal(
-                                    goal
-                            );
+            evolutionEngine.createEvolutionGoal(goal);
 
-            if (created) {
+            return "تم تسجيل الهدف: " + goal;
+        }
 
-                return "تم تسجيل الهدف: "
-                        + goal;
+        // =========================
+        // حفظ ذاكرة
+        // =========================
+
+        if (cmd.startsWith("تذكر ")
+                || cmd.startsWith("احفظ ")
+                || cmd.startsWith("حفظ ")) {
+
+            String memory =
+                    original
+                            .replaceFirst(
+                                    "(?i)^تذكر\\s*",
+                                    ""
+                            )
+                            .replaceFirst(
+                                    "(?i)^احفظ\\s*",
+                                    ""
+                            )
+                            .replaceFirst(
+                                    "(?i)^حفظ\\s*",
+                                    ""
+                            )
+                            .trim();
+
+            if (memory.isEmpty()) {
+                return "شنو بغيتي نحفظ؟";
             }
 
-            return "تعذر تسجيل الهدف.";
+            String key = "memory_" + System.currentTimeMillis();
+
+            memoryManager.saveMemory(
+                    key,
+                    memory
+            );
+
+            return "حفظتها في الذاكرة.";
         }
 
-        // =====================================================
-        // TIME
-        // =====================================================
+        // =========================
+        // عدد الذكريات
+        // =========================
 
-        if (containsAny(
-                lower,
-                "الساعة",
-                "الوقت",
-                "شحال فالساعة",
-                "كم الساعة"
-        )) {
+        if (containsAny(cmd,
+                "شنو حافظ",
+                "الذاكرة ديالك",
+                "ذكرياتك",
+                "memory")) {
 
-            String time =
-                    new SimpleDateFormat(
-                            "HH:mm",
-                            Locale.getDefault()
-                    ).format(
-                            new Date()
-                    );
-
-            return "الساعة الآن هي "
-                    + time;
+            return "عندي حاليا "
+                    + memoryManager.getMemoryCount()
+                    + " ذكريات محفوظة.";
         }
 
-        // =====================================================
-        // DATE
-        // =====================================================
+        // =========================
+        // مسح الذاكرة
+        // =========================
 
-        if (containsAny(
-                lower,
-                "التاريخ",
-                "اليوم",
-                "شنو نهار اليوم"
-        )) {
-
-            String date =
-                    new SimpleDateFormat(
-                            "dd/MM/yyyy",
-                            Locale.getDefault()
-                    ).format(
-                            new Date()
-                    );
-
-            return "تاريخ اليوم هو "
-                    + date;
-        }
-
-        // =====================================================
-        // MEMORY - SAVE
-        // =====================================================
-
-        if (lower.startsWith("تذكر أن")) {
-
-            String value =
-                    input.substring(
-                            "تذكر أن".length()
-                    ).trim();
-
-            if (!value.isEmpty()) {
-
-                memoryManager.saveMemory(
-                        "custom_" +
-                                System.currentTimeMillis(),
-                        value
-                );
-
-                return "تم حفظ المعلومة في ذاكرتي.";
-            }
-        }
-
-        if (lower.startsWith("تذكر")) {
-
-            String value =
-                    input.substring(
-                            "تذكر".length()
-                    ).trim();
-
-            if (!value.isEmpty()) {
-
-                memoryManager.saveMemory(
-                        "custom_" +
-                                System.currentTimeMillis(),
-                        value
-                );
-
-                return "تم حفظ المعلومة.";
-            }
-        }
-
-        // =====================================================
-        // MEMORY - CLEAR
-        // =====================================================
-
-        if (containsAny(
-                lower,
+        if (containsAny(cmd,
+                "مسح الذاكرة",
                 "امسح الذاكرة",
-                "احذف الذاكرة",
-                "انس كل شيء",
-                "انسى كل شيء"
-        )) {
+                "حذف الذاكرة",
+                "نسى كلشي")) {
 
             memoryManager.clearAllMemories();
 
             return "تم مسح الذاكرة.";
         }
 
-        // =====================================================
-        // OPEN YOUTUBE
-        // =====================================================
+        // =========================
+        // الوقت
+        // =========================
 
-        if (containsAny(
-                lower,
-                "افتح يوتيوب",
+        if (containsAny(cmd,
+                "الوقت",
+                "شحال فالوقت",
+                "كم الساعة",
+                "الساعة")) {
+
+            String time =
+                    new SimpleDateFormat(
+                            "HH:mm",
+                            Locale.getDefault()
+                    ).format(new Date());
+
+            return "الوقت دابا هو " + time;
+        }
+
+        // =========================
+        // التاريخ
+        // =========================
+
+        if (containsAny(cmd,
+                "التاريخ",
+                "نهار شحال",
+                "اليوم شحال")) {
+
+            String date =
+                    new SimpleDateFormat(
+                            "dd/MM/yyyy",
+                            Locale.getDefault()
+                    ).format(new Date());
+
+            return "التاريخ اليوم هو " + date;
+        }
+
+        // =========================
+        // إيقاف الكلام
+        // =========================
+
+        if (containsAny(cmd,
+                "سكت",
+                "اسكت",
+                "وقف الكلام",
+                "وقف الصوت",
+                "stop speaking")) {
+
+            return "__STOP_SPEAKING__";
+        }
+
+        // =========================
+        // فتح YouTube
+        // =========================
+
+        if (containsAny(cmd,
                 "فتح يوتيوب",
-                "youtube"
-        )) {
+                "افتح يوتيوب",
+                "youtube")) {
 
             openUrl(
                     "https://www.youtube.com"
             );
 
-            return "تم فتح يوتيوب.";
+            return "فتحت YouTube.";
         }
 
-        // =====================================================
-        // OPEN GOOGLE
-        // =====================================================
+        // =========================
+        // فتح Google
+        // =========================
 
-        if (containsAny(
-                lower,
-                "افتح جوجل",
+        if (containsAny(cmd,
                 "فتح جوجل",
-                "google"
-        )) {
+                "افتح جوجل",
+                "google")) {
 
             openUrl(
                     "https://www.google.com"
             );
 
-            return "تم فتح جوجل.";
+            return "فتحت Google.";
         }
 
-        // =====================================================
-        // OPEN FACEBOOK
-        // =====================================================
+        // =========================
+        // فتح Facebook
+        // =========================
 
-        if (containsAny(
-                lower,
-                "افتح فيسبوك",
+        if (containsAny(cmd,
                 "فتح فيسبوك",
-                "facebook"
-        )) {
+                "افتح فيسبوك",
+                "facebook")) {
 
             openUrl(
                     "https://www.facebook.com"
             );
 
-            return "تم فتح فيسبوك.";
+            return "فتحت Facebook.";
         }
 
-        // =====================================================
-        // OPEN INSTAGRAM
-        // =====================================================
+        // =========================
+        // فتح Instagram
+        // =========================
 
-        if (containsAny(
-                lower,
-                "افتح انستغرام",
+        if (containsAny(cmd,
                 "فتح انستغرام",
-                "instagram"
-        )) {
+                "افتح انستغرام",
+                "instagram")) {
 
             openUrl(
                     "https://www.instagram.com"
             );
 
-            return "تم فتح انستغرام.";
+            return "فتحت Instagram.";
         }
 
-        // =====================================================
-        // OPEN WHATSAPP
-        // =====================================================
+        // =========================
+        // فتح WhatsApp
+        // =========================
 
-        if (containsAny(
-                lower,
-                "افتح واتساب",
+        if (containsAny(cmd,
                 "فتح واتساب",
-                "whatsapp"
-        )) {
+                "افتح واتساب",
+                "whatsapp")) {
 
-            try {
+            openUrl(
+                    "https://wa.me/"
+            );
 
-                Intent intent =
-                        context.getPackageManager()
-                                .getLaunchIntentForPackage(
-                                        "com.whatsapp"
-                                );
-
-                if (intent != null) {
-
-                    intent.addFlags(
-                            Intent.FLAG_ACTIVITY_NEW_TASK
-                    );
-
-                    context.startActivity(intent);
-
-                    return "تم فتح واتساب.";
-                }
-
-            } catch (Exception ignored) {
-            }
-
-            return "واتساب غير متوفر.";
+            return "فتحت WhatsApp.";
         }
 
-        // =====================================================
-        // SETTINGS
-        // =====================================================
+        // =========================
+        // إعدادات الهاتف
+        // =========================
 
-        if (containsAny(
-                lower,
+        if (containsAny(cmd,
                 "افتح الإعدادات",
                 "افتح الاعدادات",
                 "الإعدادات",
-                "الاعدادات"
-        )) {
+                "الاعدادات",
+                "settings")) {
 
             openSettings();
 
-            return "تم فتح الإعدادات.";
+            return "فتحت إعدادات الهاتف.";
         }
 
-        // =====================================================
-        // WIFI
-        // =====================================================
+        // =========================
+        // Wi-Fi
+        // =========================
 
-        if (containsAny(
-                lower,
+        if (containsAny(cmd,
                 "افتح الواي فاي",
-                "افتح wifi",
-                "wifi"
-        )) {
+                "الواي فاي",
+                "wifi")) {
 
-            try {
+            openWifiSettings();
 
-                Intent intent =
-                        new Intent(
-                                Settings.ACTION_WIFI_SETTINGS
-                        );
-
-                intent.addFlags(
-                        Intent.FLAG_ACTIVITY_NEW_TASK
-                );
-
-                context.startActivity(intent);
-
-                return "تم فتح إعدادات Wi-Fi.";
-
-            } catch (Exception e) {
-
-                return "تعذر فتح إعدادات Wi-Fi.";
-            }
+            return "فتحت إعدادات Wi-Fi.";
         }
 
-        // =====================================================
-        // BLUETOOTH
-        // =====================================================
+        // =========================
+        // Bluetooth
+        // =========================
 
-        if (containsAny(
-                lower,
+        if (containsAny(cmd,
                 "افتح البلوتوث",
-                "افتح bluetooth",
-                "bluetooth"
-        )) {
+                "البلوتوث",
+                "bluetooth")) {
 
-            try {
+            openBluetoothSettings();
 
-                Intent intent =
-                        new Intent(
-                                Settings
-                                        .ACTION_BLUETOOTH_SETTINGS
-                        );
-
-                intent.addFlags(
-                        Intent.FLAG_ACTIVITY_NEW_TASK
-                );
-
-                context.startActivity(intent);
-
-                return "تم فتح إعدادات Bluetooth.";
-
-            } catch (Exception e) {
-
-                return "تعذر فتح إعدادات Bluetooth.";
-            }
+            return "فتحت إعدادات Bluetooth.";
         }
 
-        // =====================================================
-        // PHONE
-        // =====================================================
+        // =========================
+        // الهاتف
+        // =========================
 
-        if (containsAny(
-                lower,
-                "افتح الهاتف",
-                "افتح الاتصال",
-                "الهاتف"
-        )) {
+        if (containsAny(cmd,
+                "معلومات الهاتف",
+                "حول الهاتف",
+                "عن الهاتف")) {
 
-            try {
+            openPhoneSettings();
 
-                Intent intent =
-                        new Intent(
-                                Intent.ACTION_DIAL
-                        );
-
-                intent.addFlags(
-                        Intent.FLAG_ACTIVITY_NEW_TASK
-                );
-
-                context.startActivity(intent);
-
-                return "تم فتح الهاتف.";
-
-            } catch (Exception e) {
-
-                return "تعذر فتح الهاتف.";
-            }
+            return "فتحت معلومات الهاتف.";
         }
 
-        // =====================================================
-        // STOP
-        // =====================================================
-
-        if (containsAny(
-                lower,
-                "توقف عن الكلام",
-                "اسكت",
-                "توقف"
-        )) {
-
-            return "__STOP_SPEAKING__";
-        }
-
-        // =====================================================
-        // UNKNOWN COMMAND
-        // =====================================================
+        // =========================
+        // أمر غير معروف
+        // =========================
 
         evolutionEngine.createEvolutionGoal(
-                "تعلم كيفية التعامل مع الأمر: "
-                        + input
+                "تعلم كيفية التعامل مع الأمر: " + original
         );
 
-        return
-                "لم أفهم الأمر بالكامل بعد.\n\n" +
-                "سجلته كقدرة أحتاج إلى تعلمها:\n" +
-                input;
+        return "الأمر مازال ما عنديش له قدرة مباشرة.\n"
+                + "سجلتو كهدف تعلم باش نطورو النظام مستقبلا.";
     }
 
-    // =========================================================
+    // ==================================================
     // HELP
-    // =========================================================
+    // ==================================================
 
     private String getHelp() {
 
-        return
-                "أوامر JARVIS الحالية:\n\n" +
+        return "أوامر JARVIS المتاحة حاليا:\n\n"
 
-                "• طور نفسك\n" +
-                "• شخّص نفسك\n" +
-                "• حالة التطور\n" +
-                "• سجل التطور\n" +
-                "• أضف مهارة [اسم المهارة]\n" +
-                "• هدف جديد [الهدف]\n" +
-                "• تذكر [المعلومة]\n" +
-                "• امسح الذاكرة\n" +
-                "• شحال فالساعة\n" +
-                "• شنو نهار اليوم\n" +
-                "• افتح يوتيوب\n" +
-                "• افتح جوجل\n" +
-                "• افتح فيسبوك\n" +
-                "• افتح انستغرام\n" +
-                "• افتح واتساب\n" +
-                "• افتح الإعدادات\n" +
-                "• افتح الواي فاي\n" +
-                "• افتح البلوتوث\n" +
-                "• افتح الهاتف";
+                + "• شنو هي القدرات ديالك\n"
+                + "• شنو هي المهارات ديالك\n"
+                + "• شنو ناقصك\n"
+                + "• طور نفسك\n"
+                + "• حالة التطور\n"
+                + "• تاريخ التطور\n"
+                + "• أضف مهارة ...\n"
+                + "• هدف جديد ...\n"
+                + "• تذكر ...\n"
+                + "• شحال فالوقت\n"
+                + "• نهار شحال\n"
+                + "• افتح يوتيوب\n"
+                + "• افتح جوجل\n"
+                + "• افتح فيسبوك\n"
+                + "• افتح انستغرام\n"
+                + "• افتح واتساب\n"
+                + "• افتح الإعدادات\n"
+                + "• افتح الواي فاي\n"
+                + "• افتح البلوتوث\n"
+                + "• اسكت";
     }
 
-    // =========================================================
+    // ==================================================
     // UTILITIES
-    // =========================================================
+    // ==================================================
 
     private boolean containsAny(
             String text,
@@ -632,11 +542,8 @@ public class CommandRouter {
         for (String value : values) {
 
             if (text.contains(
-                    value.toLowerCase(
-                            Locale.getDefault()
-                    )
+                    value.toLowerCase(Locale.ROOT)
             )) {
-
                 return true;
             }
         }
@@ -671,6 +578,63 @@ public class CommandRouter {
             Intent intent =
                     new Intent(
                             Settings.ACTION_SETTINGS
+                    );
+
+            intent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK
+            );
+
+            context.startActivity(intent);
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void openWifiSettings() {
+
+        try {
+
+            Intent intent =
+                    new Intent(
+                            Settings.ACTION_WIFI_SETTINGS
+                    );
+
+            intent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK
+            );
+
+            context.startActivity(intent);
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void openBluetoothSettings() {
+
+        try {
+
+            Intent intent =
+                    new Intent(
+                            Settings.ACTION_BLUETOOTH_SETTINGS
+                    );
+
+            intent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK
+            );
+
+            context.startActivity(intent);
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void openPhoneSettings() {
+
+        try {
+
+            Intent intent =
+                    new Intent(
+                            Settings.ACTION_DEVICE_INFO_SETTINGS
                     );
 
             intent.addFlags(
