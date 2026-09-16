@@ -33,7 +33,6 @@ public class ActionHistoryManager {
         }
 
         if (result == null) {
-
             result = "";
         }
 
@@ -70,6 +69,23 @@ public class ActionHistoryManager {
         memoryManager.saveMemory(
                 HISTORY_KEY,
                 newHistory
+        );
+    }
+
+    // Compatibility method
+    public synchronized void recordAction(
+            String action
+    ) {
+
+        if (action == null ||
+                action.trim().isEmpty()) {
+
+            return;
+        }
+
+        record(
+                action,
+                ""
         );
     }
 
@@ -162,7 +178,6 @@ public class ActionHistoryManager {
                     "Action History Manager: ONLINE ✓\n"
                     + "Records: "
                     + getHistoryCount();
-
         }
 
         return
