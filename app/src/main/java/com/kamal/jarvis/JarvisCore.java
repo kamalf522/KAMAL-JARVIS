@@ -521,14 +521,39 @@ public class JarvisCore {
             String action
     ) {
 
+        if (action == null ||
+                action.trim().isEmpty()) {
+
+            return "خاصني الأمر اللي بغيتي نطلب عليه الموافقة.";
+        }
+
         return approvalEngine.requestApproval(
-                action
+                action.trim()
         );
     }
 
-    public String approveAction() {
+    public String approveAction(
+            String action
+    ) {
 
-        return approvalEngine.approve();
+        if (action == null ||
+                action.trim().isEmpty()) {
+
+            return "خاصني الأمر اللي بغيتي توافق عليه.";
+        }
+
+        boolean approved =
+                approvalEngine.approve(
+                        action.trim()
+                );
+
+        if (approved) {
+
+            return "تمت الموافقة على الأمر: "
+                    + action.trim();
+        }
+
+        return "ما تمت الموافقة على الأمر.";
     }
 
     // =========================================================
