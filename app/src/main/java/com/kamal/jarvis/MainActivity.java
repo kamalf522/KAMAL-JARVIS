@@ -2,110 +2,87 @@ package com.kamal.jarvis;
 
 import android.Manifest;
 import android.app.Activity;
-import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.net.Uri;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.speech.RecognizerIntent;
 import android.speech.tts.TextToSpeech;
 import android.view.Gravity;
-import android.graphics.Color;
-import android.graphics.Typeface;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.Locale;
 
-public class MainActivity extends Activity {
+public class MainActivity extends Activity
+        implements TextToSpeech.OnInitListener {
 
-    private static final int VOICE_REQUEST = 1001;
-    private static final int MICROPHONE_PERMISSION = 2001;
+    private static final int REQUEST_AUDIO = 1001;
+    private static final int REQUEST_VOICE = 1002;
 
-    private TextView output;
-    private EditText commandInput;
-    private TextToSpeech jarvisVoice;
+    private TextToSpeech textToSpeech;
 
-    private MemoryManager memory;
-    private CommandRouter router;
+    private CommandRouter commandRouter;
+
+    private TextView statusText;
+    private TextView chatText;
+    private EditText inputText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        memory = new MemoryManager(this);
+        commandRouter =
+                new CommandRouter(this);
 
-        router = new CommandRouter(
-                this,
-                memory,
-                new CommandRouter.ResponseListener() {
-                    @Override
-                    public void onResponse(String message) {
-                        respond(message);
-                    }
-                }
-        );
+        textToSpeech =
+                new TextToSpeech(
+                        this,
+                        this
+                );
 
-        createVoice();
         createInterface();
+
+        if (checkSelfPermission(
+                Manifest.permission.RECORD_AUDIO
+        ) != PackageManager.PERMISSION_GRANTED) {
+
+            requestPermissions(
+                    new String[]{
+                            Manifest.permission.RECORD_AUDIO
+                    },
+                    REQUEST_AUDIO
+            );
+        }
     }
 
-    private void createVoice() {
-
-        jarvisVoice = new TextToSpeech(
-                this,
-                status -> {
-
-                    if (status == TextToSpeech.SUCCESS) {
-
-                        int result =
-                                jarvisVoice.setLanguage(
-                                        new Locale("ar", "MA")
-                                );
-
-                        if (result ==
-                                TextToSpeech.LANG_MISSING_DATA
-                                || result ==
-                                TextToSpeech.LANG_NOT_SUPPORTED) {
-
-                            jarvisVoice.setLanguage(
-                                    Locale.getDefault()
-                            );
-                        }
-
-                        jarvisVoice.setSpeechRate(0.95f);
-                    }
-                }
-        );
-    }
+    // =========================================================
+    // USER INTERFACE
+    // =========================================================
 
     private void createInterface() {
 
-        LinearLayout main =
+        LinearLayout root =
                 new LinearLayout(this);
 
-        main.setOrientation(
+        root.setOrientation(
                 LinearLayout.VERTICAL
         );
 
-        main.setPadding(
-                30,
-                40,
-                30,
-                25
+        root.setPadding(
+                24,
+                24,
+                24,
+                24
         );
 
-        main.setBackgroundColor(
-                Color.rgb(7, 11, 22)
-        );
+        // -----------------------------------------------------
+        // TITLE
+        // -----------------------------------------------------
 
         TextView title =
                 new TextView(this);
@@ -114,16 +91,7 @@ public class MainActivity extends Activity {
                 "KAMAL JARVIS"
         );
 
-        title.setTextColor(
-                Color.WHITE
-        );
-
-        title.setTextSize(29);
-
-        title.setTypeface(
-                Typeface.DEFAULT,
-                Typeface.BOLD
-        );
+        title.setTextSize(28);
 
         title.setGravity(
                 Gravity.CENTER
@@ -136,85 +104,109 @@ public class MainActivity extends Activity {
                 10
         );
 
-        TextView status =
+        root.addView(
+                title,
+                new LinearLayout.LayoutParams(
+                        -1,
+                        -2
+                )
+        );
+
+        // -----------------------------------------------------
+        // STATUS
+        // -----------------------------------------------------
+
+        statusText =
                 new TextView(this);
 
-        status.setText(
+        statusText.setText(
                 "● JARVIS ONLINE"
         );
 
-        status.setTextColor(
-                Color.rgb(80, 255, 140)
-        );
+        statusText.setTextSize(16);
 
-        status.setTextSize(16);
-
-        status.setGravity(
+        statusText.setGravity(
                 Gravity.CENTER
         );
 
-        status.setPadding(
+        statusText.setPadding(
                 0,
                 5,
                 0,
-                20
+                15
         );
 
-        output =
+        root.addView(
+                statusText
+        );
+
+        // -----------------------------------------------------
+        // CHAT AREA
+        // -----------------------------------------------------
+
+        chatText =
                 new TextView(this);
 
-        output.setText(
-                "JARVIS:\n\n" +
-                "مرحبا كمال.\n\n" +
-                "أنا JARVIS.\n" +
-                "نظام الذاكرة والمهارات جاهز."
+        chatText.setText(
+                "JARVIS: مرحبا كمال.\n" +
+                "أنا جاهز لتنفيذ أوامرك.\n\n"
         );
 
-        output.setTextColor(
-                Color.WHITE
+        chatText.setTextSize(17);
+
+        chatText.setPadding(
+                12,
+                12,
+                12,
+                12
         );
 
-        output.setTextSize(17);
-
-        output.setPadding(
-                20,
-                20,
-                20,
-                20
-        );
-
-        ScrollView scroll =
+        ScrollView scrollView =
                 new ScrollView(this);
 
-        scroll.addView(output);
+        scrollView.addView(
+                chatText
+        );
 
-        commandInput =
+        LinearLayout.LayoutParams chatParams =
+                new LinearLayout.LayoutParams(
+                        -1,
+                        0
+                );
+
+        chatParams.weight = 1;
+
+        root.addView(
+                scrollView,
+                chatParams
+        );
+
+        // -----------------------------------------------------
+        // INPUT
+        // -----------------------------------------------------
+
+        inputText =
                 new EditText(this);
 
-        commandInput.setHint(
+        inputText.setHint(
                 "اكتب أمرك هنا..."
         );
 
-        commandInput.setHintTextColor(
-                Color.GRAY
+        inputText.setTextSize(16);
+
+        inputText.setSingleLine(false);
+
+        root.addView(
+                inputText,
+                new LinearLayout.LayoutParams(
+                        -1,
+                        -2
+                )
         );
 
-        commandInput.setTextColor(
-                Color.WHITE
-        );
-
-        commandInput.setTextSize(16);
-
-        commandInput.setSingleLine(true);
-
-        commandInput.setOnEditorActionListener(
-                (v, actionId, event) -> {
-
-                    executeTypedCommand();
-
-                    return true;
-                }
-        );
+        // -----------------------------------------------------
+        // EXECUTE BUTTON
+        // -----------------------------------------------------
 
         Button executeButton =
                 new Button(this);
@@ -224,8 +216,23 @@ public class MainActivity extends Activity {
         );
 
         executeButton.setOnClickListener(
-                v -> executeTypedCommand()
+                new View.OnClickListener() {
+
+                    @Override
+                    public void onClick(View view) {
+
+                        executeCommand();
+                    }
+                }
         );
+
+        root.addView(
+                executeButton
+        );
+
+        // -----------------------------------------------------
+        // VOICE BUTTON
+        // -----------------------------------------------------
 
         Button voiceButton =
                 new Button(this);
@@ -235,116 +242,298 @@ public class MainActivity extends Activity {
         );
 
         voiceButton.setOnClickListener(
-                v -> startVoiceRecognition()
+                new View.OnClickListener() {
+
+                    @Override
+                    public void onClick(View view) {
+
+                        startVoiceRecognition();
+                    }
+                }
         );
 
-        main.addView(title);
-        main.addView(status);
-
-        main.addView(
-                scroll,
-                new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        0,
-                        1
-                )
+        root.addView(
+                voiceButton
         );
 
-        main.addView(commandInput);
-        main.addView(executeButton);
-        main.addView(voiceButton);
-
-        setContentView(main);
+        setContentView(root);
     }
 
-    private void executeTypedCommand() {
+    // =========================================================
+    // COMMAND EXECUTION
+    // =========================================================
+
+    private void executeCommand() {
 
         String command =
-                commandInput
-                        .getText()
+                inputText.getText()
                         .toString()
                         .trim();
 
         if (command.isEmpty()) {
+
+            speak(
+                    "قول لي الأمر الذي تريد تنفيذه."
+            );
+
             return;
         }
 
-        executeCommand(command);
-    }
-
-    private void executeCommand(
-            String command
-    ) {
-
         addMessage(
-                "أنت:\n" + command
+                "كمال: " + command
         );
 
-        router.execute(command);
+        inputText.setText("");
 
-        commandInput.setText("");
+        statusText.setText(
+                "● JARVIS PROCESSING..."
+        );
+
+        String response =
+                commandRouter.execute(
+                        command
+                );
+
+        if (response == null) {
+
+            response =
+                    "حدث خطأ غير معروف.";
+        }
+
+        if (response.equals(
+                "__STOP_SPEAKING__"
+        )) {
+
+            stopSpeaking();
+
+            statusText.setText(
+                    "● JARVIS ONLINE"
+            );
+
+            return;
+        }
+
+        addMessage(
+                "JARVIS: " + response
+        );
+
+        speak(response);
+
+        statusText.setText(
+                "● JARVIS ONLINE"
+        );
     }
+
+    // =========================================================
+    // VOICE RECOGNITION
+    // =========================================================
 
     private void startVoiceRecognition() {
 
-        if (android.os.Build.VERSION.SDK_INT >= 23) {
+        if (checkSelfPermission(
+                Manifest.permission.RECORD_AUDIO
+        ) != PackageManager.PERMISSION_GRANTED) {
 
-            if (checkSelfPermission(
-                    Manifest.permission.RECORD_AUDIO
-            ) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(
+                    new String[]{
+                            Manifest.permission.RECORD_AUDIO
+                    },
+                    REQUEST_AUDIO
+            );
 
-                requestPermissions(
-                        new String[]{
-                                Manifest.permission.RECORD_AUDIO
-                        },
-                        MICROPHONE_PERMISSION
-                );
-
-                return;
-            }
+            return;
         }
-
-        openVoiceRecognizer();
-    }
-
-    private void openVoiceRecognizer() {
-
-        Intent intent =
-                new Intent(
-                        RecognizerIntent.ACTION_RECOGNIZE_SPEECH
-                );
-
-        intent.putExtra(
-                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-        );
-
-        intent.putExtra(
-                RecognizerIntent.EXTRA_LANGUAGE,
-                "ar-MA"
-        );
-
-        intent.putExtra(
-                RecognizerIntent.EXTRA_PROMPT,
-                "تكلم مع JARVIS..."
-        );
 
         try {
 
-            startActivityForResult(
-                    intent,
-                    VOICE_REQUEST
+            Intent intent =
+                    new Intent(
+                            RecognizerIntent
+                                    .ACTION_RECOGNIZE_SPEECH
+                    );
+
+            intent.putExtra(
+                    RecognizerIntent
+                            .EXTRA_LANGUAGE_MODEL,
+                    RecognizerIntent
+                            .LANGUAGE_MODEL_FREE_FORM
             );
 
-        } catch (ActivityNotFoundException e) {
+            intent.putExtra(
+                    RecognizerIntent
+                            .EXTRA_LANGUAGE,
+                    "ar-MA"
+            );
 
-            Toast.makeText(
-                    this,
-                    "التعرف على الصوت غير متوفر.",
-                    Toast.LENGTH_LONG
-            ).show();
+            intent.putExtra(
+                    RecognizerIntent
+                            .EXTRA_PROMPT,
+                    "تكلم مع JARVIS"
+            );
+
+            startActivityForResult(
+                    intent,
+                    REQUEST_VOICE
+            );
+
+            statusText.setText(
+                    "● JARVIS LISTENING..."
+            );
+
+        } catch (Exception e) {
+
+            statusText.setText(
+                    "● JARVIS ONLINE"
+            );
+
+            speak(
+                    "تعذر تشغيل التعرف على الصوت."
+            );
         }
     }
+
+    // =========================================================
+    // VOICE RESULT
+    // =========================================================
+
+    @Override
+    protected void onActivityResult(
+            int requestCode,
+            int resultCode,
+            android.content.Intent data
+    ) {
+
+        super.onActivityResult(
+                requestCode,
+                resultCode,
+                data
+        );
+
+        if (requestCode != REQUEST_VOICE) {
+            return;
+        }
+
+        statusText.setText(
+                "● JARVIS ONLINE"
+        );
+
+        if (resultCode != RESULT_OK ||
+                data == null) {
+
+            speak(
+                    "لم أسمع الأمر."
+            );
+
+            return;
+        }
+
+        ArrayList<String> results =
+                data.getStringArrayListExtra(
+                        RecognizerIntent
+                                .EXTRA_RESULTS
+                );
+
+        if (results == null ||
+                results.isEmpty()) {
+
+            speak(
+                    "لم أتعرف على الكلام."
+            );
+
+            return;
+        }
+
+        String command =
+                results.get(0);
+
+        inputText.setText(
+                command
+        );
+
+        executeCommand();
+    }
+
+    // =========================================================
+    // TEXT TO SPEECH
+    // =========================================================
+
+    @Override
+    public void onInit(int status) {
+
+        if (status ==
+                TextToSpeech.SUCCESS) {
+
+            int result =
+                    textToSpeech.setLanguage(
+                            new Locale(
+                                    "ar",
+                                    "MA"
+                            )
+                    );
+
+            if (result ==
+                    TextToSpeech.LANG_MISSING_DATA ||
+                    result ==
+                    TextToSpeech.LANG_NOT_SUPPORTED) {
+
+                textToSpeech.setLanguage(
+                        new Locale("ar")
+                );
+            }
+
+            textToSpeech.setSpeechRate(
+                    0.95f
+            );
+        }
+    }
+
+    private void speak(String text) {
+
+        if (text == null ||
+                text.trim().isEmpty()) {
+
+            return;
+        }
+
+        if (textToSpeech == null) {
+            return;
+        }
+
+        textToSpeech.speak(
+                text,
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                "JARVIS_RESPONSE"
+        );
+    }
+
+    private void stopSpeaking() {
+
+        if (textToSpeech != null &&
+                textToSpeech.isSpeaking()) {
+
+            textToSpeech.stop();
+        }
+    }
+
+    // =========================================================
+    // CHAT
+    // =========================================================
+
+    private void addMessage(String message) {
+
+        if (chatText == null) {
+            return;
+        }
+
+        chatText.append(
+                "\n" + message + "\n"
+        );
+    }
+
+    // =========================================================
+    // PERMISSION RESULT
+    // =========================================================
 
     @Override
     public void onRequestPermissionsResult(
@@ -360,110 +549,39 @@ public class MainActivity extends Activity {
         );
 
         if (requestCode ==
-                MICROPHONE_PERMISSION) {
+                REQUEST_AUDIO) {
 
-            if (grantResults.length > 0
-                    && grantResults[0] ==
-                    PackageManager.PERMISSION_GRANTED) {
+            if (grantResults.length > 0 &&
+                    grantResults[0] ==
+                            PackageManager.PERMISSION_GRANTED) {
 
-                Toast.makeText(
-                        this,
-                        "تم السماح بالميكروفون.",
-                        Toast.LENGTH_SHORT
-                ).show();
-
-                openVoiceRecognizer();
+                statusText.setText(
+                        "● JARVIS ONLINE"
+                );
 
             } else {
 
-                Toast.makeText(
-                        this,
-                        "خاصك تسمح لـ JARVIS بالميكروفون.",
-                        Toast.LENGTH_LONG
-                ).show();
-            }
-        }
-    }
-
-    @Override
-    protected void onActivityResult(
-            int requestCode,
-            int resultCode,
-            Intent data
-    ) {
-
-        super.onActivityResult(
-                requestCode,
-                resultCode,
-                data
-        );
-
-        if (requestCode == VOICE_REQUEST
-                && resultCode == RESULT_OK
-                && data != null) {
-
-            ArrayList<String> results =
-                    data.getStringArrayListExtra(
-                            RecognizerIntent.EXTRA_RESULTS
-                    );
-
-            if (results != null
-                    && !results.isEmpty()) {
-
-                String command =
-                        results.get(0);
-
-                commandInput.setText(
-                        command
+                statusText.setText(
+                        "● JARVIS ONLINE — الصوت غير مفعل"
                 );
-
-                executeCommand(command);
             }
         }
     }
 
-    private void respond(
-            String message
-    ) {
-
-        addMessage(
-                "JARVIS:\n" + message
-        );
-
-        if (jarvisVoice != null) {
-
-            jarvisVoice.speak(
-                    message,
-                    TextToSpeech.QUEUE_FLUSH,
-                    null,
-                    "JARVIS_RESPONSE"
-            );
-        }
-    }
-
-    private void addMessage(
-            String message
-    ) {
-
-        String current =
-                output
-                        .getText()
-                        .toString();
-
-        output.setText(
-                current +
-                "\n\n--------------------\n\n" +
-                message
-        );
-    }
+    // =========================================================
+    // ACTIVITY LIFECYCLE
+    // =========================================================
 
     @Override
     protected void onDestroy() {
 
-        if (jarvisVoice != null) {
+        stopSpeaking();
 
-            jarvisVoice.stop();
-            jarvisVoice.shutdown();
+        if (textToSpeech != null) {
+
+            textToSpeech.shutdown();
+
+            textToSpeech = null;
         }
 
         super.onDestroy();
