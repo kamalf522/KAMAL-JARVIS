@@ -12,294 +12,223 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * JARVIS Evolution Engine
- *
- * مسؤول عن إدارة التطور المستمر لـ JARVIS:
- *
- * Observe -> Learn -> Plan -> Build -> Test -> Improve -> Remember
- *
- * هذه الطبقة هي نواة نظام التطور.
- * سيتم ربطها لاحقاً مع:
- * - Skill System
- * - Learning System
- * - Self Diagnosis
- * - Self Test
- * - Self Builder
- * - Permission Manager
- * - Kamal Authority
- * - Recovery System
- */
 public class EvolutionEngine {
 
-    private static final String PREF_NAME = "jarvis_evolution";
+    private static final String PREF_NAME =
+            "jarvis_evolution";
 
-    private static final String KEY_SKILLS = "skills";
-    private static final String KEY_GOALS = "goals";
-    private static final String KEY_HISTORY = "history";
-    private static final String KEY_PENDING_APPROVALS = "pending_approvals";
-    private static final String KEY_VERSION = "engine_version";
+    private static final String KEY_GOALS =
+            "goals";
 
-    private static final String ENGINE_VERSION = "1.0";
+    private static final String KEY_HISTORY =
+            "history";
+
+    private static final String KEY_APPROVALS =
+            "pending_approvals";
+
+    private static final String KEY_VERSION =
+            "engine_version";
+
+    private static final String ENGINE_VERSION =
+            "2.0";
 
     private final Context context;
     private final SharedPreferences preferences;
+
     private final MemoryManager memoryManager;
+    private final SkillManager skillManager;
 
-    public EvolutionEngine(Context context, MemoryManager memoryManager) {
-        this.context = context.getApplicationContext();
-        this.memoryManager = memoryManager;
+    public EvolutionEngine(
+            Context context,
+            MemoryManager memoryManager
+    ) {
 
-        preferences = this.context.getSharedPreferences(
-                PREF_NAME,
-                Context.MODE_PRIVATE
-        );
+        this.context =
+                context.getApplicationContext();
+
+        this.memoryManager =
+                memoryManager;
+
+        this.skillManager =
+                new SkillManager(
+                        this.context
+                );
+
+        preferences =
+                this.context.getSharedPreferences(
+                        PREF_NAME,
+                        Context.MODE_PRIVATE
+                );
 
         initialize();
     }
 
-    /**
-     * إنشاء البيانات الأساسية لأول مرة.
-     */
+    // =========================================================
+    // INITIALIZATION
+    // =========================================================
+
     private void initialize() {
 
-        if (!preferences.contains(KEY_SKILLS)) {
-            preferences.edit()
-                    .putString(KEY_SKILLS, "[]")
-                    .apply();
-        }
-
         if (!preferences.contains(KEY_GOALS)) {
+
             preferences.edit()
-                    .putString(KEY_GOALS, "[]")
+                    .putString(
+                            KEY_GOALS,
+                            "[]"
+                    )
                     .apply();
         }
 
         if (!preferences.contains(KEY_HISTORY)) {
+
             preferences.edit()
-                    .putString(KEY_HISTORY, "[]")
+                    .putString(
+                            KEY_HISTORY,
+                            "[]"
+                    )
                     .apply();
         }
 
-        if (!preferences.contains(KEY_PENDING_APPROVALS)) {
+        if (!preferences.contains(KEY_APPROVALS)) {
+
             preferences.edit()
-                    .putString(KEY_PENDING_APPROVALS, "[]")
+                    .putString(
+                            KEY_APPROVALS,
+                            "[]"
+                    )
                     .apply();
         }
 
         preferences.edit()
-                .putString(KEY_VERSION, ENGINE_VERSION)
+                .putString(
+                        KEY_VERSION,
+                        ENGINE_VERSION
+                )
                 .apply();
     }
 
-    // ============================================================
+    // =========================================================
     // SKILLS
-    // ============================================================
+    // =========================================================
 
-    /**
-     * إضافة مهارة جديدة.
-     */
     public boolean registerSkill(
             String name,
             String description
     ) {
 
-        if (name == null || name.trim().isEmpty()) {
-            return false;
-        }
+        boolean added =
+                skillManager.addSkill(
+                        name,
+                        description
+                );
 
-        try {
-
-            JSONArray skills = getSkillsJson();
-
-            // منع التكرار
-            for (int i = 0; i < skills.length(); i++) {
-
-                JSONObject skill = skills.getJSONObject(i);
-
-                if (skill.getString("name")
-                        .equalsIgnoreCase(name.trim())) {
-
-                    return false;
-                }
-            }
-
-            JSONObject skill = new JSONObject();
-
-            skill.put("name", name.trim());
-            skill.put(
-                    "description",
-                    description == null ? "" : description.trim()
-            );
-
-            skill.put("status", "active");
-            skill.put("success_count", 0);
-            skill.put("failure_count", 0);
-            skill.put("created_at", now());
-            skill.put("updated_at", now());
-
-            skills.put(skill);
-
-            saveSkills(skills);
+        if (added) {
 
             addHistory(
                     "SKILL_CREATED",
-                    "تمت إضافة مهارة جديدة: " + name
+                    name
             );
-
-            return true;
-
-        } catch (Exception e) {
-
-            addHistory(
-                    "ERROR",
-                    "فشل إنشاء المهارة: " + e.getMessage()
-            );
-
-            return false;
         }
+
+        return added;
     }
 
-    /**
-     * تسجيل نجاح المهارة.
-     */
-    public void recordSkillSuccess(String skillName) {
-
-        updateSkillResult(
-                skillName,
-                true
-        );
-    }
-
-    /**
-     * تسجيل فشل المهارة.
-     */
-    public void recordSkillFailure(String skillName) {
-
-        updateSkillResult(
-                skillName,
-                false
-        );
-    }
-
-    private void updateSkillResult(
-            String skillName,
-            boolean success
+    public boolean removeSkill(
+            String name
     ) {
 
-        if (skillName == null) {
-            return;
-        }
+        boolean removed =
+                skillManager.removeSkill(
+                        name
+                );
 
-        try {
-
-            JSONArray skills = getSkillsJson();
-
-            for (int i = 0; i < skills.length(); i++) {
-
-                JSONObject skill = skills.getJSONObject(i);
-
-                if (skill.getString("name")
-                        .equalsIgnoreCase(skillName.trim())) {
-
-                    if (success) {
-
-                        int count =
-                                skill.optInt("success_count", 0);
-
-                        skill.put(
-                                "success_count",
-                                count + 1
-                        );
-
-                    } else {
-
-                        int count =
-                                skill.optInt("failure_count", 0);
-
-                        skill.put(
-                                "failure_count",
-                                count + 1
-                        );
-                    }
-
-                    skill.put("updated_at", now());
-
-                    saveSkills(skills);
-
-                    addHistory(
-                            success
-                                    ? "SKILL_SUCCESS"
-                                    : "SKILL_FAILURE",
-                            skillName
-                    );
-
-                    return;
-                }
-            }
-
-        } catch (Exception e) {
+        if (removed) {
 
             addHistory(
-                    "ERROR",
-                    "Skill result error: " + e.getMessage()
+                    "SKILL_REMOVED",
+                    name
             );
         }
+
+        return removed;
     }
 
-    /**
-     * إرجاع جميع المهارات.
-     */
+    public void recordSkillSuccess(
+            String name
+    ) {
+
+        skillManager.recordSuccess(
+                name
+        );
+
+        addHistory(
+                "SKILL_SUCCESS",
+                name
+        );
+    }
+
+    public void recordSkillFailure(
+            String name
+    ) {
+
+        skillManager.recordFailure(
+                name
+        );
+
+        addHistory(
+                "SKILL_FAILURE",
+                name
+        );
+    }
+
     public List<String> getSkillNames() {
 
-        List<String> result = new ArrayList<>();
-
-        try {
-
-            JSONArray skills = getSkillsJson();
-
-            for (int i = 0; i < skills.length(); i++) {
-
-                JSONObject skill = skills.getJSONObject(i);
-
-                result.add(
-                        skill.getString("name")
-                );
-            }
-
-        } catch (Exception e) {
-
-            addHistory(
-                    "ERROR",
-                    "Skill list error: " + e.getMessage()
-            );
-        }
-
-        return result;
+        return skillManager
+                .getSkillNames();
     }
 
-    // ============================================================
+    public String getSkillReport() {
+
+        return skillManager
+                .getSkillReport();
+    }
+
+    // =========================================================
     // GOALS
-    // ============================================================
+    // =========================================================
 
-    /**
-     * إنشاء هدف تطوري جديد.
-     */
-    public boolean createEvolutionGoal(String goal) {
+    public boolean createEvolutionGoal(
+            String goal
+    ) {
 
-        if (goal == null || goal.trim().isEmpty()) {
+        if (goal == null ||
+                goal.trim().isEmpty()) {
+
             return false;
         }
 
         try {
 
-            JSONArray goals = getGoalsJson();
+            JSONArray goals =
+                    getGoals();
 
-            JSONObject object = new JSONObject();
+            JSONObject object =
+                    new JSONObject();
 
-            object.put("goal", goal.trim());
-            object.put("status", "pending");
-            object.put("created_at", now());
+            object.put(
+                    "goal",
+                    goal.trim()
+            );
+
+            object.put(
+                    "status",
+                    "pending"
+            );
+
+            object.put(
+                    "created_at",
+                    now()
+            );
 
             goals.put(object);
 
@@ -316,24 +245,17 @@ public class EvolutionEngine {
 
             addHistory(
                     "ERROR",
-                    "Goal creation error: " + e.getMessage()
+                    e.getMessage()
             );
 
             return false;
         }
     }
 
-    // ============================================================
+    // =========================================================
     // EVOLUTION CYCLE
-    // ============================================================
+    // =========================================================
 
-    /**
-     * تشغيل دورة تطور واحدة.
-     *
-     * هذه حالياً طبقة التخطيط.
-     * سيتم ربط مراحل BUILD وTEST وIMPROVE
-     * مع الأنظمة القادمة.
-     */
     public String runEvolutionCycle() {
 
         addHistory(
@@ -344,28 +266,80 @@ public class EvolutionEngine {
         StringBuilder report =
                 new StringBuilder();
 
-        report.append("JARVIS EVOLUTION CYCLE\n\n");
+        report.append(
+                "JARVIS EVOLUTION CYCLE\n\n"
+        );
 
-        // 1. Observe
-        report.append("1. OBSERVE: OK\n");
+        // -----------------------------------------------------
+        // 1. OBSERVE
+        // -----------------------------------------------------
 
-        // 2. Learn
-        report.append("2. LEARN: READY\n");
+        report.append(
+                "1. OBSERVE: OK\n"
+        );
 
-        // 3. Plan
-        report.append("3. PLAN: READY\n");
+        int skillCount =
+                skillManager
+                        .getSkillNames()
+                        .size();
 
-        // 4. Build
-        report.append("4. BUILD: WAITING FOR BUILDER\n");
+        report.append(
+                "   Skills detected: "
+        );
 
-        // 5. Test
-        report.append("5. TEST: WAITING FOR TEST SYSTEM\n");
+        report.append(
+                skillCount
+        );
 
-        // 6. Improve
-        report.append("6. IMPROVE: READY\n");
+        report.append("\n");
 
-        // 7. Remember
-        report.append("7. REMEMBER: ACTIVE\n");
+        // -----------------------------------------------------
+        // 2. LEARN
+        // -----------------------------------------------------
+
+        report.append(
+                "2. LEARN: READY\n"
+        );
+
+        // -----------------------------------------------------
+        // 3. PLAN
+        // -----------------------------------------------------
+
+        report.append(
+                "3. PLAN: READY\n"
+        );
+
+        // -----------------------------------------------------
+        // 4. BUILD
+        // -----------------------------------------------------
+
+        report.append(
+                "4. BUILD: MODULE PENDING\n"
+        );
+
+        // -----------------------------------------------------
+        // 5. TEST
+        // -----------------------------------------------------
+
+        report.append(
+                "5. TEST: MODULE PENDING\n"
+        );
+
+        // -----------------------------------------------------
+        // 6. IMPROVE
+        // -----------------------------------------------------
+
+        report.append(
+                "6. IMPROVE: READY\n"
+        );
+
+        // -----------------------------------------------------
+        // 7. REMEMBER
+        // -----------------------------------------------------
+
+        report.append(
+                "7. REMEMBER: ACTIVE\n"
+        );
 
         addHistory(
                 "EVOLUTION_CYCLE",
@@ -375,19 +349,18 @@ public class EvolutionEngine {
         return report.toString();
     }
 
-    // ============================================================
+    // =========================================================
     // SELF DIAGNOSIS
-    // ============================================================
+    // =========================================================
 
-    /**
-     * فحص أولي لمعرفة حالة نظام التطور.
-     */
     public String selfDiagnosis() {
 
         StringBuilder result =
                 new StringBuilder();
 
-        result.append("JARVIS SELF DIAGNOSIS\n\n");
+        result.append(
+                "JARVIS SELF DIAGNOSIS\n\n"
+        );
 
         result.append(
                 "Evolution Engine: ONLINE\n"
@@ -404,13 +377,7 @@ public class EvolutionEngine {
         );
 
         result.append(
-                "Skill System: "
-        );
-
-        result.append(
-                getSkillNames().size() >= 0
-                        ? "ONLINE\n"
-                        : "ERROR\n"
+                "Skill System: ONLINE\n"
         );
 
         result.append(
@@ -418,7 +385,7 @@ public class EvolutionEngine {
         );
 
         result.append(
-                "Evolution History: ONLINE\n"
+                "History System: ONLINE\n"
         );
 
         result.append(
@@ -426,54 +393,62 @@ public class EvolutionEngine {
         );
 
         result.append(
-                "Self Builder: NOT CONNECTED YET\n"
+                "Self Builder: PENDING\n"
         );
 
         result.append(
-                "Self Test: NOT CONNECTED YET\n"
+                "Self Test: PENDING\n"
+        );
+
+        result.append(
+                "Recovery System: PENDING\n"
         );
 
         return result.toString();
     }
 
-    // ============================================================
-    // APPROVAL SYSTEM
-    // ============================================================
+    // =========================================================
+    // APPROVAL
+    // =========================================================
 
-    /**
-     * إضافة عملية تحتاج موافقة كمال.
-     */
     public String requestApproval(
             String action,
             String reason
     ) {
 
-        if (action == null || action.trim().isEmpty()) {
+        if (action == null ||
+                action.trim().isEmpty()) {
+
             return null;
         }
 
         try {
 
             JSONArray approvals =
-                    getApprovalsJson();
+                    getApprovals();
 
             JSONObject request =
                     new JSONObject();
 
             String id =
-                    "REQ-" + System.currentTimeMillis();
+                    "REQ-" +
+                    System.currentTimeMillis();
 
-            request.put("id", id);
+            request.put(
+                    "id",
+                    id
+            );
+
             request.put(
                     "action",
-                    action.trim()
+                    action
             );
 
             request.put(
                     "reason",
                     reason == null
                             ? ""
-                            : reason.trim()
+                            : reason
             );
 
             request.put(
@@ -488,7 +463,9 @@ public class EvolutionEngine {
 
             approvals.put(request);
 
-            saveApprovals(approvals);
+            saveApprovals(
+                    approvals
+            );
 
             addHistory(
                     "APPROVAL_REQUESTED",
@@ -499,52 +476,43 @@ public class EvolutionEngine {
 
         } catch (Exception e) {
 
-            addHistory(
-                    "ERROR",
-                    "Approval error: " + e.getMessage()
-            );
-
             return null;
         }
     }
 
-    /**
-     * الموافقة على طلب.
-     */
-    public boolean approve(String requestId) {
+    public boolean approve(
+            String requestId
+    ) {
 
-        return changeApprovalStatus(
+        return updateApproval(
                 requestId,
                 "approved"
         );
     }
 
-    /**
-     * رفض طلب.
-     */
-    public boolean reject(String requestId) {
+    public boolean reject(
+            String requestId
+    ) {
 
-        return changeApprovalStatus(
+        return updateApproval(
                 requestId,
                 "rejected"
         );
     }
 
-    private boolean changeApprovalStatus(
+    private boolean updateApproval(
             String requestId,
             String status
     ) {
 
-        if (requestId == null) {
-            return false;
-        }
-
         try {
 
             JSONArray approvals =
-                    getApprovalsJson();
+                    getApprovals();
 
-            for (int i = 0; i < approvals.length(); i++) {
+            for (int i = 0;
+                    i < approvals.length();
+                    i++) {
 
                 JSONObject request =
                         approvals.getJSONObject(i);
@@ -562,7 +530,9 @@ public class EvolutionEngine {
                             now()
                     );
 
-                    saveApprovals(approvals);
+                    saveApprovals(
+                            approvals
+                    );
 
                     addHistory(
                             "APPROVAL_" +
@@ -574,35 +544,30 @@ public class EvolutionEngine {
                 }
             }
 
-        } catch (Exception e) {
-
-            addHistory(
-                    "ERROR",
-                    "Approval update error: "
-                            + e.getMessage()
-            );
+        } catch (Exception ignored) {
         }
 
         return false;
     }
 
-    // ============================================================
+    // =========================================================
     // STATUS
-    // ============================================================
+    // =========================================================
 
-    /**
-     * حالة نظام التطور.
-     */
     public String getEvolutionStatus() {
 
         int skills =
-                getSkillNames().size();
+                skillManager
+                        .getSkillNames()
+                        .size();
 
         int goals =
-                getGoalsJson().length();
+                getGoals()
+                        .length();
 
         int approvals =
-                getApprovalsJson().length();
+                getApprovals()
+                        .length();
 
         return
                 "JARVIS EVOLUTION STATUS\n\n" +
@@ -635,16 +600,26 @@ public class EvolutionEngine {
 
                 "Continuous Evolution: READY\n" +
 
-                "Self Builder: PENDING MODULE\n" +
+                "Self Builder: PENDING\n" +
 
-                "Self Test: PENDING MODULE\n" +
+                "Self Test: PENDING\n" +
 
-                "Recovery: PENDING MODULE";
+                "Recovery: PENDING";
     }
 
-    // ============================================================
+    // =========================================================
+    // SKILL REPORT
+    // =========================================================
+
+    public String getSkillsStatus() {
+
+        return skillManager
+                .getSkillReport();
+    }
+
+    // =========================================================
     // HISTORY
-    // ============================================================
+    // =========================================================
 
     private void addHistory(
             String type,
@@ -654,7 +629,7 @@ public class EvolutionEngine {
         try {
 
             JSONArray history =
-                    getHistoryJson();
+                    getHistory();
 
             JSONObject item =
                     new JSONObject();
@@ -678,25 +653,26 @@ public class EvolutionEngine {
 
             history.put(item);
 
-            // نحتفظ بآخر 1000 عملية فقط
             if (history.length() > 1000) {
 
                 JSONArray newHistory =
                         new JSONArray();
 
                 int start =
-                        history.length() - 1000;
+                        history.length()
+                                - 1000;
 
                 for (int i = start;
-                     i < history.length();
-                     i++) {
+                        i < history.length();
+                        i++) {
 
                     newHistory.put(
                             history.get(i)
                     );
                 }
 
-                history = newHistory;
+                history =
+                        newHistory;
             }
 
             preferences.edit()
@@ -710,49 +686,50 @@ public class EvolutionEngine {
         }
     }
 
-    /**
-     * إرجاع سجل التطور.
-     */
     public String getEvolutionHistory() {
 
-        return getHistoryJson().toString();
+        return getHistory()
+                .toString();
     }
 
-    // ============================================================
-    // JSON STORAGE
-    // ============================================================
+    // =========================================================
+    // STORAGE
+    // =========================================================
 
-    private JSONArray getSkillsJson() {
+    private JSONArray getGoals() {
 
-        return readArray(KEY_SKILLS);
+        return readArray(
+                KEY_GOALS
+        );
     }
 
-    private JSONArray getGoalsJson() {
+    private JSONArray getHistory() {
 
-        return readArray(KEY_GOALS);
+        return readArray(
+                KEY_HISTORY
+        );
     }
 
-    private JSONArray getHistoryJson() {
+    private JSONArray getApprovals() {
 
-        return readArray(KEY_HISTORY);
+        return readArray(
+                KEY_APPROVALS
+        );
     }
 
-    private JSONArray getApprovalsJson() {
-
-        return readArray(KEY_PENDING_APPROVALS);
-    }
-
-    private JSONArray readArray(String key) {
+    private JSONArray readArray(
+            String key
+    ) {
 
         try {
 
-            String value =
+            String data =
                     preferences.getString(
                             key,
                             "[]"
                     );
 
-            return new JSONArray(value);
+            return new JSONArray(data);
 
         } catch (Exception e) {
 
@@ -760,17 +737,9 @@ public class EvolutionEngine {
         }
     }
 
-    private void saveSkills(JSONArray data) {
-
-        preferences.edit()
-                .putString(
-                        KEY_SKILLS,
-                        data.toString()
-                )
-                .apply();
-    }
-
-    private void saveGoals(JSONArray data) {
+    private void saveGoals(
+            JSONArray data
+    ) {
 
         preferences.edit()
                 .putString(
@@ -780,19 +749,21 @@ public class EvolutionEngine {
                 .apply();
     }
 
-    private void saveApprovals(JSONArray data) {
+    private void saveApprovals(
+            JSONArray data
+    ) {
 
         preferences.edit()
                 .putString(
-                        KEY_PENDING_APPROVALS,
+                        KEY_APPROVALS,
                         data.toString()
                 )
                 .apply();
     }
 
-    // ============================================================
+    // =========================================================
     // TIME
-    // ============================================================
+    // =========================================================
 
     private String now() {
 
