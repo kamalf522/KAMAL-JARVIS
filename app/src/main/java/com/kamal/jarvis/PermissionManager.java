@@ -4,50 +4,34 @@ import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
 
-import androidx.core.content.ContextCompat;
-
 public class PermissionManager {
 
     private final Context context;
 
     public PermissionManager(Context context) {
-
-        this.context =
-                context.getApplicationContext();
+        this.context = context.getApplicationContext();
     }
 
     public boolean hasMicrophonePermission() {
-
-        return ContextCompat.checkSelfPermission(
-                context,
+        return context.checkSelfPermission(
                 Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED;
     }
 
     public boolean hasInternetPermission() {
-
-        return ContextCompat.checkSelfPermission(
-                context,
+        return context.checkSelfPermission(
                 Manifest.permission.INTERNET
         ) == PackageManager.PERMISSION_GRANTED;
     }
 
     public String getPermissionStatus() {
 
-        StringBuilder result =
-                new StringBuilder();
+        StringBuilder result = new StringBuilder();
 
-        result.append(
-                "JARVIS PERMISSION SYSTEM\n"
-        );
+        result.append("JARVIS PERMISSION SYSTEM\n");
+        result.append("============================\n\n");
 
-        result.append(
-                "============================\n\n"
-        );
-
-        result.append(
-                "Microphone: "
-        );
+        result.append("Microphone: ");
 
         result.append(
                 hasMicrophonePermission()
@@ -57,9 +41,7 @@ public class PermissionManager {
 
         result.append("\n");
 
-        result.append(
-                "Internet: "
-        );
+        result.append("Internet: ");
 
         result.append(
                 hasInternetPermission()
@@ -67,24 +49,21 @@ public class PermissionManager {
                         : "NOT AVAILABLE ⚠"
         );
 
+        result.append("\n");
+
         return result.toString();
     }
 
     public boolean isHealthy() {
-
         return hasInternetPermission();
     }
 
     public String getStatus() {
 
         if (isHealthy()) {
-
-            return
-                    "Permission Manager: ONLINE ✓";
-
+            return "Permission Manager: ONLINE ✓";
         }
 
-        return
-                "Permission Manager: NEEDS ATTENTION ⚠";
+        return "Permission Manager: NEEDS ATTENTION ⚠";
     }
 }
