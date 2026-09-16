@@ -2,60 +2,47 @@ package com.kamal.jarvis;
 
 import android.content.Context;
 
-import java.util.Map;
-
 public class KnowledgeEngine {
+
+    private static final String PREFIX = "__knowledge__";
 
     private final Context context;
     private final MemoryManager memoryManager;
     private final LearningEngine learningEngine;
     private final SkillManager skillManager;
 
-    private static final String PREFIX =
-            "__knowledge__";
-
     public KnowledgeEngine(Context context) {
 
-        this.context =
-                context.getApplicationContext();
+        this.context = context.getApplicationContext();
 
-        memoryManager =
-                new MemoryManager(this.context);
-
-        learningEngine =
-                new LearningEngine(this.context);
-
-        skillManager =
-                new SkillManager(this.context);
+        memoryManager = new MemoryManager(this.context);
+        learningEngine = new LearningEngine(this.context);
+        skillManager = new SkillManager(this.context);
     }
+
+    // ==========================================
+    // LEARN
+    // ==========================================
 
     public String learn(
             String topic,
             String information
     ) {
 
-        if (topic == null ||
-                topic.trim().isEmpty()) {
-
+        if (topic == null || topic.trim().isEmpty()) {
             return "حدد الموضوع اللي بغيتي JARVIS يتعلمو.";
         }
 
-        if (information == null ||
-                information.trim().isEmpty()) {
-
+        if (information == null || information.trim().isEmpty()) {
             return "عطيني المعلومة اللي بغيتي نخزن.";
         }
 
-        String cleanTopic =
-                topic.trim();
-
-        String cleanInformation =
-                information.trim();
+        String cleanTopic = topic.trim();
+        String cleanInformation = information.trim();
 
         String key =
                 PREFIX
-                        + cleanTopic
-                        .toLowerCase();
+                        + cleanTopic.toLowerCase();
 
         memoryManager.saveMemory(
                 key,
@@ -71,93 +58,96 @@ public class KnowledgeEngine {
                 + cleanInformation;
     }
 
-    public String remember(
-            String topic
-    ) {
+    // ==========================================
+    // REMEMBER
+    // ==========================================
 
-        if (topic == null ||
-                topic.trim().isEmpty()) {
+    public String remember(String topic) {
 
+        if (topic == null || topic.trim().isEmpty()) {
             return "حدد الموضوع اللي بغيتي نبحث عليه.";
         }
 
+        String cleanTopic = topic.trim();
+
         String key =
                 PREFIX
-                        + topic.trim()
-                        .toLowerCase();
+                        + cleanTopic.toLowerCase();
 
         String information =
                 memoryManager.getMemory(key);
 
-        if (information == null ||
-                information.trim().isEmpty()) {
+        if (information == null
+                || information.trim().isEmpty()) {
 
             return
                     "ما عنديش معرفة محفوظة على: "
-                    + topic.trim();
+                    + cleanTopic;
         }
 
         return
                 "المعرفة المحفوظة ✓\n\n"
                 + "الموضوع: "
-                + topic.trim()
+                + cleanTopic
                 + "\n"
                 + information;
     }
 
-    public boolean hasKnowledge(
-            String topic
-    ) {
+    // ==========================================
+    // HAS KNOWLEDGE
+    // ==========================================
 
-        if (topic == null ||
-                topic.trim().isEmpty()) {
+    public boolean hasKnowledge(String topic) {
 
+        if (topic == null || topic.trim().isEmpty()) {
             return false;
         }
 
         String key =
                 PREFIX
-                        + topic.trim()
-                        .toLowerCase();
+                        + topic.trim().toLowerCase();
 
         return memoryManager.hasMemory(key);
     }
 
-    public String forget(
-            String topic
-    ) {
+    // ==========================================
+    // FORGET
+    // ==========================================
 
-        if (topic == null ||
-                topic.trim().isEmpty()) {
+    public String forget(String topic) {
 
+        if (topic == null || topic.trim().isEmpty()) {
             return "حدد المعرفة اللي بغيتي نحيد.";
         }
 
+        String cleanTopic = topic.trim();
+
         String key =
                 PREFIX
-                        + topic.trim()
-                        .toLowerCase();
+                        + cleanTopic.toLowerCase();
 
         memoryManager.removeMemory(key);
 
         return
                 "تم حذف المعرفة ✓\n\n"
-                + topic.trim();
+                + cleanTopic;
     }
+
+    // ==========================================
+    // CREATE KNOWLEDGE SKILL
+    // ==========================================
 
     public String createKnowledgeSkill(
             String name,
             String description
     ) {
 
-        if (name == null ||
-                name.trim().isEmpty()) {
-
+        if (name == null || name.trim().isEmpty()) {
             return "حدد اسم المهارة.";
         }
 
-        if (description == null ||
-                description.trim().isEmpty()) {
+        if (description == null
+                || description.trim().isEmpty()) {
 
             return "حدد وصف المهارة.";
         }
@@ -176,24 +166,23 @@ public class KnowledgeEngine {
                 + description.trim();
     }
 
-    public String importLearning(
-            String topic
-    ) {
+    // ==========================================
+    // IMPORT LEARNING
+    // ==========================================
 
-        if (topic == null ||
-                topic.trim().isEmpty()) {
+    public String importLearning(String topic) {
 
+        if (topic == null || topic.trim().isEmpty()) {
             return "حدد موضوع التعلم.";
         }
 
         String learning =
-                learningEngine
-                        .rememberLearning(
-                                topic.trim()
-                        );
+                learningEngine.rememberLearning(
+                        topic.trim()
+                );
 
-        if (learning == null ||
-                learning.trim().isEmpty()) {
+        if (learning == null
+                || learning.trim().isEmpty()) {
 
             return
                     "ما لقيتش تعلم محفوظ على هاد الموضوع.";
@@ -202,20 +191,29 @@ public class KnowledgeEngine {
         return learning;
     }
 
-    public String getKnowledgeReport() {
+    // ==========================================
+    // KNOWLEDGE REPORT
+    // ==========================================
 
-        Map<String, String> memories =
-                memoryManager.getAllMemories();
+    public String getKnowledgeReport() {
 
         int count = 0;
 
-        if (memories != null) {
+        String memories =
+                memoryManager.getAllMemories();
 
-            for (String key :
-                    memories.keySet()) {
+        if (memories != null
+                && !memories.trim().isEmpty()
+                && !memories.equals(
+                        "ما عنديش معلومات محفوظة حاليا."
+                )) {
 
-                if (key.startsWith(PREFIX)) {
+            String[] lines =
+                    memories.split("\\n");
 
+            for (String line : lines) {
+
+                if (line.contains(PREFIX)) {
                     count++;
                 }
             }
@@ -231,6 +229,10 @@ public class KnowledgeEngine {
                 + "Skill System: ONLINE";
     }
 
+    // ==========================================
+    // STATUS
+    // ==========================================
+
     public String getStatus() {
 
         if (isHealthy()) {
@@ -242,6 +244,10 @@ public class KnowledgeEngine {
         return
                 "Knowledge Engine: ERROR ⚠";
     }
+
+    // ==========================================
+    // HEALTH
+    // ==========================================
 
     public boolean isHealthy() {
 
