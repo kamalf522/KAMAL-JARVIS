@@ -198,6 +198,12 @@ public class SkillManager {
             boolean enabled
     ) {
 
+        if (name == null ||
+                name.trim().isEmpty()) {
+
+            return false;
+        }
+
         try {
 
             JSONArray skills =
@@ -430,6 +436,15 @@ public class SkillManager {
     }
 
     // =========================================================
+    // SKILL COUNT
+    // =========================================================
+
+    public int getSkillCount() {
+
+        return getSkillNames().size();
+    }
+
+    // =========================================================
     // SKILL REPORT
     // =========================================================
 
@@ -550,6 +565,15 @@ public class SkillManager {
         }
 
         return report.toString();
+    }
+
+    // =========================================================
+    // COMPATIBILITY REPORT
+    // =========================================================
+
+    public String getReport() {
+
+        return getSkillReport();
     }
 
     // =========================================================
