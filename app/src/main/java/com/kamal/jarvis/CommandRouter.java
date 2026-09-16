@@ -12,228 +12,321 @@ import java.util.Locale;
 public class CommandRouter {
 
     private final Context context;
-    private final MemoryManager memoryManager;
-    private final EvolutionEngine evolutionEngine;
+    private final JarvisCore core;
 
     public CommandRouter(Context context) {
+
         this.context = context.getApplicationContext();
 
-        memoryManager = new MemoryManager(this.context);
-        evolutionEngine = new EvolutionEngine(this.context);
+        core = new JarvisCore(this.context);
     }
+
+    // =========================================================
+    // MAIN ENTRY
+    // =========================================================
 
     public String execute(String command) {
 
-        if (command == null || command.trim().isEmpty()) {
+        if (command == null ||
+                command.trim().isEmpty()) {
+
             return "ما سمعت حتى أمر.";
         }
 
         String original = command.trim();
         String cmd = original.toLowerCase(Locale.ROOT);
 
-        // =========================
-        // تحية
-        // =========================
+        // =====================================================
+        // STOP SPEAKING
+        // =====================================================
 
-        if (containsAny(cmd,
+        if (containsAny(
+                cmd,
+                "سكت",
+                "اسكت",
+                "وقف الكلام",
+                "وقف الصوت",
+                "stop speaking"
+        )) {
+
+            return "__STOP_SPEAKING__";
+        }
+
+        // =====================================================
+        // GREETING
+        // =====================================================
+
+        if (containsAny(
+                cmd,
                 "سلام",
                 "السلام عليكم",
                 "مرحبا",
                 "اهلا",
                 "أهلا",
                 "hello",
-                "hi")) {
+                "hi"
+        )) {
 
-            return "مرحبا كمال. JARVIS حاضر ومستعد.";
+            return "مرحبا كمال. JARVIS CORE حاضر ومستعد.";
         }
 
-        // =========================
-        // مساعدة
-        // =========================
+        // =====================================================
+        // HELP
+        // =====================================================
 
-        if (containsAny(cmd,
+        if (containsAny(
+                cmd,
                 "مساعدة",
                 "ساعدني",
                 "شنو نقدر ندير",
                 "الأوامر",
-                "الاوامر")) {
+                "الاوامر",
+                "help"
+        )) {
 
             return getHelp();
         }
 
-        // =========================
-        // حالة النظام
-        // =========================
+        // =====================================================
+        // TIME
+        // =====================================================
 
-        if (containsAny(cmd,
-                "حالة النظام",
-                "حالتك",
-                "ستاتوس",
-                "status",
-                "كيف داير")) {
+        if (containsAny(
+                cmd,
+                "الوقت",
+                "شحال فالوقت",
+                "كم الساعة",
+                "الساعة"
+        )) {
 
-            return evolutionEngine.getEvolutionStatus();
+            String time =
+                    new SimpleDateFormat(
+                            "HH:mm",
+                            Locale.getDefault()
+                    ).format(new Date());
+
+            return "الوقت دابا هو " + time;
         }
 
-        // =========================
-        // القدرات
-        // =========================
+        // =====================================================
+        // DATE
+        // =====================================================
 
-        if (containsAny(cmd,
-                "شنو هي القدرات ديالك",
-                "ما هي قدراتك",
-                "شنو قدراتك",
-                "القدرات ديالك",
-                "قدراتك",
-                "capabilities")) {
+        if (containsAny(
+                cmd,
+                "التاريخ",
+                "نهار شحال",
+                "اليوم شحال"
+        )) {
 
-            return evolutionEngine.getCapabilitiesStatus();
+            String date =
+                    new SimpleDateFormat(
+                            "dd/MM/yyyy",
+                            Locale.getDefault()
+                    ).format(new Date());
+
+            return "التاريخ اليوم هو " + date;
         }
 
-        // =========================
-        // المهارات
-        // =========================
+        // =====================================================
+        // OPEN YOUTUBE
+        // =====================================================
 
-        if (containsAny(cmd,
-                "شنو هي المهارات ديالك",
-                "شنو المهارات ديالك",
-                "ما هي مهاراتك",
-                "المهارات ديالك",
-                "مهاراتك",
-                "skills")) {
+        if (containsAny(
+                cmd,
+                "فتح يوتيوب",
+                "افتح يوتيوب",
+                "youtube"
+        )) {
 
-            return evolutionEngine.getSkillsStatus();
+            openUrl("https://www.youtube.com");
+
+            return "فتحت YouTube.";
         }
 
-        // =========================
-        // التشخيص الذاتي
-        // =========================
+        // =====================================================
+        // OPEN GOOGLE
+        // =====================================================
 
-        if (containsAny(cmd,
-                "شخص نفسك",
-                "شخص النظام",
-                "التشخيص",
-                "التشخيص الذاتي",
-                "شنو ناقصك",
-                "شنو ناقص",
-                "ما الذي ينقصك",
-                "self diagnosis",
-                "diagnosis")) {
+        if (containsAny(
+                cmd,
+                "فتح جوجل",
+                "افتح جوجل",
+                "google"
+        )) {
 
-            return evolutionEngine.selfDiagnosis();
+            openUrl("https://www.google.com");
+
+            return "فتحت Google.";
         }
 
-        // =========================
-        // بدء التطور
-        // =========================
+        // =====================================================
+        // OPEN FACEBOOK
+        // =====================================================
 
-        if (containsAny(cmd,
-                "طور نفسك",
-                "طور ذاتك",
-                "ابدأ التطور",
-                "بدا التطور",
-                "ابدأ دورة التطور",
-                "دورة التطور",
-                "evolve",
-                "evolution")) {
+        if (containsAny(
+                cmd,
+                "فتح فيسبوك",
+                "افتح فيسبوك",
+                "facebook"
+        )) {
 
-            return evolutionEngine.runEvolutionCycle();
+            openUrl("https://www.facebook.com");
+
+            return "فتحت Facebook.";
         }
 
-        // =========================
-        // حالة التطور
-        // =========================
+        // =====================================================
+        // OPEN INSTAGRAM
+        // =====================================================
 
-        if (containsAny(cmd,
-                "حالة التطور",
-                "ستاتوس التطور",
-                "فين وصل التطور",
-                "تطورك")) {
+        if (containsAny(
+                cmd,
+                "فتح انستغرام",
+                "افتح انستغرام",
+                "instagram"
+        )) {
 
-            return evolutionEngine.getEvolutionStatus();
+            openUrl("https://www.instagram.com");
+
+            return "فتحت Instagram.";
         }
 
-        // =========================
-        // تاريخ التطور
-        // =========================
+        // =====================================================
+        // OPEN WHATSAPP
+        // =====================================================
 
-        if (containsAny(cmd,
-                "تاريخ التطور",
-                "سجل التطور",
-                "تاريخك",
-                "سجل العمليات",
-                "history")) {
+        if (containsAny(
+                cmd,
+                "فتح واتساب",
+                "افتح واتساب",
+                "whatsapp"
+        )) {
 
-            return evolutionEngine.getEvolutionHistory();
+            openUrl("https://wa.me/");
+
+            return "فتحت WhatsApp.";
         }
 
-        // =========================
-        // إضافة مهارة
-        // =========================
+        // =====================================================
+        // ANDROID SETTINGS
+        // =====================================================
 
-        if (cmd.startsWith("أضف مهارة")
-                || cmd.startsWith("اضف مهارة")) {
+        if (containsAny(
+                cmd,
+                "افتح الإعدادات",
+                "افتح الاعدادات",
+                "الإعدادات",
+                "الاعدادات",
+                "settings"
+        )) {
 
-            String skill =
-                    original
-                            .replaceFirst(
-                                    "(?i)^أضف مهارة\\s*",
-                                    ""
-                            )
-                            .replaceFirst(
-                                    "(?i)^اضف مهارة\\s*",
-                                    ""
-                            )
-                            .trim();
+            openSettings();
 
-            if (skill.isEmpty()) {
-                return "قول ليا اسم المهارة اللي بغيتي نضيف.";
-            }
-
-            evolutionEngine.registerSkill(
-                    skill,
-                    "مهارة أضافها كمال إلى نظام JARVIS."
-            );
-
-            return "تم تسجيل المهارة: " + skill;
+            return "فتحت إعدادات الهاتف.";
         }
 
-        // =========================
-        // هدف جديد
-        // =========================
+        // =====================================================
+        // WIFI
+        // =====================================================
 
-        if (cmd.startsWith("هدف جديد")
-                || cmd.startsWith("اضف هدف")
-                || cmd.startsWith("أضف هدف")) {
+        if (containsAny(
+                cmd,
+                "افتح الواي فاي",
+                "الواي فاي",
+                "wifi"
+        )) {
 
-            String goal =
-                    original
-                            .replaceFirst(
-                                    "(?i)^هدف جديد\\s*",
-                                    ""
-                            )
-                            .replaceFirst(
-                                    "(?i)^اضف هدف\\s*",
-                                    ""
-                            )
-                            .replaceFirst(
-                                    "(?i)^أضف هدف\\s*",
-                                    ""
-                            )
-                            .trim();
-
-            if (goal.isEmpty()) {
-                return "قول ليا شنو هو الهدف.";
-            }
-
-            evolutionEngine.createEvolutionGoal(goal);
-
-            return "تم تسجيل الهدف: " + goal;
+            return core.openWifi();
         }
 
-        // =========================
-        // حفظ ذاكرة
-        // =========================
+        // =====================================================
+        // BLUETOOTH
+        // =====================================================
+
+        if (containsAny(
+                cmd,
+                "افتح البلوتوث",
+                "البلوتوث",
+                "bluetooth"
+        )) {
+
+            return core.openBluetooth();
+        }
+
+        // =====================================================
+        // DEVICE INFO
+        // =====================================================
+
+        if (containsAny(
+                cmd,
+                "معلومات الهاتف",
+                "حول الهاتف",
+                "عن الهاتف"
+        )) {
+
+            return core.openDeviceInfo();
+        }
+
+        // =====================================================
+        // NOTIFICATION SETTINGS
+        // =====================================================
+
+        if (containsAny(
+                cmd,
+                "إعدادات الإشعارات",
+                "اعدادات الاشعارات",
+                "notification settings"
+        )) {
+
+            return core.openNotificationSettings();
+        }
+
+        // =====================================================
+        // DISPLAY SETTINGS
+        // =====================================================
+
+        if (containsAny(
+                cmd,
+                "إعدادات الشاشة",
+                "اعدادات الشاشة",
+                "display settings"
+        )) {
+
+            return core.openDisplaySettings();
+        }
+
+        // =====================================================
+        // SOUND SETTINGS
+        // =====================================================
+
+        if (containsAny(
+                cmd,
+                "إعدادات الصوت",
+                "اعدادات الصوت",
+                "sound settings"
+        )) {
+
+            return core.openSoundSettings();
+        }
+
+        // =====================================================
+        // BATTERY SETTINGS
+        // =====================================================
+
+        if (containsAny(
+                cmd,
+                "إعدادات البطارية",
+                "اعدادات البطارية",
+                "battery settings"
+        )) {
+
+            return core.openBatterySettings();
+        }
+
+        // =====================================================
+        // REMEMBER
+        // =====================================================
 
         if (cmd.startsWith("تذكر ")
                 || cmd.startsWith("احفظ ")
@@ -256,394 +349,115 @@ public class CommandRouter {
                             .trim();
 
             if (memory.isEmpty()) {
+
                 return "شنو بغيتي نحفظ؟";
             }
 
-            String key = "memory_" + System.currentTimeMillis();
+            String key =
+                    "memory_" +
+                            System.currentTimeMillis();
 
-            memoryManager.saveMemory(
+            return core.remember(
                     key,
                     memory
             );
-
-            return "حفظتها في الذاكرة.";
         }
 
-        // =========================
-        // عدد الذكريات
-        // =========================
+        // =====================================================
+        // SYSTEM STATUS
+        // =====================================================
 
-        if (containsAny(cmd,
-                "شنو حافظ",
-                "الذاكرة ديالك",
-                "ذكرياتك",
-                "memory")) {
+        if (containsAny(
+                cmd,
+                "حالة النظام",
+                "حالتك",
+                "ستاتوس",
+                "status",
+                "كيف داير"
+        )) {
 
-            return "عندي حاليا "
-                    + memoryManager.getMemoryCount()
-                    + " ذكريات محفوظة.";
+            return core.getFullStatus();
         }
 
-        // =========================
-        // مسح الذاكرة
-        // =========================
+        // =====================================================
+        // SELF DIAGNOSIS
+        // =====================================================
 
-        if (containsAny(cmd,
-                "مسح الذاكرة",
-                "امسح الذاكرة",
-                "حذف الذاكرة",
-                "نسى كلشي")) {
+        if (containsAny(
+                cmd,
+                "شخص نفسك",
+                "شخص النظام",
+                "التشخيص",
+                "التشخيص الذاتي",
+                "شنو ناقصك",
+                "شنو ناقص",
+                "ما الذي ينقصك",
+                "self diagnosis",
+                "diagnosis"
+        )) {
 
-            memoryManager.clearAllMemories();
-
-            return "تم مسح الذاكرة.";
-        }
-
-        // =========================
-        // الوقت
-        // =========================
-
-        if (containsAny(cmd,
-                "الوقت",
-                "شحال فالوقت",
-                "كم الساعة",
-                "الساعة")) {
-
-            String time =
-                    new SimpleDateFormat(
-                            "HH:mm",
-                            Locale.getDefault()
-                    ).format(new Date());
-
-            return "الوقت دابا هو " + time;
-        }
-
-        // =========================
-        // التاريخ
-        // =========================
-
-        if (containsAny(cmd,
-                "التاريخ",
-                "نهار شحال",
-                "اليوم شحال")) {
-
-            String date =
-                    new SimpleDateFormat(
-                            "dd/MM/yyyy",
-                            Locale.getDefault()
-                    ).format(new Date());
-
-            return "التاريخ اليوم هو " + date;
-        }
-
-        // =========================
-        // إيقاف الكلام
-        // =========================
-
-        if (containsAny(cmd,
-                "سكت",
-                "اسكت",
-                "وقف الكلام",
-                "وقف الصوت",
-                "stop speaking")) {
-
-            return "__STOP_SPEAKING__";
-        }
-
-        // =========================
-        // فتح YouTube
-        // =========================
-
-        if (containsAny(cmd,
-                "فتح يوتيوب",
-                "افتح يوتيوب",
-                "youtube")) {
-
-            openUrl(
-                    "https://www.youtube.com"
+            return core.processCommand(
+                    "التشخيص الذاتي"
             );
-
-            return "فتحت YouTube.";
         }
 
-        // =========================
-        // فتح Google
-        // =========================
+        // =====================================================
+        // SELF TEST
+        // =====================================================
 
-        if (containsAny(cmd,
-                "فتح جوجل",
-                "افتح جوجل",
-                "google")) {
+        if (containsAny(
+                cmd,
+                "اختبر نفسك",
+                "اختبار النظام",
+                "self test"
+        )) {
 
-            openUrl(
-                    "https://www.google.com"
+            return core.processCommand(
+                    "اختبر نفسك"
             );
-
-            return "فتحت Google.";
         }
 
-        // =========================
-        // فتح Facebook
-        // =========================
+        // =====================================================
+        // RECOVERY
+        // =====================================================
 
-        if (containsAny(cmd,
-                "فتح فيسبوك",
-                "افتح فيسبوك",
-                "facebook")) {
+        if (containsAny(
+                cmd,
+                "صلح نفسك",
+                "إصلاح النظام",
+                "recovery"
+        )) {
 
-            openUrl(
-                    "https://www.facebook.com"
+            return core.processCommand(
+                    "إصلاح النظام"
             );
-
-            return "فتحت Facebook.";
         }
 
-        // =========================
-        // فتح Instagram
-        // =========================
+        // =====================================================
+        // EVOLUTION
+        // =====================================================
 
-        if (containsAny(cmd,
-                "فتح انستغرام",
-                "افتح انستغرام",
-                "instagram")) {
+        if (containsAny(
+                cmd,
+                "طور نفسك",
+                "طور ذاتك",
+                "ابدأ التطور",
+                "بدا التطور",
+                "دورة التطور",
+                "evolve",
+                "evolution"
+        )) {
 
-            openUrl(
-                    "https://www.instagram.com"
+            return core.processCommand(
+                    "طور نفسك"
             );
-
-            return "فتحت Instagram.";
         }
 
-        // =========================
-        // فتح WhatsApp
-        // =========================
+        // =====================================================
+        // CAPABILITIES
+        // =====================================================
 
-        if (containsAny(cmd,
-                "فتح واتساب",
-                "افتح واتساب",
-                "whatsapp")) {
-
-            openUrl(
-                    "https://wa.me/"
-            );
-
-            return "فتحت WhatsApp.";
-        }
-
-        // =========================
-        // إعدادات الهاتف
-        // =========================
-
-        if (containsAny(cmd,
-                "افتح الإعدادات",
-                "افتح الاعدادات",
-                "الإعدادات",
-                "الاعدادات",
-                "settings")) {
-
-            openSettings();
-
-            return "فتحت إعدادات الهاتف.";
-        }
-
-        // =========================
-        // Wi-Fi
-        // =========================
-
-        if (containsAny(cmd,
-                "افتح الواي فاي",
-                "الواي فاي",
-                "wifi")) {
-
-            openWifiSettings();
-
-            return "فتحت إعدادات Wi-Fi.";
-        }
-
-        // =========================
-        // Bluetooth
-        // =========================
-
-        if (containsAny(cmd,
-                "افتح البلوتوث",
-                "البلوتوث",
-                "bluetooth")) {
-
-            openBluetoothSettings();
-
-            return "فتحت إعدادات Bluetooth.";
-        }
-
-        // =========================
-        // الهاتف
-        // =========================
-
-        if (containsAny(cmd,
-                "معلومات الهاتف",
-                "حول الهاتف",
-                "عن الهاتف")) {
-
-            openPhoneSettings();
-
-            return "فتحت معلومات الهاتف.";
-        }
-
-        // =========================
-        // أمر غير معروف
-        // =========================
-
-        evolutionEngine.createEvolutionGoal(
-                "تعلم كيفية التعامل مع الأمر: " + original
-        );
-
-        return "الأمر مازال ما عنديش له قدرة مباشرة.\n"
-                + "سجلتو كهدف تعلم باش نطورو النظام مستقبلا.";
-    }
-
-    // ==================================================
-    // HELP
-    // ==================================================
-
-    private String getHelp() {
-
-        return "أوامر JARVIS المتاحة حاليا:\n\n"
-
-                + "• شنو هي القدرات ديالك\n"
-                + "• شنو هي المهارات ديالك\n"
-                + "• شنو ناقصك\n"
-                + "• طور نفسك\n"
-                + "• حالة التطور\n"
-                + "• تاريخ التطور\n"
-                + "• أضف مهارة ...\n"
-                + "• هدف جديد ...\n"
-                + "• تذكر ...\n"
-                + "• شحال فالوقت\n"
-                + "• نهار شحال\n"
-                + "• افتح يوتيوب\n"
-                + "• افتح جوجل\n"
-                + "• افتح فيسبوك\n"
-                + "• افتح انستغرام\n"
-                + "• افتح واتساب\n"
-                + "• افتح الإعدادات\n"
-                + "• افتح الواي فاي\n"
-                + "• افتح البلوتوث\n"
-                + "• اسكت";
-    }
-
-    // ==================================================
-    // UTILITIES
-    // ==================================================
-
-    private boolean containsAny(
-            String text,
-            String... values
-    ) {
-
-        for (String value : values) {
-
-            if (text.contains(
-                    value.toLowerCase(Locale.ROOT)
-            )) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private void openUrl(String url) {
-
-        try {
-
-            Intent intent =
-                    new Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse(url)
-                    );
-
-            intent.addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK
-            );
-
-            context.startActivity(intent);
-
-        } catch (Exception ignored) {
-        }
-    }
-
-    private void openSettings() {
-
-        try {
-
-            Intent intent =
-                    new Intent(
-                            Settings.ACTION_SETTINGS
-                    );
-
-            intent.addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK
-            );
-
-            context.startActivity(intent);
-
-        } catch (Exception ignored) {
-        }
-    }
-
-    private void openWifiSettings() {
-
-        try {
-
-            Intent intent =
-                    new Intent(
-                            Settings.ACTION_WIFI_SETTINGS
-                    );
-
-            intent.addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK
-            );
-
-            context.startActivity(intent);
-
-        } catch (Exception ignored) {
-        }
-    }
-
-    private void openBluetoothSettings() {
-
-        try {
-
-            Intent intent =
-                    new Intent(
-                            Settings.ACTION_BLUETOOTH_SETTINGS
-                    );
-
-            intent.addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK
-            );
-
-            context.startActivity(intent);
-
-        } catch (Exception ignored) {
-        }
-    }
-
-    private void openPhoneSettings() {
-
-        try {
-
-            Intent intent =
-                    new Intent(
-                            Settings.ACTION_DEVICE_INFO_SETTINGS
-                    );
-
-            intent.addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK
-            );
-
-            context.startActivity(intent);
-
-        } catch (Exception ignored) {
-        }
-    }
-}
+        if (containsAny(
+                cmd,
+                "شنو هي القدرات ديالك",
+                "
