@@ -126,9 +126,7 @@ public class DecisionEngine {
         );
     }
 
-    private boolean isUrgent(
-            String input
-    ) {
+    private boolean isUrgent(String input) {
 
         return contains(input, "عاجل")
                 || contains(input, "ضروري")
@@ -203,6 +201,10 @@ public class DecisionEngine {
             return
                     "Decision Engine: ERROR ⚠";
         }
+    }
+
+    public String getStatus() {
+        return getSystemStatus();
     }
 
     public boolean isHealthy() {
