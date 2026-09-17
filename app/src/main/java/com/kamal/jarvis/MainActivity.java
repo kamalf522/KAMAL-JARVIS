@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.speech.RecognizerIntent;
 import android.speech.tts.TextToSpeech;
@@ -23,6 +24,7 @@ public class MainActivity extends Activity
 
     private static final int REQUEST_AUDIO = 1001;
     private static final int REQUEST_VOICE = 1002;
+    private static final int REQUEST_NOTIFICATIONS = 1003;
 
     private TextToSpeech textToSpeech;
 
@@ -34,6 +36,7 @@ public class MainActivity extends Activity
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+
         super.onCreate(savedInstanceState);
 
         commandRouter =
@@ -47,6 +50,43 @@ public class MainActivity extends Activity
 
         createInterface();
 
+        requestRequiredPermissions();
+
+        startJarvisBackgroundService();
+    }
+
+    // =========================================================
+    // PERMISSIONS
+    // =========================================================
+
+    private void requestRequiredPermissions() {
+
+        if (Build.VERSION.SDK_INT >= 33) {
+
+            if (checkSelfPermission(
+                    Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED) {
+
+                requestPermissions(
+                        new String[]{
+                                Manifest.permission.POST_NOTIFICATIONS
+                        },
+                        REQUEST_NOTIFICATIONS
+                );
+
+                return;
+            }
+        }
+
+        requestAudioPermission();
+    }
+
+    private void requestAudioPermission() {
+
+        if (Build.VERSION.SDK_INT < 23) {
+            return;
+        }
+
         if (checkSelfPermission(
                 Manifest.permission.RECORD_AUDIO
         ) != PackageManager.PERMISSION_GRANTED) {
@@ -57,6 +97,45 @@ public class MainActivity extends Activity
                     },
                     REQUEST_AUDIO
             );
+        }
+    }
+
+    // =========================================================
+    // JARVIS BACKGROUND SERVICE
+    // =========================================================
+
+    private void startJarvisBackgroundService() {
+
+        try {
+
+            Intent serviceIntent =
+                    new Intent(
+                            this,
+                            JarvisBackgroundService.class
+                    );
+
+            if (Build.VERSION.SDK_INT >=
+                    Build.VERSION_CODES.O) {
+
+                startForegroundService(
+                        serviceIntent
+                );
+
+            } else {
+
+                startService(
+                        serviceIntent
+                );
+            }
+
+        } catch (Exception e) {
+
+            if (statusText != null) {
+
+                statusText.setText(
+                        "● JARVIS ONLINE — BACKGROUND ERROR"
+                );
+            }
         }
     }
 
@@ -149,7 +228,8 @@ public class MainActivity extends Activity
 
         chatText.setText(
                 "JARVIS: مرحبا كمال.\n" +
-                "أنا جاهز لتنفيذ أوامرك.\n\n"
+                "أنا جاهز لتنفيذ أوامرك.\n" +
+                "النظام الخلفي يعمل عند تشغيل JARVIS.\n\n"
         );
 
         chatText.setTextSize(17);
@@ -256,6 +336,32 @@ public class MainActivity extends Activity
                 voiceButton
         );
 
+        // -----------------------------------------------------
+        // BACKGROUND STATUS BUTTON
+        // -----------------------------------------------------
+
+        Button backgroundButton =
+                new Button(this);
+
+        backgroundButton.setText(
+                "حالة النظام الخلفي"
+        );
+
+        backgroundButton.setOnClickListener(
+                new View.OnClickListener() {
+
+                    @Override
+                    public void onClick(View view) {
+
+                        showBackgroundStatus();
+                    }
+                }
+        );
+
+        root.addView(
+                backgroundButton
+        );
+
         setContentView(root);
     }
 
@@ -325,23 +431,68 @@ public class MainActivity extends Activity
     }
 
     // =========================================================
+    // BACKGROUND STATUS
+    // =========================================================
+
+    private void showBackgroundStatus() {
+
+        if (JarvisBackgroundService
+                .isServiceRunning()) {
+
+            JarvisBackgroundService service =
+                    JarvisBackgroundService
+                            .getInstance();
+
+            if (service != null) {
+
+                String status =
+                        service.getStatus();
+
+                addMessage(
+                        "JARVIS: " + status
+                );
+
+                speak(status);
+
+                return;
+            }
+        }
+
+        String message =
+                "JARVIS BACKGROUND SERVICE\n\n" +
+                "الحالة: OFFLINE\n\n" +
+                "جاري تشغيل الخدمة...";
+
+        addMessage(
+                "JARVIS: " + message
+        );
+
+        speak(message);
+
+        startJarvisBackgroundService();
+    }
+
+    // =========================================================
     // VOICE RECOGNITION
     // =========================================================
 
     private void startVoiceRecognition() {
 
-        if (checkSelfPermission(
-                Manifest.permission.RECORD_AUDIO
-        ) != PackageManager.PERMISSION_GRANTED) {
+        if (Build.VERSION.SDK_INT >= 23) {
 
-            requestPermissions(
-                    new String[]{
-                            Manifest.permission.RECORD_AUDIO
-                    },
-                    REQUEST_AUDIO
-            );
+            if (checkSelfPermission(
+                    Manifest.permission.RECORD_AUDIO
+            ) != PackageManager.PERMISSION_GRANTED) {
 
-            return;
+                requestPermissions(
+                        new String[]{
+                                Manifest.permission.RECORD_AUDIO
+                        },
+                        REQUEST_AUDIO
+                );
+
+                return;
+            }
         }
 
         try {
@@ -400,7 +551,7 @@ public class MainActivity extends Activity
     protected void onActivityResult(
             int requestCode,
             int resultCode,
-            android.content.Intent data
+            Intent data
     ) {
 
         super.onActivityResult(
@@ -549,6 +700,14 @@ public class MainActivity extends Activity
         );
 
         if (requestCode ==
+                REQUEST_NOTIFICATIONS) {
+
+            requestAudioPermission();
+
+            return;
+        }
+
+        if (requestCode ==
                 REQUEST_AUDIO) {
 
             if (grantResults.length > 0 &&
@@ -571,6 +730,20 @@ public class MainActivity extends Activity
     // =========================================================
     // ACTIVITY LIFECYCLE
     // =========================================================
+
+    @Override
+    protected void onResume() {
+
+        super.onResume();
+
+        if (JarvisBackgroundService
+                .isServiceRunning()) {
+
+            statusText.setText(
+                    "● JARVIS ONLINE"
+            );
+        }
+    }
 
     @Override
     protected void onDestroy() {
