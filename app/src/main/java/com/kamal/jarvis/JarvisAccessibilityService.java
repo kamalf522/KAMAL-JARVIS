@@ -3,6 +3,7 @@ package com.kamal.jarvis;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.graphics.Rect;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -10,7 +11,8 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import java.util.ArrayList;
 import java.util.List;
 
-public class JarvisAccessibilityService extends AccessibilityService {
+public class JarvisAccessibilityService
+        extends AccessibilityService {
 
     private static JarvisAccessibilityService instance;
 
@@ -19,11 +21,13 @@ public class JarvisAccessibilityService extends AccessibilityService {
 
     @Override
     protected void onServiceConnected() {
+
         super.onServiceConnected();
 
         instance = this;
 
-        AccessibilityServiceInfo info = new AccessibilityServiceInfo();
+        AccessibilityServiceInfo info =
+                new AccessibilityServiceInfo();
 
         info.eventTypes =
                 AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
@@ -46,45 +50,68 @@ public class JarvisAccessibilityService extends AccessibilityService {
     }
 
     @Override
-    public void onAccessibilityEvent(AccessibilityEvent event) {
+    public void onAccessibilityEvent(
+            AccessibilityEvent event
+    ) {
 
         if (event == null) {
             return;
         }
 
-        CharSequence packageName = event.getPackageName();
+        CharSequence packageName =
+                event.getPackageName();
 
         if (packageName != null) {
-            lastPackageName = packageName.toString();
+
+            lastPackageName =
+                    packageName.toString();
         }
 
-        AccessibilityNodeInfo root = getRootInActiveWindow();
+        AccessibilityNodeInfo root =
+                getRootInActiveWindow();
 
         if (root != null) {
-            lastScreenText = extractScreenText(root);
+
+            lastScreenText =
+                    extractScreenText(root);
+
+            root.recycle();
         }
     }
 
     @Override
     public void onInterrupt() {
+
         lastScreenText = "";
     }
 
     @Override
     public void onDestroy() {
-        instance = null;
+
+        if (instance == this) {
+            instance = null;
+        }
+
         super.onDestroy();
     }
 
-    public static JarvisAccessibilityService getInstance() {
+    // =========================================================
+    // INSTANCE / STATUS
+    // =========================================================
+
+    public static JarvisAccessibilityService
+    getInstance() {
+
         return instance;
     }
 
     public boolean isConnected() {
+
         return instance != null;
     }
 
     public String getCurrentPackage() {
+
         return lastPackageName;
     }
 
@@ -94,18 +121,28 @@ public class JarvisAccessibilityService extends AccessibilityService {
                 getRootInActiveWindow();
 
         if (root == null) {
-            return "JARVIS: ما قدرتش نوصل للشاشة الحالية.";
+
+            return
+                    "JARVIS: ما قدرتش نوصل للشاشة الحالية.";
         }
 
         lastScreenText =
                 extractScreenText(root);
 
+        root.recycle();
+
         if (lastScreenText.trim().isEmpty()) {
-            return "JARVIS: الشاشة الحالية ما فيهاش نص واضح.";
+
+            return
+                    "JARVIS: الشاشة الحالية ما فيهاش نص واضح.";
         }
 
         return lastScreenText;
     }
+
+    // =========================================================
+    // SCREEN TREE
+    // =========================================================
 
     public String getScreenTree() {
 
@@ -113,16 +150,29 @@ public class JarvisAccessibilityService extends AccessibilityService {
                 getRootInActiveWindow();
 
         if (root == null) {
-            return "JARVIS: ما كايناش شاشة نشطة.";
+
+            return
+                    "JARVIS: ما كايناش شاشة نشطة.";
         }
 
         StringBuilder result =
                 new StringBuilder();
 
-        result.append("JARVIS SCREEN TREE\n");
-        result.append("=================\n\n");
+        result.append(
+                "JARVIS SCREEN TREE\n"
+        );
 
-        buildNodeTree(root, result, 0);
+        result.append(
+                "=================\n\n"
+        );
+
+        buildNodeTree(
+                root,
+                result,
+                0
+        );
+
+        root.recycle();
 
         return result.toString();
     }
@@ -138,19 +188,25 @@ public class JarvisAccessibilityService extends AccessibilityService {
         }
 
         for (int i = 0; i < depth; i++) {
+
             result.append("  ");
         }
 
-        CharSequence text = node.getText();
+        CharSequence text =
+                node.getText();
+
         CharSequence description =
                 node.getContentDescription();
+
         CharSequence className =
                 node.getClassName();
 
         result.append("- ");
 
         if (text != null &&
-                !text.toString().trim().isEmpty()) {
+                !text.toString()
+                        .trim()
+                        .isEmpty()) {
 
             result.append("text=\"")
                     .append(text)
@@ -158,7 +214,9 @@ public class JarvisAccessibilityService extends AccessibilityService {
         }
 
         if (description != null &&
-                !description.toString().trim().isEmpty()) {
+                !description.toString()
+                        .trim()
+                        .isEmpty()) {
 
             result.append("description=\"")
                     .append(description)
@@ -173,14 +231,17 @@ public class JarvisAccessibilityService extends AccessibilityService {
         }
 
         if (node.isClickable()) {
+
             result.append("[CLICKABLE] ");
         }
 
         if (node.isEditable()) {
+
             result.append("[EDITABLE] ");
         }
 
         if (node.isScrollable()) {
+
             result.append("[SCROLLABLE] ");
         }
 
@@ -206,6 +267,10 @@ public class JarvisAccessibilityService extends AccessibilityService {
         }
     }
 
+    // =========================================================
+    // SCREEN TEXT
+    // =========================================================
+
     private String extractScreenText(
             AccessibilityNodeInfo node
     ) {
@@ -217,7 +282,10 @@ public class JarvisAccessibilityService extends AccessibilityService {
         List<String> lines =
                 new ArrayList<>();
 
-        collectText(node, lines);
+        collectText(
+                node,
+                lines
+        );
 
         StringBuilder result =
                 new StringBuilder();
@@ -235,9 +303,13 @@ public class JarvisAccessibilityService extends AccessibilityService {
                 continue;
             }
 
-            if (result.indexOf(clean) == -1) {
+            if (!containsLine(
+                    result,
+                    clean
+            )) {
 
                 if (result.length() > 0) {
+
                     result.append("\n");
                 }
 
@@ -261,18 +333,26 @@ public class JarvisAccessibilityService extends AccessibilityService {
                 node.getText();
 
         if (text != null &&
-                !text.toString().trim().isEmpty()) {
+                !text.toString()
+                        .trim()
+                        .isEmpty()) {
 
-            lines.add(text.toString());
+            lines.add(
+                    text.toString()
+            );
         }
 
         CharSequence description =
                 node.getContentDescription();
 
         if (description != null &&
-                !description.toString().trim().isEmpty()) {
+                !description.toString()
+                        .trim()
+                        .isEmpty()) {
 
-            lines.add(description.toString());
+            lines.add(
+                    description.toString()
+            );
         }
 
         for (int i = 0;
@@ -284,14 +364,45 @@ public class JarvisAccessibilityService extends AccessibilityService {
 
             if (child != null) {
 
-                collectText(child, lines);
+                collectText(
+                        child,
+                        lines
+                );
 
                 child.recycle();
             }
         }
     }
 
-    public boolean clickByText(String target) {
+    private boolean containsLine(
+            StringBuilder result,
+            String line
+    ) {
+
+        String current =
+                result.toString();
+
+        String[] existing =
+                current.split("\n");
+
+        for (String item : existing) {
+
+            if (item.equals(line)) {
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // =========================================================
+    // CLICK BY TEXT
+    // =========================================================
+
+    public boolean clickByText(
+            String target
+    ) {
 
         if (target == null ||
                 target.trim().isEmpty()) {
@@ -303,6 +414,7 @@ public class JarvisAccessibilityService extends AccessibilityService {
                 getRootInActiveWindow();
 
         if (root == null) {
+
             return false;
         }
 
@@ -332,17 +444,24 @@ public class JarvisAccessibilityService extends AccessibilityService {
         CharSequence description =
                 node.getContentDescription();
 
-        if (matches(text, target)
-                || matches(description, target)) {
+        if (matches(
+                text,
+                target
+        ) || matches(
+                description,
+                target
+        )) {
 
             if (node.isClickable()) {
 
                 boolean clicked =
                         node.performAction(
-                                AccessibilityNodeInfo.ACTION_CLICK
+                                AccessibilityNodeInfo
+                                        .ACTION_CLICK
                         );
 
                 if (clicked) {
+
                     return true;
                 }
             }
@@ -354,12 +473,14 @@ public class JarvisAccessibilityService extends AccessibilityService {
 
                 boolean clicked =
                         parent.performAction(
-                                AccessibilityNodeInfo.ACTION_CLICK
+                                AccessibilityNodeInfo
+                                        .ACTION_CLICK
                         );
 
                 parent.recycle();
 
                 if (clicked) {
+
                     return true;
                 }
             }
@@ -383,6 +504,7 @@ public class JarvisAccessibilityService extends AccessibilityService {
                 child.recycle();
 
                 if (result) {
+
                     return true;
                 }
             }
@@ -391,215 +513,9 @@ public class JarvisAccessibilityService extends AccessibilityService {
         return false;
     }
 
-    private boolean matches(
-            CharSequence value,
-            String target
-    ) {
-
-        if (value == null) {
-            return false;
-        }
-
-        String current =
-                value.toString()
-                        .trim()
-                        .toLowerCase();
-
-        String wanted =
-                target.trim()
-                        .toLowerCase();
-
-        return current.equals(wanted)
-                || current.contains(wanted);
-    }
-
-    public boolean typeText(
-            String target,
-            String text
-    ) {
-
-        if (target == null ||
-                target.trim().isEmpty()
-                || text == null) {
-
-            return false;
-        }
-
-        AccessibilityNodeInfo root =
-                getRootInActiveWindow();
-
-        if (root == null) {
-            return false;
-        }
-
-        AccessibilityNodeInfo node =
-                findEditableNode(
-                        root,
-                        target.trim()
-                );
-
-        if (node == null) {
-            return false;
-        }
-
-        Bundle arguments =
-                new Bundle();
-
-        arguments.putCharSequence(
-                AccessibilityNodeInfo
-                        .ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                text
-        );
-
-        boolean result =
-                node.performAction(
-                        AccessibilityNodeInfo.ACTION_SET_TEXT,
-                        arguments
-                );
-
-        node.recycle();
-        root.recycle();
-
-        return result;
-    }
-
-    private AccessibilityNodeInfo findEditableNode(
-            AccessibilityNodeInfo node,
-            String target
-    ) {
-
-        if (node == null) {
-            return null;
-        }
-
-        CharSequence nodeText =
-                node.getText();
-
-        CharSequence hint =
-                node.getHintText();
-
-        if (node.isEditable()) {
-
-            if (target.isEmpty()
-                    || matches(nodeText, target)
-                    || matches(hint, target)) {
-
-                return node;
-            }
-        }
-
-        for (int i = 0;
-             i < node.getChildCount();
-             i++) {
-
-            AccessibilityNodeInfo child =
-                    node.getChild(i);
-
-            if (child != null) {
-
-                AccessibilityNodeInfo result =
-                        findEditableNode(
-                                child,
-                                target
-                        );
-
-                if (result != null) {
-                    return result;
-                }
-
-                child.recycle();
-            }
-        }
-
-        return null;
-    }
-
-    public boolean scrollForward() {
-
-        AccessibilityNodeInfo root =
-                getRootInActiveWindow();
-
-        if (root == null) {
-            return false;
-        }
-
-        boolean result =
-                performScroll(
-                        root,
-                        AccessibilityNodeInfo
-                                .ACTION_SCROLL_FORWARD
-                );
-
-        root.recycle();
-
-        return result;
-    }
-
-    public boolean scrollBackward() {
-
-        AccessibilityNodeInfo root =
-                getRootInActiveWindow();
-
-        if (root == null) {
-            return false;
-        }
-
-        boolean result =
-                performScroll(
-                        root,
-                        AccessibilityNodeInfo
-                                .ACTION_SCROLL_BACKWARD
-                );
-
-        root.recycle();
-
-        return result;
-    }
-
-    private boolean performScroll(
-            AccessibilityNodeInfo node,
-            int action
-    ) {
-
-        if (node == null) {
-            return false;
-        }
-
-        if (node.isScrollable()) {
-
-            boolean result =
-                    node.performAction(action);
-
-            if (result) {
-                return true;
-            }
-        }
-
-        for (int i = 0;
-             i < node.getChildCount();
-             i++) {
-
-            AccessibilityNodeInfo child =
-                    node.getChild(i);
-
-            if (child != null) {
-
-                boolean result =
-                        performScroll(
-                                child,
-                                action
-                        );
-
-                child.recycle();
-
-                if (result) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
+    // =========================================================
+    // FIND ELEMENT
+    // =========================================================
 
     public String getNodeInfoByText(
             String target
@@ -608,14 +524,17 @@ public class JarvisAccessibilityService extends AccessibilityService {
         if (target == null ||
                 target.trim().isEmpty()) {
 
-            return "JARVIS: خاصني النص اللي نقلب عليه.";
+            return
+                    "JARVIS: خاصني النص اللي نقلب عليه.";
         }
 
         AccessibilityNodeInfo root =
                 getRootInActiveWindow();
 
         if (root == null) {
-            return "JARVIS: ما كايناش شاشة نشطة.";
+
+            return
+                    "JARVIS: ما كايناش شاشة نشطة.";
         }
 
         AccessibilityNodeInfo node =
@@ -625,23 +544,36 @@ public class JarvisAccessibilityService extends AccessibilityService {
                 );
 
         if (node == null) {
-            return "JARVIS: ما لقيتش العنصر: "
-                    + target;
+
+            root.recycle();
+
+            return
+                    "JARVIS: ما لقيتش العنصر: "
+                            + target;
         }
 
         Rect bounds =
                 new Rect();
 
-        node.getBoundsInScreen(bounds);
+        node.getBoundsInScreen(
+                bounds
+        );
 
         String result =
                 "العنصر موجود ✓\n"
                         + "النص: "
-                        + String.valueOf(node.getText())
+                        + String.valueOf(
+                        node.getText()
+                )
                         + "\n"
                         + "الوصف: "
                         + String.valueOf(
                         node.getContentDescription()
+                )
+                        + "\n"
+                        + "النوع: "
+                        + String.valueOf(
+                        node.getClassName()
                 )
                         + "\n"
                         + "قابل للضغط: "
@@ -649,6 +581,9 @@ public class JarvisAccessibilityService extends AccessibilityService {
                         + "\n"
                         + "قابل للكتابة: "
                         + node.isEditable()
+                        + "\n"
+                        + "قابل للتمرير: "
+                        + node.isScrollable()
                         + "\n"
                         + "الموقع: "
                         + bounds.toShortString();
@@ -695,6 +630,7 @@ public class JarvisAccessibilityService extends AccessibilityService {
                         );
 
                 if (result != null) {
+
                     return result;
                 }
 
@@ -703,5 +639,378 @@ public class JarvisAccessibilityService extends AccessibilityService {
         }
 
         return null;
+    }
+
+    // =========================================================
+    // TYPE TEXT
+    // =========================================================
+
+    public boolean typeText(
+            String target,
+            String text
+    ) {
+
+        if (text == null) {
+            return false;
+        }
+
+        AccessibilityNodeInfo root =
+                getRootInActiveWindow();
+
+        if (root == null) {
+            return false;
+        }
+
+        AccessibilityNodeInfo node;
+
+        if (target == null ||
+                target.trim().isEmpty()) {
+
+            node =
+                    findFocusedEditableNode(
+                            root
+                    );
+
+        } else {
+
+            node =
+                    findEditableNode(
+                            root,
+                            target.trim()
+                    );
+        }
+
+        if (node == null) {
+
+            root.recycle();
+
+            return false;
+        }
+
+        Bundle arguments =
+                new Bundle();
+
+        arguments.putCharSequence(
+                AccessibilityNodeInfo
+                        .ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                text
+        );
+
+        boolean result =
+                node.performAction(
+                        AccessibilityNodeInfo
+                                .ACTION_SET_TEXT,
+                        arguments
+                );
+
+        node.recycle();
+        root.recycle();
+
+        return result;
+    }
+
+    private AccessibilityNodeInfo
+    findEditableNode(
+            AccessibilityNodeInfo node,
+            String target
+    ) {
+
+        if (node == null) {
+            return null;
+        }
+
+        CharSequence nodeText =
+                node.getText();
+
+        CharSequence description =
+                node.getContentDescription();
+
+        CharSequence hint = null;
+
+        if (Build.VERSION.SDK_INT >=
+                Build.VERSION_CODES.O) {
+
+            hint =
+                    node.getHintText();
+        }
+
+        if (node.isEditable()) {
+
+            if (matches(
+                    nodeText,
+                    target
+            ) || matches(
+                    description,
+                    target
+            ) || matches(
+                    hint,
+                    target
+            )) {
+
+                return node;
+            }
+        }
+
+        for (int i = 0;
+             i < node.getChildCount();
+             i++) {
+
+            AccessibilityNodeInfo child =
+                    node.getChild(i);
+
+            if (child != null) {
+
+                AccessibilityNodeInfo result =
+                        findEditableNode(
+                                child,
+                                target
+                        );
+
+                if (result != null) {
+
+                    return result;
+                }
+
+                child.recycle();
+            }
+        }
+
+        return null;
+    }
+
+    private AccessibilityNodeInfo
+    findFocusedEditableNode(
+            AccessibilityNodeInfo node
+    ) {
+
+        if (node == null) {
+            return null;
+        }
+
+        if (node.isEditable() &&
+                node.isFocused()) {
+
+            return node;
+        }
+
+        for (int i = 0;
+             i < node.getChildCount();
+             i++) {
+
+            AccessibilityNodeInfo child =
+                    node.getChild(i);
+
+            if (child != null) {
+
+                AccessibilityNodeInfo result =
+                        findFocusedEditableNode(
+                                child
+                        );
+
+                if (result != null) {
+
+                    return result;
+                }
+
+                child.recycle();
+            }
+        }
+
+        return null;
+    }
+
+    // =========================================================
+    // SCROLL
+    // =========================================================
+
+    public boolean scrollForward() {
+
+        return scroll(
+                AccessibilityNodeInfo
+                        .ACTION_SCROLL_FORWARD
+        );
+    }
+
+    public boolean scrollBackward() {
+
+        return scroll(
+                AccessibilityNodeInfo
+                        .ACTION_SCROLL_BACKWARD
+        );
+    }
+
+    private boolean scroll(
+            int action
+    ) {
+
+        AccessibilityNodeInfo root =
+                getRootInActiveWindow();
+
+        if (root == null) {
+            return false;
+        }
+
+        boolean result =
+                performScroll(
+                        root,
+                        action
+                );
+
+        root.recycle();
+
+        return result;
+    }
+
+    private boolean performScroll(
+            AccessibilityNodeInfo node,
+            int action
+    ) {
+
+        if (node == null) {
+            return false;
+        }
+
+        if (node.isScrollable()) {
+
+            if (node.performAction(action)) {
+
+                return true;
+            }
+        }
+
+        for (int i = 0;
+             i < node.getChildCount();
+             i++) {
+
+            AccessibilityNodeInfo child =
+                    node.getChild(i);
+
+            if (child != null) {
+
+                boolean result =
+                        performScroll(
+                                child,
+                                action
+                        );
+
+                child.recycle();
+
+                if (result) {
+
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    // =========================================================
+    // GLOBAL PHONE CONTROLS
+    // =========================================================
+
+    public boolean goHome() {
+
+        return performGlobalAction(
+                GLOBAL_ACTION_HOME
+        );
+    }
+
+    public boolean goBack() {
+
+        return performGlobalAction(
+                GLOBAL_ACTION_BACK
+        );
+    }
+
+    public boolean openRecents() {
+
+        return performGlobalAction(
+                GLOBAL_ACTION_RECENTS
+        );
+    }
+
+    public boolean openNotifications() {
+
+        return performGlobalAction(
+                GLOBAL_ACTION_NOTIFICATIONS
+        );
+    }
+
+    public boolean openQuickSettings() {
+
+        return performGlobalAction(
+                GLOBAL_ACTION_QUICK_SETTINGS
+        );
+    }
+
+    public boolean lockScreen() {
+
+        if (Build.VERSION.SDK_INT >=
+                Build.VERSION_CODES.P) {
+
+            return performGlobalAction(
+                    GLOBAL_ACTION_LOCK_SCREEN
+            );
+        }
+
+        return false;
+    }
+
+    // =========================================================
+    // STATUS
+    // =========================================================
+
+    public String getStatus() {
+
+        if (instance == null) {
+
+            return
+                    "Accessibility Service: OFFLINE";
+        }
+
+        return
+                "Accessibility Service: ONLINE ✓\n"
+                        + "التطبيق الحالي: "
+                        + (
+                        lastPackageName.isEmpty()
+                                ? "غير معروف"
+                                : lastPackageName
+                );
+    }
+
+    // =========================================================
+    // MATCHING
+    // =========================================================
+
+    private boolean matches(
+            CharSequence value,
+            String target
+    ) {
+
+        if (value == null ||
+                target == null) {
+
+            return false;
+        }
+
+        String current =
+                value.toString()
+                        .trim()
+                        .toLowerCase();
+
+        String wanted =
+                target.trim()
+                        .toLowerCase();
+
+        if (current.isEmpty() ||
+                wanted.isEmpty()) {
+
+            return false;
+        }
+
+        return current.equals(wanted)
+                || current.contains(wanted)
+                || wanted.contains(current);
     }
 }
