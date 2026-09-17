@@ -1,9 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
+
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- ========================= -->
+    <!-- JARVIS PERMISSIONS -->
+    <!-- ========================= -->
+
+    <uses-permission
+        android:name="android.permission.RECORD_AUDIO" />
+
+    <uses-permission
+        android:name="android.permission.INTERNET" />
+
+    <uses-permission
+        android:name="android.permission.POST_NOTIFICATIONS" />
+
+
+    <!-- ========================= -->
+    <!-- APPLICATION -->
+    <!-- ========================= -->
 
     <application
         android:theme="@style/AppTheme"
@@ -11,20 +26,41 @@
         android:allowBackup="true"
         android:supportsRtl="true">
 
+
+        <!-- ========================= -->
+        <!-- MAIN ACTIVITY -->
+        <!-- ========================= -->
+
         <activity
             android:name=".MainActivity"
             android:exported="true">
 
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
+
+                <action
+                    android:name="android.intent.action.MAIN" />
+
+                <category
+                    android:name="android.intent.category.LAUNCHER" />
+
             </intent-filter>
 
         </activity>
 
+
+        <!-- ========================= -->
+        <!-- REMINDER RECEIVER -->
+        <!-- ========================= -->
+
         <receiver
             android:name=".ReminderReceiver"
             android:exported="false" />
+
+
+        <!-- ========================= -->
+        <!-- SCREEN INTELLIGENCE -->
+        <!-- ACCESSIBILITY SERVICE -->
+        <!-- ========================= -->
 
         <service
             android:name=".JarvisAccessibilityService"
@@ -32,7 +68,10 @@
             android:exported="false">
 
             <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
+
+                <action
+                    android:name="android.accessibilityservice.AccessibilityService" />
+
             </intent-filter>
 
             <meta-data
@@ -40,6 +79,27 @@
                 android:resource="@xml/jarvis_accessibility_service" />
 
         </service>
+
+
+        <!-- ========================= -->
+        <!-- NOTIFICATION INTELLIGENCE -->
+        <!-- ========================= -->
+
+        <service
+            android:name=".JarvisNotificationListenerService"
+            android:label="JARVIS Notification Intelligence"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+
+            <intent-filter>
+
+                <action
+                    android:name="android.service.notification.NotificationListenerService" />
+
+            </intent-filter>
+
+        </service>
+
 
     </application>
 
