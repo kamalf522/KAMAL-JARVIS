@@ -16,6 +16,82 @@ public class ScreenIntelligence {
                 context.getApplicationContext();
     }
 
+    public String analyzeCurrentScreen() {
+
+        JarvisAccessibilityService service =
+                JarvisAccessibilityService.getInstance();
+
+        if (service == null) {
+
+            enabled = false;
+
+            return
+                    "JARVIS: خدمة التحكم في الشاشة غير مفعلة.\n\n"
+                    + "خاصك تفعّل JARVIS Accessibility من إعدادات الهاتف.";
+        }
+
+        enabled = true;
+
+        String screenText =
+                service.getScreenText();
+
+        String packageName =
+                service.getCurrentPackage();
+
+        String tree =
+                service.getScreenTree();
+
+        StringBuilder result =
+                new StringBuilder();
+
+        result.append(
+                "JARVIS SCREEN INTELLIGENCE\n"
+        );
+
+        result.append(
+                "============================\n\n"
+        );
+
+        result.append(
+                "SCREEN ACCESS: ONLINE ✓\n"
+        );
+
+        result.append(
+                "PACKAGE: "
+        );
+
+        result.append(
+                packageName == null
+                        ? "UNKNOWN"
+                        : packageName
+        );
+
+        result.append("\n\n");
+
+        result.append(
+                "SCREEN TEXT:\n"
+        );
+
+        result.append(
+                screenText
+        );
+
+        result.append("\n\n");
+
+        result.append(
+                "SCREEN TREE:\n"
+        );
+
+        result.append(
+                tree
+        );
+
+        lastAnalysis =
+                result.toString();
+
+        return lastAnalysis;
+    }
+
     public String analyzeScreen(
             String screenDescription
     ) {
@@ -23,8 +99,7 @@ public class ScreenIntelligence {
         if (screenDescription == null ||
                 screenDescription.trim().isEmpty()) {
 
-            return
-                    "ما وصلني حتى وصف للشاشة.";
+            return analyzeCurrentScreen();
         }
 
         String description =
@@ -32,6 +107,8 @@ public class ScreenIntelligence {
 
         lastAnalysis =
                 description;
+
+        enabled = true;
 
         StringBuilder result =
                 new StringBuilder();
@@ -52,7 +129,9 @@ public class ScreenIntelligence {
                 "المحتوى:\n"
         );
 
-        result.append(description);
+        result.append(
+                description
+        );
 
         result.append("\n\n");
 
@@ -60,9 +139,10 @@ public class ScreenIntelligence {
                 detectElements(description)
         );
 
-        enabled = true;
+        lastAnalysis =
+                result.toString();
 
-        return result.toString();
+        return lastAnalysis;
     }
 
     private String detectElements(
@@ -136,6 +216,17 @@ public class ScreenIntelligence {
             detected = true;
         }
 
+        if (lower.contains("scroll")
+                || lower.contains("تمرير")
+                || lower.contains("سكرول")) {
+
+            result.append(
+                    "• منطقة قابلة للتمرير\n"
+            );
+
+            detected = true;
+        }
+
         if (!detected) {
 
             result.append(
@@ -144,6 +235,156 @@ public class ScreenIntelligence {
         }
 
         return result.toString();
+    }
+
+    public String clickElement(
+            String target
+    ) {
+
+        if (target == null ||
+                target.trim().isEmpty()) {
+
+            return
+                    "JARVIS: عطيني اسم العنصر اللي بغيتي نضغط عليه.";
+        }
+
+        JarvisAccessibilityService service =
+                JarvisAccessibilityService.getInstance();
+
+        if (service == null) {
+
+            return
+                    "JARVIS: خدمة التحكم في الشاشة غير مفعلة.";
+        }
+
+        boolean clicked =
+                service.clickByText(
+                        target.trim()
+                );
+
+        if (clicked) {
+
+            return
+                    "JARVIS: تم الضغط على \""
+                    + target
+                    + "\" ✓";
+        }
+
+        return
+                "JARVIS: ما لقيتش العنصر \""
+                + target
+                + "\" أو ما قدرتش نضغط عليه.";
+    }
+
+    public String typeText(
+            String target,
+            String text
+    ) {
+
+        if (text == null) {
+
+            return
+                    "JARVIS: النص فارغ.";
+        }
+
+        JarvisAccessibilityService service =
+                JarvisAccessibilityService.getInstance();
+
+        if (service == null) {
+
+            return
+                    "JARVIS: خدمة التحكم في الشاشة غير مفعلة.";
+        }
+
+        boolean typed =
+                service.typeText(
+                        target == null
+                                ? ""
+                                : target.trim(),
+                        text
+                );
+
+        if (typed) {
+
+            return
+                    "JARVIS: تم إدخال النص ✓";
+        }
+
+        return
+                "JARVIS: ما قدرتش ندخل النص.";
+    }
+
+    public String scrollForward() {
+
+        JarvisAccessibilityService service =
+                JarvisAccessibilityService.getInstance();
+
+        if (service == null) {
+
+            return
+                    "JARVIS: خدمة التحكم في الشاشة غير مفعلة.";
+        }
+
+        boolean result =
+                service.scrollForward();
+
+        if (result) {
+
+            return
+                    "JARVIS: تم التمرير للأسفل ✓";
+        }
+
+        return
+                "JARVIS: ما قدرتش نمرر الشاشة.";
+    }
+
+    public String scrollBackward() {
+
+        JarvisAccessibilityService service =
+                JarvisAccessibilityService.getInstance();
+
+        if (service == null) {
+
+            return
+                    "JARVIS: خدمة التحكم في الشاشة غير مفعلة.";
+        }
+
+        boolean result =
+                service.scrollBackward();
+
+        if (result) {
+
+            return
+                    "JARVIS: تم التمرير للأعلى ✓";
+        }
+
+        return
+                "JARVIS: ما قدرتش نمرر الشاشة.";
+    }
+
+    public String findElement(
+            String target
+    ) {
+
+        if (target == null ||
+                target.trim().isEmpty()) {
+
+            return
+                    "JARVIS: خاصني اسم العنصر.";
+        }
+
+        JarvisAccessibilityService service =
+                JarvisAccessibilityService.getInstance();
+
+        if (service == null) {
+
+            return
+                    "JARVIS: خدمة التحكم في الشاشة غير مفعلة.";
+        }
+
+        return service.getNodeInfoByText(
+                target.trim()
+        );
     }
 
     public String getLastAnalysis() {
@@ -181,6 +422,13 @@ public class ScreenIntelligence {
         return enabled;
     }
 
+    public boolean isConnected() {
+
+        return
+                JarvisAccessibilityService
+                        .getInstance() != null;
+    }
+
     public boolean isHealthy() {
 
         return context != null;
@@ -188,18 +436,20 @@ public class ScreenIntelligence {
 
     public String getStatus() {
 
-        if (isHealthy()) {
+        JarvisAccessibilityService service =
+                JarvisAccessibilityService.getInstance();
+
+        if (service == null) {
 
             return
-                    "Screen Intelligence: ONLINE ✓\n"
-                    + "Mode: "
-                    + (enabled
-                    ? "ACTIVE"
-                    : "STANDBY");
-
+                    "Screen Intelligence: STANDBY\n"
+                    + "Accessibility Service: OFF";
         }
 
         return
-                "Screen Intelligence: ERROR ⚠";
+                "Screen Intelligence: ONLINE ✓\n"
+                + "Accessibility Service: CONNECTED ✓\n"
+                + "Package: "
+                + service.getCurrentPackage();
     }
 }
