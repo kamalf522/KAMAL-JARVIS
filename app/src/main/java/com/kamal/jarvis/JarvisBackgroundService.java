@@ -18,7 +18,7 @@ public class JarvisBackgroundService extends Service {
 
     private static JarvisBackgroundService instance;
 
-    private boolean running = false;
+    private volatile boolean running = false;
 
     @Override
     public void onCreate() {
@@ -39,15 +39,22 @@ public class JarvisBackgroundService extends Service {
             int startId
     ) {
 
-        running = true;
+        try {
 
-        Notification notification =
-                createNotification();
+            Notification notification =
+                    createNotification();
 
-        startForeground(
-                NOTIFICATION_ID,
-                notification
-        );
+            startForeground(
+                    NOTIFICATION_ID,
+                    notification
+            );
+
+            running = true;
+
+        } catch (Exception e) {
+
+            running = false;
+        }
 
         return START_STICKY;
     }
@@ -72,16 +79,22 @@ public class JarvisBackgroundService extends Service {
         }
 
         return builder
-                .setContentTitle("Kamal JARVIS")
+                .setContentTitle(
+                        "Kamal JARVIS"
+                )
                 .setContentText(
                         "JARVIS يعمل في الخلفية"
                 )
                 .setSmallIcon(
-                        android.R.drawable.ic_dialog_info
+                        android.R.drawable
+                                .ic_dialog_info
                 )
                 .setOngoing(true)
                 .setCategory(
                         Notification.CATEGORY_SERVICE
+                )
+                .setPriority(
+                        Notification.PRIORITY_LOW
                 )
                 .build();
     }
@@ -91,6 +104,15 @@ public class JarvisBackgroundService extends Service {
         if (Build.VERSION.SDK_INT <
                 Build.VERSION_CODES.O) {
 
+            return;
+        }
+
+        NotificationManager manager =
+                getSystemService(
+                        NotificationManager.class
+                );
+
+        if (manager == null) {
             return;
         }
 
@@ -106,17 +128,11 @@ public class JarvisBackgroundService extends Service {
                 "خدمة JARVIS الأساسية في الخلفية"
         );
 
-        NotificationManager manager =
-                getSystemService(
-                        NotificationManager.class
-                );
+        channel.setShowBadge(false);
 
-        if (manager != null) {
-
-            manager.createNotificationChannel(
-                    channel
-            );
-        }
+        manager.createNotificationChannel(
+                channel
+        );
     }
 
     @Override
@@ -124,7 +140,9 @@ public class JarvisBackgroundService extends Service {
 
         running = false;
 
-        instance = null;
+        if (instance == this) {
+            instance = null;
+        }
 
         super.onDestroy();
     }
@@ -159,9 +177,9 @@ public class JarvisBackgroundService extends Service {
                 + "========================\n\n"
                 + "الحالة: "
                 + (
-                    running
-                    ? "ONLINE ✓"
-                    : "OFFLINE"
+                        running
+                                ? "ONLINE ✓"
+                                : "OFFLINE"
                 );
     }
 }
