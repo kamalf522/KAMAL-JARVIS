@@ -2,10 +2,6 @@
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- ========================= -->
-    <!-- JARVIS PERMISSIONS -->
-    <!-- ========================= -->
-
     <uses-permission
         android:name="android.permission.RECORD_AUDIO" />
 
@@ -15,21 +11,17 @@
     <uses-permission
         android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE" />
 
-    <!-- ========================= -->
-    <!-- APPLICATION -->
-    <!-- ========================= -->
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:theme="@style/AppTheme"
         android:label="Kamal JARVIS"
         android:allowBackup="true"
         android:supportsRtl="true">
-
-
-        <!-- ========================= -->
-        <!-- MAIN ACTIVITY -->
-        <!-- ========================= -->
 
         <activity
             android:name=".MainActivity"
@@ -47,20 +39,9 @@
 
         </activity>
 
-
-        <!-- ========================= -->
-        <!-- REMINDER RECEIVER -->
-        <!-- ========================= -->
-
         <receiver
             android:name=".ReminderReceiver"
             android:exported="false" />
-
-
-        <!-- ========================= -->
-        <!-- SCREEN INTELLIGENCE -->
-        <!-- ACCESSIBILITY SERVICE -->
-        <!-- ========================= -->
 
         <service
             android:name=".JarvisAccessibilityService"
@@ -80,11 +61,6 @@
 
         </service>
 
-
-        <!-- ========================= -->
-        <!-- NOTIFICATION INTELLIGENCE -->
-        <!-- ========================= -->
-
         <service
             android:name=".JarvisNotificationListenerService"
             android:label="JARVIS Notification Intelligence"
@@ -100,6 +76,11 @@
 
         </service>
 
+        <service
+            android:name=".JarvisBackgroundService"
+            android:label="Kamal JARVIS Background Service"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
     </application>
 
