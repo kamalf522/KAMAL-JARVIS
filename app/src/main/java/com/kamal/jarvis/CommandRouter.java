@@ -22,16 +22,24 @@ public class CommandRouter {
                 context.getApplicationContext();
 
         core =
-                new JarvisCore(this.context);
+                new JarvisCore(
+                        this.context
+                );
 
         screenIntelligence =
-                new ScreenIntelligence(this.context);
+                new ScreenIntelligence(
+                        this.context
+                );
 
         androidControl =
-                new AndroidControlEngine(this.context);
+                new AndroidControlEngine(
+                        this.context
+                );
     }
 
-    public String execute(String command) {
+    public String execute(
+            String command
+    ) {
 
         if (command == null ||
                 command.trim().isEmpty()) {
@@ -116,7 +124,9 @@ public class CommandRouter {
                     new SimpleDateFormat(
                             "HH:mm",
                             Locale.getDefault()
-                    ).format(new Date());
+                    ).format(
+                            new Date()
+                    );
 
             return
                     "الوقت دابا هو "
@@ -139,7 +149,9 @@ public class CommandRouter {
                     new SimpleDateFormat(
                             "dd/MM/yyyy",
                             Locale.getDefault()
-                    ).format(new Date());
+                    ).format(
+                            new Date()
+                    );
 
             return
                     "التاريخ اليوم هو "
@@ -158,7 +170,9 @@ public class CommandRouter {
                 "youtube"
         )) {
 
-            return androidControl.openYouTube();
+            return
+                    androidControl
+                            .openYouTube();
         }
 
         if (containsAny(
@@ -169,7 +183,9 @@ public class CommandRouter {
                 "whatsapp"
         )) {
 
-            return androidControl.openWhatsApp();
+            return
+                    androidControl
+                            .openWhatsApp();
         }
 
         if (containsAny(
@@ -180,7 +196,9 @@ public class CommandRouter {
                 "instagram"
         )) {
 
-            return androidControl.openInstagram();
+            return
+                    androidControl
+                            .openInstagram();
         }
 
         if (containsAny(
@@ -191,7 +209,9 @@ public class CommandRouter {
                 "facebook"
         )) {
 
-            return androidControl.openFacebook();
+            return
+                    androidControl
+                            .openFacebook();
         }
 
         if (containsAny(
@@ -202,7 +222,9 @@ public class CommandRouter {
                 "chrome"
         )) {
 
-            return androidControl.openChrome();
+            return
+                    androidControl
+                            .openChrome();
         }
 
         // =====================================================
@@ -217,16 +239,19 @@ public class CommandRouter {
                 "google"
         )) {
 
-            return androidControl.openWebPage(
-                    "https://www.google.com"
-            );
+            return
+                    androidControl.openWebPage(
+                            "https://www.google.com"
+                    );
         }
 
         // =====================================================
         // WEB SEARCH
         // =====================================================
 
-        if (cmd.startsWith("ابحث في جوجل ")) {
+        if (cmd.startsWith(
+                "ابحث في جوجل "
+        )) {
 
             String query =
                     removePrefix(
@@ -236,13 +261,18 @@ public class CommandRouter {
 
             if (query.isEmpty()) {
 
-                return "شنو بغيتي نقلب عليه؟";
+                return
+                        "شنو بغيتي نقلب عليه؟";
             }
 
-            return androidControl.searchWeb(query);
+            return
+                    androidControl
+                            .searchWeb(query);
         }
 
-        if (cmd.startsWith("قلب في جوجل ")) {
+        if (cmd.startsWith(
+                "قلب في جوجل "
+        )) {
 
             String query =
                     removePrefix(
@@ -252,13 +282,18 @@ public class CommandRouter {
 
             if (query.isEmpty()) {
 
-                return "شنو بغيتي نقلب عليه؟";
+                return
+                        "شنو بغيتي نقلب عليه؟";
             }
 
-            return androidControl.searchWeb(query);
+            return
+                    androidControl
+                            .searchWeb(query);
         }
 
-        if (cmd.startsWith("ابحث عن ")) {
+        if (cmd.startsWith(
+                "ابحث عن "
+        )) {
 
             String query =
                     removePrefix(
@@ -268,13 +303,18 @@ public class CommandRouter {
 
             if (query.isEmpty()) {
 
-                return "شنو بغيتي نقلب عليه؟";
+                return
+                        "شنو بغيتي نقلب عليه؟";
             }
 
-            return androidControl.searchWeb(query);
+            return
+                    androidControl
+                            .searchWeb(query);
         }
 
-        if (cmd.startsWith("ابحث على ")) {
+        if (cmd.startsWith(
+                "ابحث على "
+        )) {
 
             String query =
                     removePrefix(
@@ -284,17 +324,22 @@ public class CommandRouter {
 
             if (query.isEmpty()) {
 
-                return "شنو بغيتي نقلب عليه؟";
+                return
+                        "شنو بغيتي نقلب عليه؟";
             }
 
-            return androidControl.searchWeb(query);
+            return
+                    androidControl
+                            .searchWeb(query);
         }
 
         // =====================================================
         // OPEN URL
         // =====================================================
 
-        if (cmd.startsWith("افتح الرابط ")) {
+        if (cmd.startsWith(
+                "افتح الرابط "
+        )) {
 
             String url =
                     removePrefix(
@@ -304,10 +349,13 @@ public class CommandRouter {
 
             if (url.isEmpty()) {
 
-                return "عطيني الرابط.";
+                return
+                        "عطيني الرابط.";
             }
 
-            return androidControl.openWebPage(url);
+            return
+                    androidControl
+                            .openWebPage(url);
         }
 
         // =====================================================
@@ -322,10 +370,14 @@ public class CommandRouter {
                 "dialer"
         )) {
 
-            return androidControl.openPhoneDialer();
+            return
+                    androidControl
+                            .openPhoneDialer();
         }
 
-        if (cmd.startsWith("اتصل ب ")) {
+        if (cmd.startsWith(
+                "اتصل ب "
+        )) {
 
             String number =
                     removePrefix(
@@ -335,13 +387,18 @@ public class CommandRouter {
 
             if (number.isEmpty()) {
 
-                return "عطيني رقم الهاتف.";
+                return
+                        "عطيني رقم الهاتف.";
             }
 
-            return androidControl.dialNumber(number);
+            return
+                    androidControl
+                            .dialNumber(number);
         }
 
-        if (cmd.startsWith("اتصل ب")) {
+        if (cmd.startsWith(
+                "اتصل ب"
+        )) {
 
             String number =
                     removePrefix(
@@ -351,10 +408,13 @@ public class CommandRouter {
 
             if (number.isEmpty()) {
 
-                return "عطيني رقم الهاتف.";
+                return
+                        "عطيني رقم الهاتف.";
             }
 
-            return androidControl.dialNumber(number);
+            return
+                    androidControl
+                            .dialNumber(number);
         }
 
         // =====================================================
@@ -371,7 +431,9 @@ public class CommandRouter {
                 "settings"
         )) {
 
-            return androidControl.openSettings();
+            return
+                    androidControl
+                            .openSettings();
         }
 
         if (containsAny(
@@ -382,7 +444,9 @@ public class CommandRouter {
                 "wi fi"
         )) {
 
-            return androidControl.openWifiSettings();
+            return
+                    androidControl
+                            .openWifiSettings();
         }
 
         if (containsAny(
@@ -392,7 +456,9 @@ public class CommandRouter {
                 "bluetooth"
         )) {
 
-            return androidControl.openBluetoothSettings();
+            return
+                    androidControl
+                            .openBluetoothSettings();
         }
 
         if (containsAny(
@@ -402,7 +468,9 @@ public class CommandRouter {
                 "application settings"
         )) {
 
-            return androidControl.openApplicationSettings();
+            return
+                    androidControl
+                            .openApplicationSettings();
         }
 
         if (containsAny(
@@ -413,7 +481,9 @@ public class CommandRouter {
                 "عن الهاتف"
         )) {
 
-            return androidControl.openDeviceInformation();
+            return
+                    androidControl
+                            .openDeviceInformation();
         }
 
         if (containsAny(
@@ -423,7 +493,9 @@ public class CommandRouter {
                 "notification settings"
         )) {
 
-            return androidControl.openNotificationSettings();
+            return
+                    androidControl
+                            .openNotificationSettings();
         }
 
         if (containsAny(
@@ -433,7 +505,9 @@ public class CommandRouter {
                 "display settings"
         )) {
 
-            return androidControl.openDisplaySettings();
+            return
+                    androidControl
+                            .openDisplaySettings();
         }
 
         if (containsAny(
@@ -443,7 +517,9 @@ public class CommandRouter {
                 "sound settings"
         )) {
 
-            return androidControl.openSoundSettings();
+            return
+                    androidControl
+                            .openSoundSettings();
         }
 
         if (containsAny(
@@ -453,7 +529,9 @@ public class CommandRouter {
                 "battery settings"
         )) {
 
-            return androidControl.openBatterySettings();
+            return
+                    androidControl
+                            .openBatterySettings();
         }
 
         if (containsAny(
@@ -463,7 +541,9 @@ public class CommandRouter {
                 "accessibility settings"
         )) {
 
-            return androidControl.openAccessibilitySettings();
+            return
+                    androidControl
+                            .openAccessibilitySettings();
         }
 
         // =====================================================
@@ -478,7 +558,9 @@ public class CommandRouter {
                 "هل التحكم فالشاشة خدام"
         )) {
 
-            return androidControl.getAccessibilityStatus();
+            return
+                    androidControl
+                            .getAccessibilityStatus();
         }
 
         // =====================================================
@@ -493,7 +575,9 @@ public class CommandRouter {
                 "home"
         )) {
 
-            return androidControl.goHome();
+            return
+                    androidControl
+                            .goHome();
         }
 
         if (containsAny(
@@ -504,7 +588,9 @@ public class CommandRouter {
                 "back"
         )) {
 
-            return androidControl.goBack();
+            return
+                    androidControl
+                            .goBack();
         }
 
         if (containsAny(
@@ -515,7 +601,9 @@ public class CommandRouter {
                 "recents"
         )) {
 
-            return androidControl.openRecents();
+            return
+                    androidControl
+                            .openRecents();
         }
 
         if (containsAny(
@@ -526,7 +614,9 @@ public class CommandRouter {
                 "الاشعارات"
         )) {
 
-            return androidControl.openNotifications();
+            return
+                    androidControl
+                            .openNotifications();
         }
 
         if (containsAny(
@@ -536,7 +626,9 @@ public class CommandRouter {
                 "quick settings"
         )) {
 
-            return androidControl.openQuickSettings();
+            return
+                    androidControl
+                            .openQuickSettings();
         }
 
         if (containsAny(
@@ -546,14 +638,18 @@ public class CommandRouter {
                 "lock screen"
         )) {
 
-            return androidControl.lockScreen();
+            return
+                    androidControl
+                            .lockScreen();
         }
 
         // =====================================================
         // OPEN APPLICATION BY NAME
         // =====================================================
 
-        if (cmd.startsWith("افتح تطبيق ")) {
+        if (cmd.startsWith(
+                "افتح تطبيق "
+        )) {
 
             String app =
                     removePrefix(
@@ -563,13 +659,18 @@ public class CommandRouter {
 
             if (app.isEmpty()) {
 
-                return "شنو هو اسم التطبيق؟";
+                return
+                        "شنو هو اسم التطبيق؟";
             }
 
-            return androidControl.openApplicationByName(app);
+            return
+                    androidControl
+                            .openApplicationByName(app);
         }
 
-        if (cmd.startsWith("فتح تطبيق ")) {
+        if (cmd.startsWith(
+                "فتح تطبيق "
+        )) {
 
             String app =
                     removePrefix(
@@ -579,13 +680,18 @@ public class CommandRouter {
 
             if (app.isEmpty()) {
 
-                return "شنو هو اسم التطبيق؟";
+                return
+                        "شنو هو اسم التطبيق؟";
             }
 
-            return androidControl.openApplicationByName(app);
+            return
+                    androidControl
+                            .openApplicationByName(app);
         }
 
-        if (cmd.startsWith("حل تطبيق ")) {
+        if (cmd.startsWith(
+                "حل تطبيق "
+        )) {
 
             String app =
                     removePrefix(
@@ -595,10 +701,13 @@ public class CommandRouter {
 
             if (app.isEmpty()) {
 
-                return "شنو هو اسم التطبيق؟";
+                return
+                        "شنو هو اسم التطبيق؟";
             }
 
-            return androidControl.openApplicationByName(app);
+            return
+                    androidControl
+                            .openApplicationByName(app);
         }
 
         // =====================================================
@@ -618,8 +727,9 @@ public class CommandRouter {
                 "read screen"
         )) {
 
-            return screenIntelligence
-                    .analyzeCurrentScreen();
+            return
+                    screenIntelligence
+                            .analyzeCurrentScreen();
         }
 
         if (containsAny(
@@ -630,8 +740,9 @@ public class CommandRouter {
                 "هل تقدر تتحكم فالشاشة"
         )) {
 
-            return screenIntelligence
-                    .getStatus();
+            return
+                    screenIntelligence
+                            .getStatus();
         }
 
         if (containsAny(
@@ -642,8 +753,9 @@ public class CommandRouter {
                 "screen elements"
         )) {
 
-            return screenIntelligence
-                    .getCurrentScreenTree();
+            return
+                    screenIntelligence
+                            .getCurrentScreenTree();
         }
 
         if (containsAny(
@@ -654,19 +766,30 @@ public class CommandRouter {
                 "شنو مكتوب فالشاشة"
         )) {
 
-            return screenIntelligence
-                    .getCurrentScreenText();
+            return
+                    screenIntelligence
+                            .getCurrentScreenText();
         }
 
         // =====================================================
         // CLICK SCREEN ELEMENT
         // =====================================================
 
-        if (cmd.startsWith("اضغط على ")
-                || cmd.startsWith("ضغط على ")
-                || cmd.startsWith("كليك على ")
-                || cmd.startsWith("انقر على ")
-                || cmd.startsWith("click ")) {
+        if (cmd.startsWith(
+                "اضغط على "
+        )
+                || cmd.startsWith(
+                "ضغط على "
+        )
+                || cmd.startsWith(
+                "كليك على "
+        )
+                || cmd.startsWith(
+                "انقر على "
+        )
+                || cmd.startsWith(
+                "click "
+        )) {
 
             String target =
                     extractTarget(
@@ -684,18 +807,27 @@ public class CommandRouter {
                         "شنو هو العنصر اللي بغيتي نضغط عليه؟";
             }
 
-            return screenIntelligence
-                    .clickElement(target);
+            return
+                    screenIntelligence
+                            .clickElement(target);
         }
 
         // =====================================================
         // FIND SCREEN ELEMENT
         // =====================================================
 
-        if (cmd.startsWith("قلب على ")
-                || cmd.startsWith("ابحث على ")
-                || cmd.startsWith("لقى ")
-                || cmd.startsWith("find ")) {
+        if (cmd.startsWith(
+                "قلب على "
+        )
+                || cmd.startsWith(
+                "ابحث على "
+        )
+                || cmd.startsWith(
+                "لقى "
+        )
+                || cmd.startsWith(
+                "find "
+        )) {
 
             String target =
                     extractTarget(
@@ -712,15 +844,18 @@ public class CommandRouter {
                         "شنو هو العنصر اللي بغيتي نقلب عليه؟";
             }
 
-            return screenIntelligence
-                    .findElement(target);
+            return
+                    screenIntelligence
+                            .findElement(target);
         }
 
         // =====================================================
         // TYPE TEXT
         // =====================================================
 
-        if (cmd.startsWith("كتب ")) {
+        if (cmd.startsWith(
+                "كتب "
+        )) {
 
             String text =
                     removePrefix(
@@ -730,17 +865,21 @@ public class CommandRouter {
 
             if (text.isEmpty()) {
 
-                return "شنو بغيتي نكتب؟";
+                return
+                        "شنو بغيتي نكتب؟";
             }
 
-            return screenIntelligence
-                    .typeText(
-                            "",
-                            text
-                    );
+            return
+                    screenIntelligence
+                            .typeText(
+                                    "",
+                                    text
+                            );
         }
 
-        if (cmd.startsWith("اكتب ")) {
+        if (cmd.startsWith(
+                "اكتب "
+        )) {
 
             String text =
                     removePrefix(
@@ -750,14 +889,16 @@ public class CommandRouter {
 
             if (text.isEmpty()) {
 
-                return "شنو بغيتي نكتب؟";
+                return
+                        "شنو بغيتي نكتب؟";
             }
 
-            return screenIntelligence
-                    .typeText(
-                            "",
-                            text
-                    );
+            return
+                    screenIntelligence
+                            .typeText(
+                                    "",
+                                    text
+                            );
         }
 
         // =====================================================
@@ -775,8 +916,9 @@ public class CommandRouter {
                 "scroll down"
         )) {
 
-            return screenIntelligence
-                    .scrollForward();
+            return
+                    screenIntelligence
+                            .scrollForward();
         }
 
         if (containsAny(
@@ -790,17 +932,24 @@ public class CommandRouter {
                 "scroll up"
         )) {
 
-            return screenIntelligence
-                    .scrollBackward();
+            return
+                    screenIntelligence
+                            .scrollBackward();
         }
 
         // =====================================================
         // MEMORY
         // =====================================================
 
-        if (cmd.startsWith("تذكر ")
-                || cmd.startsWith("احفظ ")
-                || cmd.startsWith("حفظ ")) {
+        if (cmd.startsWith(
+                "تذكر "
+        )
+                || cmd.startsWith(
+                "احفظ "
+        )
+                || cmd.startsWith(
+                "حفظ "
+        )) {
 
             String memory =
                     extractTarget(
@@ -812,17 +961,19 @@ public class CommandRouter {
 
             if (memory.isEmpty()) {
 
-                return "شنو بغيتي نحفظ؟";
+                return
+                        "شنو بغيتي نحفظ؟";
             }
 
             String key =
                     "memory_"
                             + System.currentTimeMillis();
 
-            return core.remember(
-                    key,
-                    memory
-            );
+            return
+                    core.remember(
+                            key,
+                            memory
+                    );
         }
 
         // =====================================================
@@ -838,11 +989,12 @@ public class CommandRouter {
                 "كيف داير"
         )) {
 
-            return core.getFullStatus()
-                    + "\n\n"
-                    + androidControl.getStatus()
-                    + "\n"
-                    + screenIntelligence.getStatus();
+            return
+                    core.getFullStatus()
+                            + "\n\n"
+                            + androidControl.getStatus()
+                            + "\n"
+                            + screenIntelligence.getStatus();
         }
 
         // =====================================================
@@ -862,9 +1014,10 @@ public class CommandRouter {
                 "diagnosis"
         )) {
 
-            return core.processCommand(
-                    "التشخيص الذاتي"
-            );
+            return
+                    core.processCommand(
+                            "التشخيص الذاتي"
+                    );
         }
 
         // =====================================================
@@ -878,9 +1031,10 @@ public class CommandRouter {
                 "self test"
         )) {
 
-            return core.processCommand(
-                    "اختبر نفسك"
-            );
+            return
+                    core.processCommand(
+                            "اختبر نفسك"
+                    );
         }
 
         // =====================================================
@@ -895,9 +1049,10 @@ public class CommandRouter {
                 "recovery"
         )) {
 
-            return core.processCommand(
-                    "إصلاح النظام"
-            );
+            return
+                    core.processCommand(
+                            "إصلاح النظام"
+                    );
         }
 
         // =====================================================
@@ -915,9 +1070,10 @@ public class CommandRouter {
                 "evolution"
         )) {
 
-            return core.processCommand(
-                    "طور نفسك"
-            );
+            return
+                    core.processCommand(
+                            "طور نفسك"
+                    );
         }
 
         // =====================================================
@@ -932,9 +1088,10 @@ public class CommandRouter {
                 "capabilities"
         )) {
 
-            return core.processCommand(
-                    "القدرات"
-            );
+            return
+                    core.processCommand(
+                            "القدرات"
+                    );
         }
 
         // =====================================================
@@ -948,9 +1105,10 @@ public class CommandRouter {
                 "skills"
         )) {
 
-            return core.processCommand(
-                    "المهارات"
-            );
+            return
+                    core.processCommand(
+                            "المهارات"
+                    );
         }
 
         // =====================================================
@@ -965,9 +1123,10 @@ public class CommandRouter {
                 "memory"
         )) {
 
-            return core.processCommand(
-                    "الذاكرة"
-            );
+            return
+                    core.processCommand(
+                            "الذاكرة"
+                    );
         }
 
         // =====================================================
@@ -981,9 +1140,10 @@ public class CommandRouter {
                 "tasks"
         )) {
 
-            return core.processCommand(
-                    "المهام"
-            );
+            return
+                    core.processCommand(
+                            "المهام"
+                    );
         }
 
         // =====================================================
@@ -998,9 +1158,10 @@ public class CommandRouter {
                 "plan"
         )) {
 
-            return core.processCommand(
-                    "الخطة"
-            );
+            return
+                    core.processCommand(
+                            "الخطة"
+                    );
         }
 
         // =====================================================
@@ -1014,9 +1175,10 @@ public class CommandRouter {
                 "knowledge"
         )) {
 
-            return core.processCommand(
-                    "المعرفة"
-            );
+            return
+                    core.processCommand(
+                            "المعرفة"
+                    );
         }
 
         // =====================================================
@@ -1030,9 +1192,10 @@ public class CommandRouter {
                 "notifications"
         )) {
 
-            return core.processCommand(
-                    "الإشعارات"
-            );
+            return
+                    core.processCommand(
+                            "الإشعارات"
+                    );
         }
 
         // =====================================================
@@ -1045,9 +1208,10 @@ public class CommandRouter {
                 "screen"
         )) {
 
-            return core.processCommand(
-                    "الشاشة"
-            );
+            return
+                    core.processCommand(
+                            "الشاشة"
+                    );
         }
 
         // =====================================================
@@ -1061,9 +1225,10 @@ public class CommandRouter {
                 "automation"
         )) {
 
-            return core.processCommand(
-                    "الأتمتة"
-            );
+            return
+                    core.processCommand(
+                            "الأتمتة"
+                    );
         }
 
         // =====================================================
@@ -1077,9 +1242,10 @@ public class CommandRouter {
                 "monitor"
         )) {
 
-            return core.processCommand(
-                    "المراقبة"
-            );
+            return
+                    core.processCommand(
+                            "المراقبة"
+                    );
         }
 
         // =====================================================
@@ -1092,15 +1258,20 @@ public class CommandRouter {
                 "الهدف الحالي"
         )) {
 
-            return core.getDevelopmentTarget();
+            return
+                    core.getDevelopmentTarget();
         }
 
         // =====================================================
         // LEARNING
         // =====================================================
 
-        if (cmd.startsWith("تعلم ")
-                || cmd.startsWith("علمني ")) {
+        if (cmd.startsWith(
+                "تعلم "
+        )
+                || cmd.startsWith(
+                "علمني "
+        )) {
 
             String information =
                     extractTarget(
@@ -1115,18 +1286,23 @@ public class CommandRouter {
                         "شنو بغيتي نتعلم؟";
             }
 
-            return core.learn(
-                    information,
-                    information
-            );
+            return
+                    core.learn(
+                            information,
+                            information
+                    );
         }
 
         // =====================================================
         // TASK CREATION
         // =====================================================
 
-        if (cmd.startsWith("مهمة ")
-                || cmd.startsWith("دير مهمة ")) {
+        if (cmd.startsWith(
+                "مهمة "
+        )
+                || cmd.startsWith(
+                "دير مهمة "
+        )) {
 
             String task =
                     extractTarget(
@@ -1141,15 +1317,20 @@ public class CommandRouter {
                         "شنو هي المهمة؟";
             }
 
-            return core.addTask(task);
+            return
+                    core.addTask(task);
         }
 
         // =====================================================
         // PLANNING
         // =====================================================
 
-        if (cmd.startsWith("خطط ل")
-                || cmd.startsWith("خطط ")) {
+        if (cmd.startsWith(
+                "خطط ل"
+        )
+                || cmd.startsWith(
+                "خطط "
+        )) {
 
             String goal =
                     extractTarget(
@@ -1164,15 +1345,20 @@ public class CommandRouter {
                         "شنو الهدف اللي بغيتي نخطط ليه؟";
             }
 
-            return core.createPlan(goal);
+            return
+                    core.createPlan(goal);
         }
 
         // =====================================================
         // COMMAND LEARNING
         // =====================================================
 
-        if (cmd.startsWith("علم جارفيس ")
-                || cmd.equals("علم جارفيس")) {
+        if (cmd.startsWith(
+                "علم جارفيس "
+        )
+                || cmd.equals(
+                "علم جارفيس"
+        )) {
 
             String learning =
                     extractTarget(
@@ -1186,11 +1372,142 @@ public class CommandRouter {
                         "قول ليا شنو بغيتي نعلم جارفيس يدير.";
             }
 
+            /*
+             * الصيغ المدعومة:
+             *
+             * علم جارفيس افتح يوتيوب = افتح يوتيوب
+             * علم جارفيس شغل الموسيقى -> افتح يوتيوب
+             *
+             * كنستعمل "=" أو "->" أو "ثم نفذ" للفصل
+             * بين الأمر والإجراء.
+             */
+
+            String learnedCommand = "";
+            String learnedAction = "";
+
+            String[] separators = {
+                    "=",
+                    "->",
+                    "=>",
+                    " ثم ",
+                    " ومن بعد ",
+                    " وبعدها "
+            };
+
+            for (String separator : separators) {
+
+                int index =
+                        learning.indexOf(
+                                separator
+                        );
+
+                if (index > 0) {
+
+                    learnedCommand =
+                            learning
+                                    .substring(
+                                            0,
+                                            index
+                                    )
+                                    .trim();
+
+                    learnedAction =
+                            learning
+                                    .substring(
+                                            index
+                                                    + separator.length()
+                                    )
+                                    .trim();
+
+                    break;
+                }
+            }
+
+            /*
+             * إلا ما كانش separator،
+             * كنقلب على الصيغة:
+             *
+             * "علم جارفيس أمر هو إجراء"
+             */
+
+            if (learnedCommand.isEmpty() &&
+                    learnedAction.isEmpty()) {
+
+                String normalizedLearning =
+                        normalize(
+                                learning
+                        );
+
+                String marker =
+                        " هو ";
+
+                int index =
+                        normalizedLearning.indexOf(
+                                marker
+                        );
+
+                if (index > 0) {
+
+                    learnedCommand =
+                            learning
+                                    .substring(
+                                            0,
+                                            index
+                                    )
+                                    .trim();
+
+                    learnedAction =
+                            learning
+                                    .substring(
+                                            index
+                                                    + marker.length()
+                                    )
+                                    .trim();
+                }
+            }
+
+            if (learnedCommand.isEmpty() ||
+                    learnedAction.isEmpty()) {
+
+                return
+                        "باش نتعلم مزيان خاصك تعطيني الأمر والإجراء.\n\n"
+                                + "مثال:\n"
+                                + "علم جارفيس شغل يوتيوب = افتح يوتيوب";
+            }
+
+            if (normalize(
+                    learnedCommand
+            ).equals(
+                    normalize(
+                            learnedAction
+                    )
+            )) {
+
+                return
+                        "الأمر والإجراء ما خاصهمش يكونو نفس الحاجة.";
+            }
+
             return
-                    "JARVIS: سجلت طلب التعليم:\n"
-                            + learning
-                            + "\n\n"
-                            + "محرك التعلم المتقدم غادي يربط هاد الأمر بالتنفيذ التلقائي.";
+                    core.rememberCommand(
+                            learnedCommand,
+                            learnedAction
+                    );
+        }
+
+        // =====================================================
+        // COMMAND LEARNING STATUS
+        // =====================================================
+
+        if (containsAny(
+                cmd,
+                "تعلم الأوامر",
+                "حالة التعلم",
+                "حالة تعلم الأوامر",
+                "command learning"
+        )) {
+
+            return
+                    "Command Learning Engine: ONLINE ✓";
         }
 
         // =====================================================
@@ -1204,16 +1521,19 @@ public class CommandRouter {
                 "android control"
         )) {
 
-            return androidControl.getStatus();
+            return
+                    androidControl
+                            .getStatus();
         }
 
         // =====================================================
         // CORE FALLBACK
         // =====================================================
 
-        return core.processCommand(
-                original
-        );
+        return
+                core.processCommand(
+                        original
+                );
     }
 
     // =========================================================
@@ -1231,7 +1551,9 @@ public class CommandRouter {
 
         return value
                 .trim()
-                .toLowerCase(Locale.ROOT)
+                .toLowerCase(
+                        Locale.ROOT
+                )
                 .replace(
                         "أ",
                         "ا"
@@ -1278,7 +1600,9 @@ public class CommandRouter {
                     normalize(value);
 
             if (!target.isEmpty() &&
-                    normalized.contains(target)) {
+                    normalized.contains(
+                            target
+                    )) {
 
                 return true;
             }
@@ -1561,7 +1885,15 @@ public class CommandRouter {
         );
 
         help.append(
-                "- علم جارفيس [الأمر]\n\n"
+                "- علم جارفيس [الأمر] = [الإجراء]\n\n"
+        );
+
+        help.append(
+                "مثال:\n"
+        );
+
+        help.append(
+                "علم جارفيس شغل يوتيوب = افتح يوتيوب\n\n"
         );
 
         help.append(
