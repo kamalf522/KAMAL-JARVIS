@@ -19,10 +19,16 @@ public class TaskManager {
                 context.getApplicationContext();
 
         memoryManager =
-                new MemoryManager(this.context);
+                new MemoryManager(
+                        this.context
+                );
 
         loadTasks();
     }
+
+    // =========================================================
+    // ADD TASK
+    // =========================================================
 
     public synchronized String addTask(
             String title
@@ -31,7 +37,8 @@ public class TaskManager {
         if (title == null ||
                 title.trim().isEmpty()) {
 
-            return "خاصك تكتب اسم المهمة.";
+            return
+                    "خاصك تكتب اسم المهمة.";
         }
 
         String cleanTitle =
@@ -53,6 +60,10 @@ public class TaskManager {
                 + cleanTitle;
     }
 
+    // =========================================================
+    // COMPLETE TASK
+    // =========================================================
+
     public synchronized String completeTask(
             int index
     ) {
@@ -60,7 +71,8 @@ public class TaskManager {
         if (index < 0 ||
                 index >= tasks.size()) {
 
-            return "رقم المهمة غير صحيح.";
+            return
+                    "رقم المهمة غير صحيح.";
         }
 
         Task task =
@@ -75,6 +87,10 @@ public class TaskManager {
                 + task.title;
     }
 
+    // =========================================================
+    // REMOVE TASK
+    // =========================================================
+
     public synchronized String removeTask(
             int index
     ) {
@@ -82,7 +98,8 @@ public class TaskManager {
         if (index < 0 ||
                 index >= tasks.size()) {
 
-            return "رقم المهمة غير صحيح.";
+            return
+                    "رقم المهمة غير صحيح.";
         }
 
         Task removed =
@@ -94,6 +111,10 @@ public class TaskManager {
                 "تم حذف المهمة ✓\n\n"
                 + removed.title;
     }
+
+    // =========================================================
+    // GET TASKS
+    // =========================================================
 
     public synchronized String getTasks() {
 
@@ -121,7 +142,10 @@ public class TaskManager {
             Task task =
                     tasks.get(i);
 
-            result.append(i + 1);
+            result.append(
+                    i + 1
+            );
+
             result.append(". ");
 
             if (task.completed) {
@@ -133,12 +157,19 @@ public class TaskManager {
                 result.append("○ ");
             }
 
-            result.append(task.title);
+            result.append(
+                    task.title
+            );
+
             result.append("\n");
         }
 
         return result.toString();
     }
+
+    // =========================================================
+    // COUNTERS
+    // =========================================================
 
     public synchronized int getTaskCount() {
 
@@ -175,7 +206,13 @@ public class TaskManager {
         return count;
     }
 
-    public synchronized void clearCompletedTasks() {
+    // =========================================================
+    // CLEAR COMPLETED
+    // =========================================================
+
+    public synchronized String clearCompletedTasks() {
+
+        int removedCount = 0;
 
         for (int i = tasks.size() - 1;
              i >= 0;
@@ -184,38 +221,79 @@ public class TaskManager {
             if (tasks.get(i).completed) {
 
                 tasks.remove(i);
+
+                removedCount++;
             }
         }
 
         saveTasks();
+
+        if (removedCount == 0) {
+
+            return
+                    "ما كايناش مهام مكتملة باش نحيدها.";
+        }
+
+        return
+                "تم حذف "
+                + removedCount
+                + " مهمة مكتملة ✓";
     }
 
     /*
      * Compatibility method.
-     * بعض الأنظمة القديمة داخل JARVIS
-     * كتستعمل clearCompleted().
+     *
+     * مهم:
+     * كان void من قبل، ولكن AutomationEngine
+     * كيرجع النتيجة ديالو للمستخدم.
+     *
+     * تبديل void إلى String ما كيضرش الاستعمالات
+     * اللي كتنادي عليه بلا ما تستعمل النتيجة.
      */
-    public synchronized void clearCompleted() {
+    public synchronized String clearCompleted() {
 
-        clearCompletedTasks();
+        return clearCompletedTasks();
     }
 
-    public synchronized void clearAllTasks() {
+    // =========================================================
+    // CLEAR ALL
+    // =========================================================
+
+    public synchronized String clearAllTasks() {
+
+        int count =
+                tasks.size();
 
         tasks.clear();
 
         saveTasks();
+
+        if (count == 0) {
+
+            return
+                    "ما كايناش مهام باش نحيدها.";
+        }
+
+        return
+                "تم حذف جميع المهام ✓\n"
+                + "العدد: "
+                + count;
     }
 
     /*
      * Compatibility method.
-     * بعض الأنظمة القديمة داخل JARVIS
-     * كتستعمل clearAll().
+     *
+     * نفس السبب: AutomationEngine محتاج
+     * نتيجة نصية باش يرجعها للمستخدم.
      */
-    public synchronized void clearAll() {
+    public synchronized String clearAll() {
 
-        clearAllTasks();
+        return clearAllTasks();
     }
+
+    // =========================================================
+    // HEALTH
+    // =========================================================
 
     public boolean isHealthy() {
 
@@ -247,12 +325,15 @@ public class TaskManager {
                     + getPendingTaskCount()
                     + "\nCompleted: "
                     + getCompletedTaskCount();
-
         }
 
         return
                 "Task Manager: ERROR ⚠";
     }
+
+    // =========================================================
+    // SAVE
+    // =========================================================
 
     private void saveTasks() {
 
@@ -261,11 +342,16 @@ public class TaskManager {
 
         for (Task task : tasks) {
 
-            data.append(task.id);
+            data.append(
+                    task.id
+            );
+
             data.append("|");
 
             data.append(
-                    escape(task.title)
+                    escape(
+                            task.title
+                    )
             );
 
             data.append("|");
@@ -283,6 +369,10 @@ public class TaskManager {
         );
     }
 
+    // =========================================================
+    // LOAD
+    // =========================================================
+
     private void loadTasks() {
 
         try {
@@ -299,7 +389,9 @@ public class TaskManager {
             }
 
             String[] lines =
-                    data.split("\n");
+                    data.split(
+                            "\\n"
+                    );
 
             for (String line : lines) {
 
@@ -325,7 +417,9 @@ public class TaskManager {
                         );
 
                 String title =
-                        unescape(parts[1]);
+                        unescape(
+                                parts[1]
+                        );
 
                 boolean completed =
                         Boolean.parseBoolean(
@@ -347,6 +441,10 @@ public class TaskManager {
         }
     }
 
+    // =========================================================
+    // ESCAPE
+    // =========================================================
+
     private String escape(
             String value
     ) {
@@ -357,10 +455,23 @@ public class TaskManager {
         }
 
         return value
-                .replace("\\", "\\\\")
-                .replace("|", "\\p")
-                .replace("\n", "\\n");
+                .replace(
+                        "\\",
+                        "\\\\"
+                )
+                .replace(
+                        "|",
+                        "\\p"
+                )
+                .replace(
+                        "\n",
+                        "\\n"
+                );
     }
+
+    // =========================================================
+    // UNESCAPE
+    // =========================================================
 
     private String unescape(
             String value
@@ -372,15 +483,29 @@ public class TaskManager {
         }
 
         return value
-                .replace("\\n", "\n")
-                .replace("\\p", "|")
-                .replace("\\\\", "\\");
+                .replace(
+                        "\\n",
+                        "\n"
+                )
+                .replace(
+                        "\\p",
+                        "|"
+                )
+                .replace(
+                        "\\\\",
+                        "\\"
+                );
     }
+
+    // =========================================================
+    // TASK MODEL
+    // =========================================================
 
     private static class Task {
 
         final long id;
         final String title;
+
         boolean completed;
 
         Task(
@@ -389,9 +514,14 @@ public class TaskManager {
                 boolean completed
         ) {
 
-            this.id = id;
-            this.title = title;
-            this.completed = completed;
+            this.id =
+                    id;
+
+            this.title =
+                    title;
+
+            this.completed =
+                    completed;
         }
     }
 }
