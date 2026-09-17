@@ -1,9 +1,9 @@
 package com.kamal.jarvis;
 
 import android.app.Notification;
+import android.os.Bundle;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
-import android.os.Bundle;
 
 public class JarvisNotificationListenerService
         extends NotificationListenerService {
@@ -14,6 +14,8 @@ public class JarvisNotificationListenerService
     private String lastTitle = "";
     private String lastMessage = "";
 
+    private String lastNotificationKey = "";
+
     @Override
     public void onListenerConnected() {
 
@@ -21,7 +23,8 @@ public class JarvisNotificationListenerService
 
         instance = this;
 
-        NotificationIntelligence.setServiceConnected(true);
+        NotificationIntelligence
+                .setServiceConnected(true);
     }
 
     @Override
@@ -33,54 +36,102 @@ public class JarvisNotificationListenerService
             return;
         }
 
-        String packageName =
-                statusBarNotification.getPackageName();
+        try {
 
-        String title = "";
-        String message = "";
+            String packageName =
+                    statusBarNotification
+                            .getPackageName();
 
-        Notification notification =
-                statusBarNotification.getNotification();
+            if (packageName == null) {
+                packageName = "";
+            }
 
-        if (notification != null &&
-                notification.extras != null) {
+            Notification notification =
+                    statusBarNotification
+                            .getNotification();
+
+            if (notification == null) {
+                return;
+            }
+
+            String title = "";
+            String message = "";
 
             Bundle extras =
                     notification.extras;
 
-            CharSequence titleValue =
-                    extras.getCharSequence(
-                            Notification.EXTRA_TITLE
-                    );
+            if (extras != null) {
 
-            CharSequence textValue =
-                    extras.getCharSequence(
-                            Notification.EXTRA_TEXT
-                    );
+                CharSequence titleValue =
+                        extras.getCharSequence(
+                                Notification.EXTRA_TITLE
+                        );
 
-            if (titleValue != null) {
-                title = titleValue.toString();
+                CharSequence textValue =
+                        extras.getCharSequence(
+                                Notification.EXTRA_TEXT
+                        );
+
+                if (titleValue != null) {
+
+                    title =
+                            titleValue
+                                    .toString()
+                                    .trim();
+                }
+
+                if (textValue != null) {
+
+                    message =
+                            textValue
+                                    .toString()
+                                    .trim();
+                }
             }
 
-            if (textValue != null) {
-                message = textValue.toString();
+            if (title.isEmpty() &&
+                    message.isEmpty()) {
+
+                return;
             }
+
+            String notificationKey =
+                    packageName
+                    + "|"
+                    + title
+                    + "|"
+                    + message;
+
+            if (notificationKey.equals(
+                    lastNotificationKey
+            )) {
+
+                return;
+            }
+
+            lastNotificationKey =
+                    notificationKey;
+
+            lastPackageName =
+                    packageName;
+
+            lastTitle =
+                    title;
+
+            lastMessage =
+                    message;
+
+            NotificationIntelligence
+                    .receiveNotification(
+                            lastPackageName,
+                            lastTitle,
+                            lastMessage
+                    );
+
+        } catch (Exception e) {
+
+            // JARVIS لا يتوقف بسبب إشعار غير صالح.
         }
-
-        lastPackageName =
-                packageName == null
-                        ? ""
-                        : packageName;
-
-        lastTitle = title;
-        lastMessage = message;
-
-        NotificationIntelligence
-                .receiveNotification(
-                        lastPackageName,
-                        lastTitle,
-                        lastMessage
-                );
     }
 
     @Override
@@ -88,8 +139,8 @@ public class JarvisNotificationListenerService
             StatusBarNotification statusBarNotification
     ) {
 
-        // JARVIS keeps the last notification
-        // for intelligence and memory purposes.
+        // JARVIS يحتفظ بآخر إشعار مهم
+        // حتى يتمكن نظام الذكاء من تحليله.
     }
 
     @Override
@@ -98,13 +149,17 @@ public class JarvisNotificationListenerService
         NotificationIntelligence
                 .setServiceConnected(false);
 
-        instance = null;
+        if (instance == this) {
+
+            instance = null;
+        }
 
         super.onListenerDisconnected();
     }
 
     public static
-    JarvisNotificationListenerService getInstance() {
+    JarvisNotificationListenerService
+    getInstance() {
 
         return instance;
     }
@@ -127,5 +182,25 @@ public class JarvisNotificationListenerService
     public String getLastMessage() {
 
         return lastMessage;
+    }
+
+    public String getLastNotificationSummary() {
+
+        if (lastPackageName.isEmpty() &&
+                lastTitle.isEmpty() &&
+                lastMessage.isEmpty()) {
+
+            return "لا توجد إشعارات محفوظة.";
+        }
+
+        return
+                "التطبيق: "
+                + lastPackageName
+                + "\n"
+                + "العنوان: "
+                + lastTitle
+                + "\n"
+                + "الرسالة: "
+                + lastMessage;
     }
 }
