@@ -41,13 +41,7 @@ public class AutomationEngine {
                 new ContextEngine(this.context);
     }
 
-    // =========================================================
-    // COMMAND ANALYSIS
-    // =========================================================
-
-    public String analyzeCommand(
-            String command
-    ) {
+    public String analyzeCommand(String command) {
 
         if (command == null ||
                 command.trim().isEmpty()) {
@@ -74,8 +68,7 @@ public class AutomationEngine {
                 decision
         );
 
-        lastCommand =
-                cleanCommand;
+        lastCommand = cleanCommand;
 
         return
                 "تم تحليل الأمر ✓\n\n"
@@ -86,13 +79,7 @@ public class AutomationEngine {
                 + decision;
     }
 
-    // =========================================================
-    // REAL AUTOMATION EXECUTION
-    // =========================================================
-
-    public String execute(
-            String command
-    ) {
+    public String execute(String command) {
 
         if (command == null ||
                 command.trim().isEmpty()) {
@@ -110,6 +97,39 @@ public class AutomationEngine {
                 System.currentTimeMillis();
 
         try {
+
+            /*
+             * الأتمتة متعددة الخطوات خاصها تتفحص
+             * قبل الأمر المفرد.
+             *
+             * مثال:
+             * افتح يوتيوب ثم انتظر 2 ثانية ثم رجع
+             *
+             * ما خاصش JARVIS ينفذ غير "افتح يوتيوب".
+             */
+
+            List<String> steps =
+                    splitIntoSteps(cleanCommand);
+
+            if (steps.size() > 1) {
+
+                String result =
+                        executeSequence(cleanCommand);
+
+                lastResult =
+                        result;
+
+                contextEngine.updateCommand(
+                        cleanCommand,
+                        "AUTOMATION"
+                );
+
+                contextEngine.updateDecision(
+                        "AUTOMATION"
+                );
+
+                return result;
+            }
 
             String singleResult =
                     executeSingleCommand(
@@ -163,10 +183,6 @@ public class AutomationEngine {
         }
     }
 
-    // =========================================================
-    // SINGLE COMMAND EXECUTION
-    // =========================================================
-
     private String executeSingleCommand(
             String command
     ) {
@@ -176,13 +192,8 @@ public class AutomationEngine {
 
         if (cmd.isEmpty()) {
 
-            return
-                    "الأمر فارغ.";
+            return "الأمر فارغ.";
         }
-
-        // -----------------------------------------------------
-        // HOME
-        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -193,10 +204,6 @@ public class AutomationEngine {
 
             return androidControlEngine.goHome();
         }
-
-        // -----------------------------------------------------
-        // BACK
-        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -209,10 +216,6 @@ public class AutomationEngine {
             return androidControlEngine.goBack();
         }
 
-        // -----------------------------------------------------
-        // RECENTS
-        // -----------------------------------------------------
-
         if (containsAny(
                 cmd,
                 "التطبيقات الأخيرة",
@@ -224,10 +227,6 @@ public class AutomationEngine {
             return androidControlEngine.openRecents();
         }
 
-        // -----------------------------------------------------
-        // NOTIFICATIONS
-        // -----------------------------------------------------
-
         if (containsAny(
                 cmd,
                 "افتح الإشعارات",
@@ -237,10 +236,6 @@ public class AutomationEngine {
 
             return androidControlEngine.openNotifications();
         }
-
-        // -----------------------------------------------------
-        // QUICK SETTINGS
-        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -252,10 +247,6 @@ public class AutomationEngine {
             return androidControlEngine.openQuickSettings();
         }
 
-        // -----------------------------------------------------
-        // LOCK
-        // -----------------------------------------------------
-
         if (containsAny(
                 cmd,
                 "قفل الشاشة",
@@ -265,10 +256,6 @@ public class AutomationEngine {
 
             return androidControlEngine.lockScreen();
         }
-
-        // -----------------------------------------------------
-        // SETTINGS
-        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -281,10 +268,6 @@ public class AutomationEngine {
             return androidControlEngine.openSettings();
         }
 
-        // -----------------------------------------------------
-        // WIFI
-        // -----------------------------------------------------
-
         if (containsAny(
                 cmd,
                 "افتح الواي فاي",
@@ -294,10 +277,6 @@ public class AutomationEngine {
 
             return androidControlEngine.openWifiSettings();
         }
-
-        // -----------------------------------------------------
-        // BLUETOOTH
-        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -310,10 +289,6 @@ public class AutomationEngine {
                     .openBluetoothSettings();
         }
 
-        // -----------------------------------------------------
-        // ACCESSIBILITY
-        // -----------------------------------------------------
-
         if (containsAny(
                 cmd,
                 "افتح إمكانية الوصول",
@@ -325,10 +300,6 @@ public class AutomationEngine {
                     .openAccessibilitySettings();
         }
 
-        // -----------------------------------------------------
-        // YOUTUBE
-        // -----------------------------------------------------
-
         if (containsAny(
                 cmd,
                 "افتح يوتيوب",
@@ -338,10 +309,6 @@ public class AutomationEngine {
 
             return androidControlEngine.openYouTube();
         }
-
-        // -----------------------------------------------------
-        // WHATSAPP
-        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -353,10 +320,6 @@ public class AutomationEngine {
             return androidControlEngine.openWhatsApp();
         }
 
-        // -----------------------------------------------------
-        // INSTAGRAM
-        // -----------------------------------------------------
-
         if (containsAny(
                 cmd,
                 "افتح انستغرام",
@@ -366,10 +329,6 @@ public class AutomationEngine {
 
             return androidControlEngine.openInstagram();
         }
-
-        // -----------------------------------------------------
-        // FACEBOOK
-        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -381,10 +340,6 @@ public class AutomationEngine {
             return androidControlEngine.openFacebook();
         }
 
-        // -----------------------------------------------------
-        // CHROME
-        // -----------------------------------------------------
-
         if (containsAny(
                 cmd,
                 "افتح كروم",
@@ -394,10 +349,6 @@ public class AutomationEngine {
 
             return androidControlEngine.openChrome();
         }
-
-        // -----------------------------------------------------
-        // GENERIC APP
-        // -----------------------------------------------------
 
         if (cmd.startsWith(
                 "افتح تطبيق "
@@ -433,21 +384,21 @@ public class AutomationEngine {
             }
         }
 
-        // -----------------------------------------------------
-        // CLICK
-        // -----------------------------------------------------
-
         if (cmd.startsWith(
                 "اضغط على "
-        ) || cmd.startsWith(
-                "ضغط على "
-        ) || cmd.startsWith(
-                "كليك على "
-        ) || cmd.startsWith(
-                "انقر على "
-        ) || cmd.startsWith(
-                "click "
-        )) {
+        ) ||
+                cmd.startsWith(
+                        "ضغط على "
+                ) ||
+                cmd.startsWith(
+                        "كليك على "
+                ) ||
+                cmd.startsWith(
+                        "انقر على "
+                ) ||
+                cmd.startsWith(
+                        "click "
+                )) {
 
             String target =
                     extractTarget(
@@ -467,10 +418,6 @@ public class AutomationEngine {
                         );
             }
         }
-
-        // -----------------------------------------------------
-        // TYPE
-        // -----------------------------------------------------
 
         if (cmd.startsWith(
                 "اكتب "
@@ -512,10 +459,6 @@ public class AutomationEngine {
             }
         }
 
-        // -----------------------------------------------------
-        // SCROLL DOWN
-        // -----------------------------------------------------
-
         if (containsAny(
                 cmd,
                 "سكرول لتحت",
@@ -531,10 +474,6 @@ public class AutomationEngine {
                     .scrollDown();
         }
 
-        // -----------------------------------------------------
-        // SCROLL UP
-        // -----------------------------------------------------
-
         if (containsAny(
                 cmd,
                 "سكرول لفوق",
@@ -549,10 +488,6 @@ public class AutomationEngine {
             return androidControlEngine
                     .scrollUp();
         }
-
-        // -----------------------------------------------------
-        // SCREEN STATUS
-        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -575,10 +510,6 @@ public class AutomationEngine {
             return service.getScreenText();
         }
 
-        // -----------------------------------------------------
-        // DEVICE INFORMATION
-        // -----------------------------------------------------
-
         if (containsAny(
                 cmd,
                 "معلومات الهاتف",
@@ -593,18 +524,12 @@ public class AutomationEngine {
         return null;
     }
 
-    // =========================================================
-    // MULTI-STEP AUTOMATION
-    // =========================================================
-
     private String executeSequence(
             String command
     ) {
 
         List<String> steps =
-                splitIntoSteps(
-                        command
-                );
+                splitIntoSteps(command);
 
         if (steps.isEmpty()) {
 
@@ -647,18 +572,11 @@ public class AutomationEngine {
                             ":\n"
                     );
 
-            report.append(
-                    step
-            );
-
-            report.append(
-                    "\n"
-            );
+            report.append(step);
+            report.append("\n");
 
             String result =
-                    executeStep(
-                            step
-                    );
+                    executeStep(step);
 
             if (result == null) {
 
@@ -670,22 +588,15 @@ public class AutomationEngine {
                     "RESULT:\n"
             );
 
-            report.append(
-                    result
-            );
-
-            report.append(
-                    "\n\n"
-            );
+            report.append(result);
+            report.append("\n\n");
 
             if (isSuccessResult(result)) {
 
                 successCount++;
             }
 
-            if (isHardFailure(
-                    result
-            )) {
+            if (isHardFailure(result)) {
 
                 report.append(
                         "AUTOMATION STOPPED ⚠\n"
@@ -703,17 +614,9 @@ public class AutomationEngine {
                 "SUMMARY:\n"
         );
 
-        report.append(
-                successCount
-        );
-
-        report.append(
-                "/"
-        );
-
-        report.append(
-                totalCount
-        );
+        report.append(successCount);
+        report.append("/");
+        report.append(totalCount);
 
         report.append(
                 " خطوات منفذة بنجاح."
@@ -735,10 +638,6 @@ public class AutomationEngine {
         return report.toString();
     }
 
-    // =========================================================
-    // EXECUTE STEP
-    // =========================================================
-
     private String executeStep(
             String step
     ) {
@@ -751,10 +650,6 @@ public class AutomationEngine {
 
         String clean =
                 step.trim();
-
-        // -----------------------------------------------------
-        // WAIT COMMAND
-        // -----------------------------------------------------
 
         long delay =
                 extractDelay(clean);
@@ -788,9 +683,7 @@ public class AutomationEngine {
         }
 
         String result =
-                executeSingleCommand(
-                        clean
-                );
+                executeSingleCommand(clean);
 
         if (result != null) {
 
@@ -801,10 +694,6 @@ public class AutomationEngine {
                 "JARVIS: ما فهمتش هاد الخطوة:\n"
                         + clean;
     }
-
-    // =========================================================
-    // SPLIT AUTOMATION STEPS
-    // =========================================================
 
     private List<String> splitIntoSteps(
             String command
@@ -866,9 +755,7 @@ public class AutomationEngine {
 
             if (!clean.isEmpty()) {
 
-                steps.add(
-                        clean
-                );
+                steps.add(clean);
             }
         }
 
@@ -882,10 +769,6 @@ public class AutomationEngine {
 
         return steps;
     }
-
-    // =========================================================
-    // TASKS
-    // =========================================================
 
     public String createTask(
             String task
@@ -914,18 +797,14 @@ public class AutomationEngine {
             int index
     ) {
 
-        return taskManager.completeTask(
-                index
-        );
+        return taskManager.completeTask(index);
     }
 
     public String removeTask(
             int index
     ) {
 
-        return taskManager.removeTask(
-                index
-        );
+        return taskManager.removeTask(index);
     }
 
     public String getTasks() {
@@ -942,10 +821,6 @@ public class AutomationEngine {
 
         return taskManager.clearAll();
     }
-
-    // =========================================================
-    // PLANNING
-    // =========================================================
 
     public String createPlan(
             String goal
@@ -964,10 +839,6 @@ public class AutomationEngine {
         return contextEngine
                 .createContextPlan();
     }
-
-    // =========================================================
-    // REMINDERS
-    // =========================================================
 
     public String createReminder(
             String title,
@@ -993,10 +864,6 @@ public class AutomationEngine {
         return reminderEngine
                 .getLastReminder();
     }
-
-    // =========================================================
-    // STATUS
-    // =========================================================
 
     public String getAutomationStatus() {
 
@@ -1130,10 +997,6 @@ public class AutomationEngine {
         return lastExecutionTime;
     }
 
-    // =========================================================
-    // DELAY DETECTION
-    // =========================================================
-
     private long extractDelay(
             String command
     ) {
@@ -1143,11 +1006,13 @@ public class AutomationEngine {
 
         if (!lower.startsWith(
                 "انتظر "
-        ) && !lower.startsWith(
-                "استنى "
-        ) && !lower.startsWith(
-                "wait "
-        )) {
+        ) &&
+                !lower.startsWith(
+                        "استنى "
+                ) &&
+                !lower.startsWith(
+                        "wait "
+                )) {
 
             return -1L;
         }
@@ -1187,24 +1052,30 @@ public class AutomationEngine {
             }
 
             long number =
-                    Long.parseLong(
-                            digits
-                    );
+                    Long.parseLong(digits);
 
             if (value.contains(
-                    "ثانية"
-            ) || value.contains(
-                    "second"
-            )) {
+                    "ثانيه"
+            ) ||
+                    value.contains(
+                            "ثانية"
+                    ) ||
+                    value.contains(
+                            "second"
+                    )) {
 
                 return number * 1000L;
             }
 
             if (value.contains(
-                    "دقيقة"
-            ) || value.contains(
-                    "minute"
-            )) {
+                    "دقيقه"
+            ) ||
+                    value.contains(
+                            "دقيقة"
+                    ) ||
+                    value.contains(
+                            "minute"
+                    )) {
 
                 return number * 60000L;
             }
@@ -1216,10 +1087,6 @@ public class AutomationEngine {
             return 1000L;
         }
     }
-
-    // =========================================================
-    // SUCCESS DETECTION
-    // =========================================================
 
     private boolean isSuccessResult(
             String result
@@ -1241,6 +1108,9 @@ public class AutomationEngine {
                         "ما لقيتش"
                 )
                 && !value.contains(
+                        "غير مفعله"
+                )
+                && !value.contains(
                         "غير مفعلة"
                 )
                 && !value.contains(
@@ -1250,13 +1120,12 @@ public class AutomationEngine {
                         "error"
                 )
                 && !value.contains(
+                        "وقع خطا"
+                )
+                && !value.contains(
                         "وقع خطأ"
                 );
     }
-
-    // =========================================================
-    // HARD FAILURE
-    // =========================================================
 
     private boolean isHardFailure(
             String result
@@ -1272,6 +1141,9 @@ public class AutomationEngine {
 
         return
                 value.contains(
+                        "وقع خطا"
+                )
+                || value.contains(
                         "وقع خطأ"
                 )
                 || value.contains(
@@ -1281,10 +1153,6 @@ public class AutomationEngine {
                         "فشل التنفيذ"
                 );
     }
-
-    // =========================================================
-    // REMOVE PREFIX
-    // =========================================================
 
     private String removePrefix(
             String original,
@@ -1301,14 +1169,10 @@ public class AutomationEngine {
                 original.trim();
 
         String lowerValue =
-                normalize(
-                        value
-                );
+                normalize(value);
 
         String lowerPrefix =
-                normalize(
-                        prefix
-                );
+                normalize(prefix);
 
         if (lowerValue.startsWith(
                 lowerPrefix
@@ -1323,10 +1187,6 @@ public class AutomationEngine {
 
         return "";
     }
-
-    // =========================================================
-    // EXTRACT TARGET
-    // =========================================================
 
     private String extractTarget(
             String command,
@@ -1355,10 +1215,6 @@ public class AutomationEngine {
         return "";
     }
 
-    // =========================================================
-    // NORMALIZE
-    // =========================================================
-
     private String normalize(
             String value
     ) {
@@ -1371,27 +1227,12 @@ public class AutomationEngine {
         return value
                 .trim()
                 .toLowerCase(Locale.ROOT)
-                .replace(
-                        "أ",
-                        "ا"
-                )
-                .replace(
-                        "إ",
-                        "ا"
-                )
-                .replace(
-                        "آ",
-                        "ا"
-                )
-                .replace(
-                        "ة",
-                        "ه"
-                );
+                .replace("أ", "ا")
+                .replace("إ", "ا")
+                .replace("آ", "ا")
+                .replace("ة", "ه")
+                .replace("ى", "ي");
     }
-
-    // =========================================================
-    // CONTAINS ANY
-    // =========================================================
 
     private boolean containsAny(
             String text,
@@ -1417,9 +1258,7 @@ public class AutomationEngine {
                     normalize(value);
 
             if (!target.isEmpty() &&
-                    normalized.contains(
-                            target
-                    )) {
+                    normalized.contains(target)) {
 
                 return true;
             }
@@ -1427,10 +1266,6 @@ public class AutomationEngine {
 
         return false;
     }
-
-    // =========================================================
-    // SAFE
-    // =========================================================
 
     private String safe(
             String value
