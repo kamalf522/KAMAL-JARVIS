@@ -5,255 +5,570 @@ import android.content.Context;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * JARVIS Self Diagnosis Manager
+ *
+ * مسؤول على:
+ * - فحص الأنظمة الموجودة فعليا
+ * - تحديد الأنظمة اللي فيها مشكل
+ * - حساب الجاهزية
+ * - اقتراح التطوير التالي
+ *
+ * مهم:
+ * ما بقاش كيعتمد على لائحة قديمة كتقول بأن الأنظمة
+ * الموجودة أصلا مازال ناقصة.
+ */
 public class SelfDiagnosisManager {
 
     private final Context context;
+
     private final CapabilityManager capabilityManager;
     private final SkillManager skillManager;
+    private final MemoryManager memoryManager;
+    private final TaskManager taskManager;
+    private final LearningEngine learningEngine;
 
     public SelfDiagnosisManager(Context context) {
-        this.context = context.getApplicationContext();
+
+        this.context =
+                context.getApplicationContext();
 
         capabilityManager =
                 new CapabilityManager(this.context);
 
         skillManager =
                 new SkillManager(this.context);
+
+        memoryManager =
+                new MemoryManager(this.context);
+
+        taskManager =
+                new TaskManager(this.context);
+
+        learningEngine =
+                new LearningEngine(this.context);
     }
 
-    // ==========================================
+    // =========================================================
     // FULL DIAGNOSIS
-    // ==========================================
+    // =========================================================
 
     public String runDiagnosis() {
 
         StringBuilder result =
                 new StringBuilder();
 
-        result.append("JARVIS SELF DIAGNOSIS\n");
-        result.append("============================\n\n");
+        int healthy = 0;
+        int checked = 0;
 
-        int score = 0;
-        int total = 0;
+        result.append(
+                "JARVIS SELF DIAGNOSIS\n"
+        );
 
-        // --------------------------------------
+        result.append(
+                "============================\n\n"
+        );
+
+        // -----------------------------------------------------
         // CORE
-        // --------------------------------------
+        // -----------------------------------------------------
 
         result.append("CORE SYSTEM\n");
-        result.append("✓ Core Engine: ONLINE\n");
-        score++;
-        total++;
 
-        // --------------------------------------
-        // CAPABILITIES
-        // --------------------------------------
+        result.append(
+                "✓ Core Engine: ONLINE\n"
+        );
 
-        result.append("\nCAPABILITIES\n");
+        healthy++;
+        checked++;
 
-        int capabilities =
-                capabilityManager.getCount();
+        // -----------------------------------------------------
+        // MEMORY
+        // -----------------------------------------------------
 
-        if (capabilities > 0) {
+        result.append("\nMEMORY SYSTEM\n");
 
-            result.append("✓ Capability Registry: ONLINE\n");
-            result.append("✓ Registered capabilities: ")
-                    .append(capabilities)
-                    .append("\n");
+        try {
 
-            score++;
-        } else {
+            int count =
+                    memoryManager.getMemoryCount();
 
-            result.append("✗ Capability Registry: EMPTY\n");
-        }
+            if (count >= 0) {
 
-        total++;
+                result.append(
+                        "✓ Memory System: ONLINE\n"
+                );
 
-        // --------------------------------------
-        // SKILLS
-        // --------------------------------------
+                result.append(
+                        "✓ Stored memories: "
+                );
 
-        result.append("\nSKILLS\n");
+                result.append(count);
+                result.append("\n");
 
-        int skills =
-                skillManager.getSkillCount();
+                healthy++;
 
-        if (skills > 0) {
+            } else {
 
-            result.append("✓ Skill Manager: ONLINE\n");
-            result.append("✓ Registered skills: ")
-                    .append(skills)
-                    .append("\n");
+                result.append(
+                        "✗ Memory System: ERROR\n"
+                );
+            }
 
-            score++;
-
-        } else {
+        } catch (Exception e) {
 
             result.append(
-                    "⚠ Skill Manager: NO USER SKILLS\n"
+                    "✗ Memory System: ERROR\n"
             );
+
+            result.append(
+                    "  "
+            );
+
+            result.append(
+                    safeError(e)
+            );
+
+            result.append("\n");
         }
 
-        total++;
+        checked++;
 
-        // --------------------------------------
-        // MEMORY
-        // --------------------------------------
+        // -----------------------------------------------------
+        // CAPABILITIES
+        // -----------------------------------------------------
 
-        result.append("\nMEMORY\n");
+        result.append("\nCAPABILITY SYSTEM\n");
 
-        MemoryManager memoryManager =
-                new MemoryManager(context);
+        try {
 
-        int memories =
-                memoryManager.getMemoryCount();
+            int count =
+                    capabilityManager.getCount();
 
-        result.append("✓ Memory system: ONLINE\n");
+            if (count >= 0) {
 
-        result.append("✓ Memories stored: ")
-                .append(memories)
-                .append("\n");
+                result.append(
+                        "✓ Capability Manager: ONLINE\n"
+                );
 
-        score++;
-        total++;
+                result.append(
+                        "✓ Registered capabilities: "
+                );
 
-        // --------------------------------------
-        // DIAGNOSIS MODULE
-        // --------------------------------------
+                result.append(count);
+                result.append("\n");
+
+                healthy++;
+
+            } else {
+
+                result.append(
+                        "✗ Capability Manager: ERROR\n"
+                );
+            }
+
+        } catch (Exception e) {
+
+            result.append(
+                    "✗ Capability Manager: ERROR\n"
+            );
+
+            result.append(
+                    "  "
+            );
+
+            result.append(
+                    safeError(e)
+            );
+
+            result.append("\n");
+        }
+
+        checked++;
+
+        // -----------------------------------------------------
+        // SKILLS
+        // -----------------------------------------------------
+
+        result.append("\nSKILL SYSTEM\n");
+
+        try {
+
+            int count =
+                    skillManager.getSkillCount();
+
+            if (count >= 0) {
+
+                result.append(
+                        "✓ Skill Manager: ONLINE\n"
+                );
+
+                result.append(
+                        "✓ Registered skills: "
+                );
+
+                result.append(count);
+                result.append("\n");
+
+                healthy++;
+
+            } else {
+
+                result.append(
+                        "✗ Skill Manager: ERROR\n"
+                );
+            }
+
+        } catch (Exception e) {
+
+            result.append(
+                    "✗ Skill Manager: ERROR\n"
+            );
+
+            result.append(
+                    "  "
+            );
+
+            result.append(
+                    safeError(e)
+            );
+
+            result.append("\n");
+        }
+
+        checked++;
+
+        // -----------------------------------------------------
+        // TASK SYSTEM
+        // -----------------------------------------------------
+
+        result.append("\nTASK SYSTEM\n");
+
+        try {
+
+            boolean taskHealthy =
+                    taskManager.isHealthy();
+
+            int pending =
+                    taskManager.getPendingTaskCount();
+
+            if (taskHealthy) {
+
+                result.append(
+                        "✓ Task Manager: ONLINE\n"
+                );
+
+                result.append(
+                        "✓ Pending tasks: "
+                );
+
+                result.append(pending);
+                result.append("\n");
+
+                healthy++;
+
+            } else {
+
+                result.append(
+                        "✗ Task Manager: ERROR\n"
+                );
+            }
+
+        } catch (Exception e) {
+
+            result.append(
+                    "✗ Task Manager: ERROR\n"
+            );
+
+            result.append(
+                    "  "
+            );
+
+            result.append(
+                    safeError(e)
+            );
+
+            result.append("\n");
+        }
+
+        checked++;
+
+        // -----------------------------------------------------
+        // LEARNING SYSTEM
+        // -----------------------------------------------------
+
+        result.append("\nLEARNING SYSTEM\n");
+
+        try {
+
+            if (learningEngine.isHealthy()) {
+
+                result.append(
+                        "✓ Learning Engine: ONLINE\n"
+                );
+
+                healthy++;
+
+            } else {
+
+                result.append(
+                        "✗ Learning Engine: ERROR\n"
+                );
+            }
+
+        } catch (Exception e) {
+
+            result.append(
+                    "✗ Learning Engine: ERROR\n"
+            );
+
+            result.append(
+                    "  "
+            );
+
+            result.append(
+                    safeError(e)
+            );
+
+            result.append("\n");
+        }
+
+        checked++;
+
+        // -----------------------------------------------------
+        // DIAGNOSIS ENGINE
+        // -----------------------------------------------------
 
         result.append("\nSELF-DIAGNOSIS\n");
 
         result.append(
-                "✓ Diagnosis engine: ONLINE\n"
+                "✓ Diagnosis Engine: ONLINE\n"
         );
 
-        score++;
-        total++;
+        healthy++;
+        checked++;
 
-        // --------------------------------------
-        // MISSING SYSTEMS
-        // --------------------------------------
+        // -----------------------------------------------------
+        // MISSING / DEVELOPMENT SYSTEMS
+        // -----------------------------------------------------
 
         List<String> missing =
                 getMissingSystems();
 
-        result.append("\nMISSING / DEVELOPMENT SYSTEMS\n");
+        result.append(
+                "\nSYSTEMS REQUIRING DEVELOPMENT\n"
+        );
 
         if (missing.isEmpty()) {
 
             result.append(
-                    "✓ No registered missing systems.\n"
+                    "✓ No core manager is currently missing.\n"
             );
 
         } else {
 
             for (String item : missing) {
 
-                result.append("• ")
-                        .append(item)
-                        .append("\n");
+                result.append("• ");
+                result.append(item);
+                result.append("\n");
             }
         }
 
-        // --------------------------------------
+        // -----------------------------------------------------
         // SCORE
-        // --------------------------------------
+        // -----------------------------------------------------
 
         int percentage = 0;
 
-        if (total > 0) {
+        if (checked > 0) {
+
             percentage =
-                    (score * 100) / total;
+                    (healthy * 100) / checked;
         }
 
-        result.append("\n============================\n");
-
-        result.append("SYSTEM READINESS: ")
-                .append(percentage)
-                .append("%\n");
+        result.append(
+                "\n============================\n"
+        );
 
         result.append(
-                "DIAGNOSIS COMPLETE\n"
+                "SYSTEMS CHECKED: "
+        );
+
+        result.append(checked);
+        result.append("\n");
+
+        result.append(
+                "SYSTEMS HEALTHY: "
+        );
+
+        result.append(healthy);
+        result.append("\n");
+
+        result.append(
+                "SYSTEM READINESS: "
+        );
+
+        result.append(percentage);
+        result.append("%\n");
+
+        if (healthy == checked) {
+
+            result.append(
+                    "DIAGNOSIS STATUS: HEALTHY ✓\n"
+            );
+
+        } else {
+
+            result.append(
+                    "DIAGNOSIS STATUS: ATTENTION REQUIRED ⚠\n"
+            );
+        }
+
+        result.append(
+                "DIAGNOSIS COMPLETE"
         );
 
         return result.toString();
     }
 
-    // ==========================================
-    // FIND MISSING SYSTEMS
-    // ==========================================
+    // =========================================================
+    // FIND REAL MISSING SYSTEMS
+    // =========================================================
 
     public List<String> getMissingSystems() {
 
         List<String> missing =
                 new ArrayList<>();
 
-        // Future architecture modules
+        /*
+         * الأنظمة الأساسية التالية راه موجودة فعليا
+         * داخل المشروع، لذلك ما خاصناش نعتبرها Missing.
+         *
+         * أي نظام جديد مستقبلا يقدر يتزاد هنا فقط
+         * إلا كان فعلا مازال ما تطورش.
+         */
 
-        missing.add(
-                "Self Builder — بناء وحدات جديدة"
-        );
+        try {
 
-        missing.add(
-                "Self Test Engine — اختبار التغييرات"
-        );
+            if (!taskManager.isHealthy()) {
 
-        missing.add(
-                "Recovery System — استرجاع النسخة السابقة"
-        );
+                missing.add(
+                        "Task Manager — يحتاج إصلاح"
+                );
+            }
 
-        missing.add(
-                "Advanced Task Manager — إدارة المهام"
-        );
+        } catch (Exception e) {
 
-        missing.add(
-                "Reminder Engine — التذكيرات"
-        );
+            missing.add(
+                    "Task Manager — غير متاح"
+            );
+        }
 
-        missing.add(
-                "Notification Intelligence — فهم الإشعارات"
-        );
+        try {
 
-        missing.add(
-                "Screen Intelligence — تحليل الشاشة"
-        );
+            if (!learningEngine.isHealthy()) {
 
-        missing.add(
-                "Advanced Android Control — تحكم متقدم في Android"
-        );
+                missing.add(
+                        "Learning Engine — يحتاج إصلاح"
+                );
+            }
 
-        missing.add(
-                "Learning Engine — نظام تعلم متقدم"
-        );
+        } catch (Exception e) {
 
-        missing.add(
-                "Planning Engine — التخطيط المتقدم"
-        );
+            missing.add(
+                    "Learning Engine — غير متاح"
+            );
+        }
+
+        /*
+         * إلا كانت الذاكرة ما خداماش، نسجلوها كمشكل
+         * بدل ما نقولو بأنها وحدة ناقصة.
+         */
+
+        try {
+
+            if (memoryManager.getMemoryCount() < 0) {
+
+                missing.add(
+                        "Memory System — يحتاج إصلاح"
+                );
+            }
+
+        } catch (Exception e) {
+
+            missing.add(
+                    "Memory System — غير متاح"
+            );
+        }
+
+        try {
+
+            if (capabilityManager.getCount() < 0) {
+
+                missing.add(
+                        "Capability Manager — يحتاج إصلاح"
+                );
+            }
+
+        } catch (Exception e) {
+
+            missing.add(
+                    "Capability Manager — غير متاح"
+            );
+        }
+
+        try {
+
+            if (skillManager.getSkillCount() < 0) {
+
+                missing.add(
+                        "Skill Manager — يحتاج إصلاح"
+                );
+            }
+
+        } catch (Exception e) {
+
+            missing.add(
+                    "Skill Manager — غير متاح"
+            );
+        }
 
         return missing;
     }
 
-    // ==========================================
+    // =========================================================
     // NEXT DEVELOPMENT TARGET
-    // ==========================================
+    // =========================================================
 
     public String getNextDevelopmentTarget() {
 
         List<String> missing =
                 getMissingSystems();
 
-        if (missing.isEmpty()) {
+        if (!missing.isEmpty()) {
 
-            return "لا توجد وحدة تطوير مسجلة حاليا.";
+            return
+                    "أولوية الإصلاح التالية:\n"
+                            + missing.get(0);
         }
 
-        return "أولوية التطوير التالية:\n"
-                + missing.get(0);
+        /*
+         * إلا كانت الأنظمة الأساسية كلها سليمة،
+         * التطور ما خاصوش يرجع دائما لـ Self Builder.
+         *
+         * الأولوية كتولي:
+         * تحسين القدرة على التعلم والتطور الداخلي.
+         */
+
+        return
+                "أولوية التطوير التالية:\n"
+                        + "تحسين Autonomous Evolution والتعلم الذاتي";
     }
 
-    // ==========================================
+    // =========================================================
     // DEVELOPMENT PLAN
-    // ==========================================
+    // =========================================================
 
     public String getDevelopmentPlan() {
 
@@ -269,128 +584,241 @@ public class SelfDiagnosisManager {
         );
 
         plan.append(
-                "PHASE 1\n"
+                "PHASE 1 — CORE\n"
         );
 
         plan.append(
-                "✓ Core\n"
+                "✓ Core Engine\n"
         );
 
         plan.append(
-                "✓ Memory\n"
+                "✓ Memory System\n"
         );
 
         plan.append(
-                "✓ Skills\n"
+                "✓ Skill Manager\n"
         );
 
         plan.append(
-                "✓ Capabilities\n"
+                "✓ Capability Manager\n"
         );
 
         plan.append(
-                "✓ Evolution Engine\n"
+                "✓ Task Manager\n"
         );
 
         plan.append(
-                "✓ Self Diagnosis\n\n"
+                "✓ Learning Engine\n\n"
         );
 
         plan.append(
-                "PHASE 2\n"
+                "PHASE 2 — INTELLIGENCE\n"
         );
 
         plan.append(
-                "→ Self Test Engine\n"
+                "✓ Decision Engine\n"
         );
 
         plan.append(
-                "→ Recovery System\n"
+                "✓ Context Engine\n"
         );
 
         plan.append(
-                "→ Task Manager\n"
+                "✓ Planning Engine\n"
         );
 
         plan.append(
-                "→ Reminder Engine\n\n"
+                "✓ Command Learning\n"
         );
 
         plan.append(
-                "PHASE 3\n"
+                "→ تحسين التعلم من استعمال المستخدم\n\n"
         );
 
         plan.append(
-                "→ Learning Engine\n"
+                "PHASE 3 — ANDROID CONTROL\n"
         );
 
         plan.append(
-                "→ Planning Engine\n"
+                "✓ Android Control Engine\n"
         );
 
         plan.append(
-                "→ Screen Intelligence\n\n"
+                "✓ Screen Intelligence\n"
         );
 
         plan.append(
-                "PHASE 4\n"
+                "✓ Accessibility Control\n"
         );
 
         plan.append(
-                "→ Self Builder\n"
+                "✓ Notification Intelligence\n"
         );
 
         plan.append(
-                "→ Advanced Android Control\n"
+                "→ توسيع قدرات التحكم الآمن\n\n"
         );
 
         plan.append(
-                "→ Recovery + Testing Integration\n"
+                "PHASE 4 — SELF EVOLUTION\n"
+        );
+
+        plan.append(
+                "✓ Self Diagnosis\n"
+        );
+
+        plan.append(
+                "✓ Self Test Engine\n"
+        );
+
+        plan.append(
+                "✓ Recovery System\n"
+        );
+
+        plan.append(
+                "✓ Self Builder\n"
+        );
+
+        plan.append(
+                "✓ Code Evolution Engine\n"
+        );
+
+        plan.append(
+                "✓ Autonomous Evolution Engine\n"
+        );
+
+        plan.append(
+                "→ تحسين حلقة: Analyze → Plan → Learn → Test → Evolve\n\n"
+        );
+
+        plan.append(
+                "PHASE 5 — ADVANCED EVOLUTION\n"
+        );
+
+        plan.append(
+                "→ تقييم نتائج التطور تلقائيا\n"
+        );
+
+        plan.append(
+                "→ تعلم من الأخطاء السابقة\n"
+        );
+
+        plan.append(
+                "→ اختيار أهداف التطور حسب الاستعمال الحقيقي\n"
+        );
+
+        plan.append(
+                "→ تحسين المهارات والقدرات بدون APK جديد\n"
+        );
+
+        plan.append(
+                "→ تجهيز تغييرات الكود للـ Build عندما تكون ضرورية\n"
         );
 
         return plan.toString();
     }
 
-    // ==========================================
+    // =========================================================
     // QUICK HEALTH CHECK
-    // ==========================================
+    // =========================================================
 
     public boolean isHealthy() {
 
-        int capabilities =
-                capabilityManager.getCount();
+        try {
 
-        return capabilities > 0;
+            return memoryManager.getMemoryCount() >= 0
+                    && capabilityManager.getCount() >= 0
+                    && skillManager.getSkillCount() >= 0
+                    && taskManager.isHealthy()
+                    && learningEngine.isHealthy();
+
+        } catch (Exception e) {
+
+            return false;
+        }
     }
 
-    // ==========================================
-    // GET SCORE
-    // ==========================================
+    // =========================================================
+    // READINESS SCORE
+    // =========================================================
 
     public int getReadinessScore() {
 
         int score = 0;
         int total = 5;
 
-        score++; // Core
+        try {
 
-        if (capabilityManager.getCount() > 0) {
-            score++;
+            if (memoryManager.getMemoryCount() >= 0) {
+                score++;
+            }
+
+        } catch (Exception ignored) {
         }
 
-        if (skillManager.getSkillCount() > 0) {
-            score++;
+        try {
+
+            if (capabilityManager.getCount() >= 0) {
+                score++;
+            }
+
+        } catch (Exception ignored) {
         }
 
-        MemoryManager memoryManager =
-                new MemoryManager(context);
+        try {
 
-        if (memoryManager.getMemoryCount() >= 0) {
-            score++;
+            if (skillManager.getSkillCount() >= 0) {
+                score++;
+            }
+
+        } catch (Exception ignored) {
         }
 
-        score++; // Diagnosis
+        try {
 
-        return (score * 100) / total;
+            if (taskManager.isHealthy()) {
+                score++;
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        try {
+
+            if (learningEngine.isHealthy()) {
+                score++;
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        return
+                (score * 100) / total;
+    }
+
+    // =========================================================
+    // SAFE ERROR
+    // =========================================================
+
+    private String safeError(
+            Exception e
+    ) {
+
+        if (e == null) {
+
+            return "Unknown error";
+        }
+
+        String message =
+                e.getMessage();
+
+        if (message == null
+                || message.trim().isEmpty()) {
+
+            return e.getClass()
+                    .getSimpleName();
+        }
+
+        return message;
     }
 }
