@@ -7,18 +7,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * JARVIS Local Intelligence Engine
- *
- * مسؤول عن:
- * - تنظيف وفهم أوامر العربية والدارجة.
- * - توحيد صيغ الأوامر.
- * - استخراج النية الأساسية من الأمر.
- * - حفظ المحادثات محليا.
- * - استرجاع السياق الأخير.
- * - إعطاء ردود حوارية أساسية.
- * - توفير طبقة ذكاء محلية يمكن لـ JarvisCore استعمالها.
- */
 public class JarvisIntelligenceEngine {
 
     private static final String PREFS_NAME =
@@ -35,21 +23,20 @@ public class JarvisIntelligenceEngine {
 
     private static final int MAX_HISTORY = 30;
 
+    private final Context context;
     private final SharedPreferences preferences;
 
     public JarvisIntelligenceEngine(Context context) {
 
-        preferences =
-                context.getApplicationContext()
-                        .getSharedPreferences(
-                                PREFS_NAME,
-                                Context.MODE_PRIVATE
-                        );
-    }
+        this.context =
+                context.getApplicationContext();
 
-    // =========================================================
-    // MAIN INTELLIGENCE PIPELINE
-    // =========================================================
+        preferences =
+                this.context.getSharedPreferences(
+                        PREFS_NAME,
+                        Context.MODE_PRIVATE
+                );
+    }
 
     public String understand(String command) {
 
@@ -71,7 +58,6 @@ public class JarvisIntelligenceEngine {
         String value = clean(command);
 
         String[] prefixes = {
-
                 "عفاك ",
                 "عافاك ",
                 "من فضلك ",
@@ -104,10 +90,6 @@ public class JarvisIntelligenceEngine {
             }
         }
 
-        // =====================================================
-        // DARija ACTION ALIASES
-        // =====================================================
-
         value = value
                 .replace("حل ليا ", "افتح ")
                 .replace("حل ليا", "افتح")
@@ -129,16 +111,11 @@ public class JarvisIntelligenceEngine {
                 .replace("شنو هو ", "ما هو ")
                 .replace("شنو هي ", "ما هي ");
 
-        // =====================================================
-        // VOICE VARIANTS
-        // =====================================================
-
         value = value
                 .replace("اليوتوب", "يوتيوب")
                 .replace("اليوتيوب", "يوتيوب")
                 .replace("الواتس", "واتساب")
                 .replace("واتس اب", "واتساب")
-                .replace("واتساب", "واتساب")
                 .replace("انستا", "انستغرام")
                 .replace("انستى", "انستغرام")
                 .replace("الفايس", "فيسبوك")
@@ -148,10 +125,6 @@ public class JarvisIntelligenceEngine {
 
         return value.trim();
     }
-
-    // =========================================================
-    // INTENT DETECTION
-    // =========================================================
 
     public String detectIntent(String command) {
 
@@ -313,10 +286,6 @@ public class JarvisIntelligenceEngine {
         return "unknown";
     }
 
-    // =========================================================
-    // CONVERSATION INTERCEPTION
-    // =========================================================
-
     public String intercept(String command) {
 
         if (command == null ||
@@ -363,10 +332,6 @@ public class JarvisIntelligenceEngine {
                 return null;
         }
     }
-
-    // =========================================================
-    // SAVE CONVERSATION
-    // =========================================================
 
     public void recordTurn(
             String command,
@@ -439,10 +404,6 @@ public class JarvisIntelligenceEngine {
                 .apply();
     }
 
-    // =========================================================
-    // LAST CONTEXT
-    // =========================================================
-
     public String getLastCommand() {
 
         return preferences.getString(
@@ -477,10 +438,6 @@ public class JarvisIntelligenceEngine {
                         + "\nآخر رد: "
                         + response;
     }
-
-    // =========================================================
-    // HISTORY
-    // =========================================================
 
     private List<String> getHistory() {
 
@@ -554,10 +511,6 @@ public class JarvisIntelligenceEngine {
                 result.toString().trim();
     }
 
-    // =========================================================
-    // TEXT NORMALIZATION
-    // =========================================================
-
     private String clean(
             String value
     ) {
@@ -580,10 +533,6 @@ public class JarvisIntelligenceEngine {
                 .replace("،", " ")
                 .replaceAll("\\s+", " ");
     }
-
-    // =========================================================
-    // TEXT MATCHING
-    // =========================================================
 
     private boolean contains(
             String text,
@@ -615,15 +564,12 @@ public class JarvisIntelligenceEngine {
         return false;
     }
 
-    // =========================================================
-    // HEALTH
-    // =========================================================
-
     public boolean isHealthy() {
 
         try {
 
-            return preferences != null;
+            return context != null
+                    && preferences != null;
 
         } catch (Exception e) {
 
@@ -646,12 +592,8 @@ public class JarvisIntelligenceEngine {
                 "Intelligence Engine: ERROR ⚠";
     }
 
-    // =========================================================
-    // CONTEXT
-    // =========================================================
-
     public Context getContext() {
 
-        return null;
+        return context;
     }
 }
