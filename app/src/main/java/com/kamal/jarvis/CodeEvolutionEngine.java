@@ -25,10 +25,6 @@ import java.util.Locale;
  * - خطط التطوير
  * - حفظ تاريخ التطور
  * - ربط التطوير مع SelfBuilderEngine
- *
- * ملاحظة:
- * هذا المحرك يطور Workspace الداخلي.
- * بناء APK حقيقي يتم عبر ApkBuilderEngine عندما تتوفر بيئة Build.
  */
 public class CodeEvolutionEngine {
 
@@ -45,11 +41,8 @@ public class CodeEvolutionEngine {
             "last_plan";
 
     private final Context context;
-
     private final SelfBuilderEngine selfBuilder;
-
     private final MemoryManager memoryManager;
-
     private final SharedPreferences prefs;
 
     private final List<String> sessionHistory =
@@ -67,14 +60,10 @@ public class CodeEvolutionEngine {
                 );
 
         memoryManager =
-                new MemoryManager(
-                        this.context
-                );
+                new MemoryManager(this.context);
 
         selfBuilder =
-                new SelfBuilderEngine(
-                        this.context
-                );
+                new SelfBuilderEngine(this.context);
     }
 
     // =========================================================
@@ -84,9 +73,7 @@ public class CodeEvolutionEngine {
     public String getStatus() {
 
         if (!isHealthy()) {
-
-            return
-                    "CODE EVOLUTION ENGINE: ATTENTION ⚠";
+            return "CODE EVOLUTION ENGINE: ATTENTION ⚠";
         }
 
         return
@@ -104,12 +91,9 @@ public class CodeEvolutionEngine {
     public boolean isHealthy() {
 
         try {
-
             return selfBuilder != null
                     && selfBuilder.isHealthy();
-
         } catch (Exception e) {
-
             return false;
         }
     }
@@ -146,25 +130,19 @@ public class CodeEvolutionEngine {
                     "PROJECT FILES\n"
             );
 
-            result.append(
-                    files
-            );
+            result.append(files);
 
             result.append(
                     "\n\nARCHITECTURE\n"
             );
 
-            result.append(
-                    architecture
-            );
+            result.append(architecture);
 
             result.append(
                     "\n\nDEPENDENCIES\n"
             );
 
-            result.append(
-                    dependencies
-            );
+            result.append(dependencies);
 
             result.append(
                     "\n\nEVOLUTION STATUS\n"
@@ -227,9 +205,7 @@ public class CodeEvolutionEngine {
         try {
 
             String javaSearch =
-                    selfBuilder.searchSource(
-                            ".java"
-                    );
+                    selfBuilder.searchSource(".java");
 
             boolean java =
                     containsIgnoreCase(
@@ -238,9 +214,7 @@ public class CodeEvolutionEngine {
                     );
 
             String xmlSearch =
-                    selfBuilder.searchSource(
-                            ".xml"
-                    );
+                    selfBuilder.searchSource(".xml");
 
             boolean xml =
                     containsIgnoreCase(
@@ -249,9 +223,7 @@ public class CodeEvolutionEngine {
                     );
 
             String gradleSearch =
-                    selfBuilder.searchSource(
-                            "gradle"
-                    );
+                    selfBuilder.searchSource("gradle");
 
             boolean gradle =
                     containsIgnoreCase(
@@ -260,39 +232,30 @@ public class CodeEvolutionEngine {
                     );
 
             if (java) {
-
                 result.append(
                         "✓ Java Android source\n"
                 );
-
             } else {
-
                 result.append(
                         "⚠ Java source غير مكتشف\n"
                 );
             }
 
             if (xml) {
-
                 result.append(
                         "✓ Android XML resources\n"
                 );
-
             } else {
-
                 result.append(
                         "⚠ XML resources غير مكتشفة\n"
                 );
             }
 
             if (gradle) {
-
                 result.append(
                         "✓ Gradle configuration\n"
                 );
-
             } else {
-
                 result.append(
                         "⚠ Gradle configuration غير مكتشفة\n"
                 );
@@ -340,9 +303,7 @@ public class CodeEvolutionEngine {
 
             } else {
 
-                output.append(
-                        result
-                )
+                output.append(result)
                         .append("\n");
             }
 
@@ -384,14 +345,10 @@ public class CodeEvolutionEngine {
     // SEARCH CODE
     // =========================================================
 
-    public String searchCode(
-            String query
-    ) {
+    public String searchCode(String query) {
 
         if (isBlank(query)) {
-
-            return
-                    "خاصني كلمة أو جملة للبحث.";
+            return "خاصني كلمة أو جملة للبحث.";
         }
 
         return selfBuilder.searchSource(
@@ -403,14 +360,10 @@ public class CodeEvolutionEngine {
     // READ CODE
     // =========================================================
 
-    public String readCode(
-            String path
-    ) {
+    public String readCode(String path) {
 
         if (isBlank(path)) {
-
-            return
-                    "حدد مسار الملف.";
+            return "حدد مسار الملف.";
         }
 
         return selfBuilder.readSourceFile(
@@ -456,9 +409,7 @@ public class CodeEvolutionEngine {
                             content
                     );
 
-            if (!isOperationSuccessful(
-                    result
-            )) {
+            if (!isOperationSuccessful(result)) {
 
                 return
                         "إنشاء الملف فشل ⚠\n\n"
@@ -526,7 +477,6 @@ public class CodeEvolutionEngine {
         }
 
         if (newCode == null) {
-
             newCode = "";
         }
 
@@ -546,9 +496,7 @@ public class CodeEvolutionEngine {
                             reason
                     );
 
-            if (!isEvolutionSuccess(
-                    result
-            )) {
+            if (!isEvolutionSuccess(result)) {
 
                 record(
                         "MODIFY_FAILED",
@@ -609,9 +557,7 @@ public class CodeEvolutionEngine {
     ) {
 
         if (!validIdentifier(className)) {
-
-            return
-                    "اسم Class غير صالح.";
+            return "اسم Class غير صالح.";
         }
 
         String cleanPackage =
@@ -643,12 +589,8 @@ public class CodeEvolutionEngine {
         code.append(
                 " * "
         )
-                .append(
-                        cleanDescription
-                )
-                .append(
-                        "\n"
-                );
+                .append(cleanDescription)
+                .append("\n");
 
         code.append(
                 " */\n"
@@ -658,9 +600,7 @@ public class CodeEvolutionEngine {
                 "public class "
         )
                 .append(cleanClass)
-                .append(
-                        " {\n\n"
-                );
+                .append(" {\n\n");
 
         code.append(
                 "    public String getName() {\n"
@@ -674,9 +614,7 @@ public class CodeEvolutionEngine {
                                 cleanClass
                         )
                 )
-                .append(
-                        "\";\n"
-                );
+                .append("\";\n");
 
         code.append(
                 "    }\n"
@@ -699,12 +637,8 @@ public class CodeEvolutionEngine {
             String description
     ) {
 
-        if (!validIdentifier(
-                interfaceName
-        )) {
-
-            return
-                    "اسم Interface غير صالح.";
+        if (!validIdentifier(interfaceName)) {
+            return "اسم Interface غير صالح.";
         }
 
         String cleanPackage =
@@ -735,12 +669,8 @@ public class CodeEvolutionEngine {
             String[] values
     ) {
 
-        if (!validIdentifier(
-                enumName
-        )) {
-
-            return
-                    "اسم Enum غير صالح.";
+        if (!validIdentifier(enumName)) {
+            return "اسم Enum غير صالح.";
         }
 
         String cleanPackage =
@@ -753,31 +683,22 @@ public class CodeEvolutionEngine {
                 "package "
         )
                 .append(cleanPackage)
-                .append(
-                        ";\n\n"
-                );
+                .append(";\n\n");
 
         code.append(
                 "public enum "
         )
-                .append(
-                        enumName.trim()
-                )
-                .append(
-                        " {\n"
-                );
+                .append(enumName.trim())
+                .append(" {\n");
 
         List<String> validValues =
                 new ArrayList<>();
 
         if (values != null) {
 
-            for (String value :
-                    values) {
+            for (String value : values) {
 
-                if (validIdentifier(
-                        value
-                )) {
+                if (validIdentifier(value)) {
 
                     validValues.add(
                             value.trim()
@@ -790,25 +711,17 @@ public class CodeEvolutionEngine {
              i < validValues.size();
              i++) {
 
-            code.append(
-                    "    "
-            )
-                    .append(
-                            validValues.get(i)
-                    );
+            code.append("    ")
+                    .append(validValues.get(i));
 
-            if (i <
-                    validValues.size() - 1) {
-
+            if (i < validValues.size() - 1) {
                 code.append(",");
             }
 
             code.append("\n");
         }
 
-        code.append(
-                "}\n"
-        );
+        code.append("}\n");
 
         return code.toString();
     }
@@ -940,9 +853,7 @@ public class CodeEvolutionEngine {
     // SNAPSHOT
     // =========================================================
 
-    public String snapshot(
-            String reason
-    ) {
+    public String snapshot(String reason) {
 
         String result =
                 selfBuilder.createSnapshot(
@@ -961,14 +872,10 @@ public class CodeEvolutionEngine {
     // ROLLBACK
     // =========================================================
 
-    public String rollback(
-            String snapshotId
-    ) {
+    public String rollback(String snapshotId) {
 
         if (isBlank(snapshotId)) {
-
-            return
-                    "خاصك تحدد Snapshot.";
+            return "خاصك تحدد Snapshot.";
         }
 
         String result =
@@ -989,7 +896,6 @@ public class CodeEvolutionEngine {
     // =========================================================
 
     public String getProjectInventory() {
-
         return selfBuilder.listProjectFiles();
     }
 
@@ -1006,7 +912,6 @@ public class CodeEvolutionEngine {
                 );
 
         if (!isBlank(plan)) {
-
             return plan;
         }
 
@@ -1016,9 +921,7 @@ public class CodeEvolutionEngine {
                 );
 
         if (isBlank(plan)) {
-
-            return
-                    "ما كايناش خطة كود محفوظة.";
+            return "ما كايناش خطة كود محفوظة.";
         }
 
         return plan;
@@ -1069,33 +972,24 @@ public class CodeEvolutionEngine {
 
                 result.append("[")
                         .append(
-                                item.optString(
-                                        "time"
-                                )
+                                item.optString("time")
                         )
                         .append("] ");
 
                 result.append(
-                        item.optString(
-                                "type"
-                        )
+                        item.optString("type")
                 )
                         .append(": ");
 
                 result.append(
-                        item.optString(
-                                "message"
-                        )
+                        item.optString("message")
                 )
                         .append("\n");
             }
 
-            for (String item :
-                    sessionHistory) {
+            for (String item : sessionHistory) {
 
-                result.append(
-                        "• "
-                )
+                result.append("• ")
                         .append(item)
                         .append("\n");
             }
@@ -1123,9 +1017,7 @@ public class CodeEvolutionEngine {
                 );
 
         if (isBlank(action)) {
-
-            return
-                    "ما كاين حتى إجراء مسجل.";
+            return "ما كاين حتى إجراء مسجل.";
         }
 
         return action;
@@ -1135,25 +1027,17 @@ public class CodeEvolutionEngine {
     // PATH SAFETY
     // =========================================================
 
-    private boolean validSourcePath(
-            String path
-    ) {
+    private boolean validSourcePath(String path) {
 
         if (path == null ||
                 path.trim().isEmpty()) {
-
             return false;
         }
 
         String clean =
                 path.trim()
-                        .replace(
-                                '\\',
-                                '/'
-                        )
-                        .toLowerCase(
-                                Locale.ROOT
-                        );
+                        .replace('\\', '/')
+                        .toLowerCase(Locale.ROOT);
 
         if (clean.startsWith("/")
                 || clean.contains("..")
@@ -1177,13 +1061,10 @@ public class CodeEvolutionEngine {
     // JAVA IDENTIFIER
     // =========================================================
 
-    private boolean validIdentifier(
-            String value
-    ) {
+    private boolean validIdentifier(String value) {
 
         if (value == null ||
                 value.trim().isEmpty()) {
-
             return false;
         }
 
@@ -1193,7 +1074,6 @@ public class CodeEvolutionEngine {
         if (!Character.isJavaIdentifierStart(
                 clean.charAt(0)
         )) {
-
             return false;
         }
 
@@ -1204,7 +1084,6 @@ public class CodeEvolutionEngine {
             if (!Character.isJavaIdentifierPart(
                     clean.charAt(i)
             )) {
-
                 return false;
             }
         }
@@ -1221,17 +1100,12 @@ public class CodeEvolutionEngine {
     ) {
 
         if (isBlank(packageName)) {
-
-            return
-                    "com.kamal.jarvis";
+            return "com.kamal.jarvis";
         }
 
         String clean =
                 packageName.trim()
-                        .replace(
-                                '/',
-                                '.'
-                        );
+                        .replace('/', '.');
 
         String[] parts =
                 clean.split("\\.");
@@ -1239,8 +1113,7 @@ public class CodeEvolutionEngine {
         StringBuilder result =
                 new StringBuilder();
 
-        for (String part :
-                parts) {
+        for (String part : parts) {
 
             if (!validIdentifier(part)) {
                 continue;
@@ -1254,9 +1127,7 @@ public class CodeEvolutionEngine {
         }
 
         if (result.length() == 0) {
-
-            return
-                    "com.kamal.jarvis";
+            return "com.kamal.jarvis";
         }
 
         return result.toString();
@@ -1278,20 +1149,9 @@ public class CodeEvolutionEngine {
             JSONObject item =
                     new JSONObject();
 
-            item.put(
-                    "step",
-                    number
-            );
-
-            item.put(
-                    "name",
-                    name
-            );
-
-            item.put(
-                    "description",
-                    description
-            );
+            item.put("step", number);
+            item.put("name", name);
+            item.put("description", description);
 
             array.put(item);
 
@@ -1313,14 +1173,9 @@ public class CodeEvolutionEngine {
                         + " | "
                         + safeText(message);
 
-        sessionHistory.add(
-                value
-        );
+        sessionHistory.add(value);
 
-        while (
-                sessionHistory.size() > 50
-        ) {
-
+        while (sessionHistory.size() > 50) {
             sessionHistory.remove(0);
         }
 
@@ -1344,16 +1199,8 @@ public class CodeEvolutionEngine {
             JSONObject item =
                     new JSONObject();
 
-            item.put(
-                    "type",
-                    type
-            );
-
-            item.put(
-                    "message",
-                    safeText(message)
-            );
-
+            item.put("type", type);
+            item.put("message", safeText(message));
             item.put(
                     "time",
                     System.currentTimeMillis()
@@ -1361,10 +1208,7 @@ public class CodeEvolutionEngine {
 
             history.put(item);
 
-            while (
-                    history.length() > 100
-            ) {
-
+            while (history.length() > 100) {
                 history.remove(0);
             }
 
@@ -1392,16 +1236,12 @@ public class CodeEvolutionEngine {
             String result
     ) {
 
-        if (result == null ||
-                result.trim().isEmpty()) {
-
+        if (isBlank(result)) {
             return false;
         }
 
         String lower =
-                result.toLowerCase(
-                        Locale.ROOT
-                );
+                result.toLowerCase(Locale.ROOT);
 
         return
                 !lower.contains("فشل")
@@ -1414,26 +1254,19 @@ public class CodeEvolutionEngine {
             String result
     ) {
 
-        if (result == null) {
-
+        if (isBlank(result)) {
             return false;
         }
 
         String lower =
-                result.toLowerCase(
-                        Locale.ROOT
-                );
+                result.toLowerCase(Locale.ROOT);
 
         return
-                lower.contains(
-                        "evolution success"
-                )
-                || lower.contains(
-                        "تعديل الكود ناجح"
-                )
-                || lower.contains(
-                        "code evolution success"
-                );
+                lower.contains("evolution success")
+                || lower.contains("تعديل الكود ناجح")
+                || lower.contains("code evolution success")
+                || lower.contains("evolution completed")
+                || lower.contains("تم تعديل الكود");
     }
 
     // =========================================================
@@ -1447,7 +1280,6 @@ public class CodeEvolutionEngine {
 
         if (source == null ||
                 query == null) {
-
             return false;
         }
 
@@ -1465,25 +1297,17 @@ public class CodeEvolutionEngine {
     ) {
 
         if (isBlank(value)) {
-
             return true;
         }
 
         String lower =
-                value.toLowerCase(
-                        Locale.ROOT
-                );
+                value.toLowerCase(Locale.ROOT);
 
         return
-                lower.contains(
-                        "ما لقيتش"
-                )
-                || lower.contains(
-                        "not found"
-                )
-                || lower.contains(
-                        "no results"
-                );
+                lower.contains("ما لقيتش")
+                || lower.contains("not found")
+                || lower.contains("no results")
+                || lower.contains("ما بان حتى");
     }
 
     // =========================================================
@@ -1495,40 +1319,33 @@ public class CodeEvolutionEngine {
     ) {
 
         if (value == null) {
-
             return "";
         }
 
         return value
-                .replace(
-                        "\\",
-                        "\\\\"
-                )
-                .replace(
-                        "\"",
-                        "\\\""
-                )
-                .replace(
-                        "\n",
-                        "\\n"
-                )
-                .replace(
-                        "\r",
-                        "\\r"
-                );
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r");
+    }
+
+    // =========================================================
+    // BLANK CHECK
+    // =========================================================
+
+    private boolean isBlank(String value) {
+
+        return value == null
+                || value.trim().isEmpty();
     }
 
     // =========================================================
     // SAFE TEXT
     // =========================================================
 
-    private String safeText(
-            String value
-    ) {
+    private String safeText(String value) {
 
-        if (value == null ||
-                value.trim().isEmpty()) {
-
+        if (isBlank(value)) {
             return "unspecified";
         }
 
@@ -1539,20 +1356,16 @@ public class CodeEvolutionEngine {
     // ERROR
     // =========================================================
 
-    private String safeError(
-            Exception e
-    ) {
+    private String safeError(Exception e) {
 
         if (e == null) {
-
             return "Unknown error";
         }
 
         String message =
                 e.getMessage();
 
-        if (message == null ||
-                message.trim().isEmpty()) {
+        if (isBlank(message)) {
 
             return e.getClass()
                     .getSimpleName();
@@ -1566,7 +1379,6 @@ public class CodeEvolutionEngine {
     // =========================================================
 
     public Context getContext() {
-
         return context;
     }
 }
