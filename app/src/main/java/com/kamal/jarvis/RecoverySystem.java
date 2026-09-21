@@ -30,7 +30,6 @@ public class RecoverySystem {
         report.append("JARVIS RECOVERY SYSTEM\n");
         report.append("============================\n\n");
 
-        // فحص الذاكرة
         checked++;
 
         try {
@@ -50,7 +49,6 @@ public class RecoverySystem {
             );
         }
 
-        // فحص القدرات
         checked++;
 
         try {
@@ -113,6 +111,51 @@ public class RecoverySystem {
         }
 
         return report.toString();
+    }
+
+    /**
+     * تسجيل أي خطأ كيقدر JARVIS يرجع ليه
+     * من بعد أثناء التشخيص والتطور الذاتي.
+     */
+    public void recordFailure(
+            String source,
+            String message
+    ) {
+
+        try {
+
+            String cleanSource =
+                    source == null ||
+                            source.trim().isEmpty()
+                            ? "unknown"
+                            : source.trim();
+
+            String cleanMessage =
+                    message == null ||
+                            message.trim().isEmpty()
+                            ? "unknown error"
+                            : message.trim();
+
+            String key =
+                    "__recovery_failure__"
+                            + System.currentTimeMillis();
+
+            String value =
+                    "SOURCE="
+                            + cleanSource
+                            + "\nERROR="
+                            + cleanMessage
+                            + "\nTIME="
+                            + System.currentTimeMillis();
+
+            memoryManager.saveMemory(
+                    key,
+                    value
+            );
+
+        } catch (Exception ignored) {
+            // نظام الاسترجاع ما خاصوش يطيح بسبب تسجيل الخطأ
+        }
     }
 
     public boolean isHealthy() {
