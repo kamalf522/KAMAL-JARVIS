@@ -155,6 +155,10 @@ public class JarvisCore {
                 );
     }
 
+    // =========================================================
+    // MAIN COMMAND PROCESSOR
+    // =========================================================
+
     public String processCommand(
             String command
     ) {
@@ -188,11 +192,9 @@ public class JarvisCore {
                     decision
             );
 
-            /*
-             * =================================================
-             * LEARNED COMMANDS
-             * =================================================
-             */
+            // =================================================
+            // LEARNED COMMANDS
+            // =================================================
 
             String learnedAction =
                     commandLearningEngine
@@ -205,11 +207,6 @@ public class JarvisCore {
 
                 String cleanLearnedAction =
                         learnedAction.trim();
-
-                /*
-                 * منع JARVIS من الدخول في حلقة لا نهائية
-                 * إذا كان الإجراء المتعلم هو نفس الأمر.
-                 */
 
                 if (!cleanLearnedAction.equalsIgnoreCase(
                         cleanCommand
@@ -236,6 +233,10 @@ public class JarvisCore {
         }
     }
 
+    // =========================================================
+    // LEARNED COMMAND EXECUTION
+    // =========================================================
+
     private String executeLearnedCommand(
             String originalCommand,
             String learnedAction
@@ -247,11 +248,6 @@ public class JarvisCore {
                     "LEARNED: "
                             + originalCommand
             );
-
-            /*
-             * الإجراءات المتعلمة تمر من AutomationEngine
-             * حتى تستعمل نفس قدرات التحكم والأتمتة.
-             */
 
             String result =
                     automationEngine.execute(
@@ -281,6 +277,10 @@ public class JarvisCore {
         }
     }
 
+    // =========================================================
+    // COMMAND ROUTER
+    // =========================================================
+
     private String routeCommand(
             String command,
             String decision
@@ -289,189 +289,345 @@ public class JarvisCore {
         String cmd =
                 command.toLowerCase();
 
-        /*
-         * =================================================
-         * SELF DIAGNOSIS
-         * =================================================
-         */
+        // =====================================================
+        // SELF DIAGNOSIS
+        // =====================================================
 
         if (containsAny(
                 cmd,
                 "تشخيص",
                 "شخص نفسك",
                 "التشخيص الذاتي",
-                "شنو ناقصك"
+                "شنو ناقصك",
+                "diagnose"
         )) {
 
-            return
-                    selfDiagnosisManager
-                            .runDiagnosis();
+            return selfDiagnosisManager
+                    .runDiagnosis();
         }
 
-        /*
-         * =================================================
-         * SELF TEST
-         * =================================================
-         */
+        // =====================================================
+        // SELF TEST
+        // =====================================================
 
         if (containsAny(
                 cmd,
                 "اختبر نفسك",
                 "اختبار النظام",
-                "self test"
+                "اختبر النظام",
+                "self test",
+                "self-test"
         )) {
 
-            return
-                    selfTestEngine
-                            .runAllTests();
+            return selfTestEngine
+                    .runAllTests();
         }
 
-        /*
-         * =================================================
-         * RECOVERY
-         * =================================================
-         */
+        // =====================================================
+        // RECOVERY
+        // =====================================================
 
         if (containsAny(
                 cmd,
                 "صلح نفسك",
                 "إصلاح النظام",
+                "اصلح نفسك",
                 "recovery"
         )) {
 
-            return
-                    recoverySystem
-                            .runRecovery();
+            return recoverySystem
+                    .runRecovery();
         }
 
-        /*
-         * =================================================
-         * SYSTEM STATUS
-         * =================================================
-         */
+        // =====================================================
+        // FULL SYSTEM STATUS
+        // =====================================================
 
         if (containsAny(
                 cmd,
                 "حالة النظام",
                 "status",
-                "كيف داير"
+                "كيف داير",
+                "الوضع ديالك",
+                "system status"
         )) {
 
             return getFullStatus();
         }
 
-        /*
-         * =================================================
-         * EVOLUTION
-         * =================================================
-         */
+        // =====================================================
+        // EVOLUTION
+        // =====================================================
 
         if (containsAny(
                 cmd,
                 "طور نفسك",
+                "طور راسك",
                 "بدا التطور",
                 "دورة التطور",
-                "evolution"
+                "دور التطور",
+                "evolution",
+                "evolve"
         )) {
 
-            return
-                    evolutionEngine
-                            .runEvolutionCycle();
+            return evolutionEngine
+                    .runEvolutionCycle();
         }
 
-        /*
-         * =================================================
-         * CAPABILITIES
-         * =================================================
-         */
+        // =====================================================
+        // EVOLUTION STATUS
+        // =====================================================
+
+        if (containsAny(
+                cmd,
+                "حالة التطور",
+                "وضع التطور",
+                "evolution status"
+        )) {
+
+            return evolutionEngine
+                    .getEvolutionStatus();
+        }
+
+        // =====================================================
+        // EVOLUTION HISTORY
+        // =====================================================
+
+        if (containsAny(
+                cmd,
+                "سجل التطور",
+                "تاريخ التطور",
+                "evolution history"
+        )) {
+
+            return evolutionEngine
+                    .getEvolutionHistory();
+        }
+
+        // =====================================================
+        // CURRENT DEVELOPMENT TARGET
+        // =====================================================
+
+        if (containsAny(
+                cmd,
+                "شنو الهدف الحالي",
+                "الهدف الحالي",
+                "هدف التطور",
+                "development target"
+        )) {
+
+            return evolutionEngine
+                    .getActiveDevelopmentTarget();
+        }
+
+        // =====================================================
+        // SELF BUILDER
+        // =====================================================
+
+        if (containsAny(
+                cmd,
+                "حالة builder",
+                "حالة self builder",
+                "self builder",
+                "selfbuilder",
+                "حالة البناء الذاتي"
+        )) {
+
+            return evolutionEngine
+                    .getSelfBuilderStatus();
+        }
+
+        // =====================================================
+        // APK PROJECT CHECK
+        // =====================================================
+
+        if (containsAny(
+                cmd,
+                "فحص مشروع apk",
+                "افحص مشروع apk",
+                "تحقق من مشروع apk",
+                "apk project check",
+                "validate apk"
+        )) {
+
+            return evolutionEngine
+                    .validateApkProject();
+        }
+
+        // =====================================================
+        // PREPARE APK BUILD
+        // =====================================================
+
+        if (containsAny(
+                cmd,
+                "جهز apk",
+                "جهز البناء",
+                "جهز build",
+                "جهز apk build",
+                "prepare apk",
+                "prepare build"
+        )) {
+
+            return evolutionEngine
+                    .prepareApkBuild(
+                            "طلب المستخدم بناء APK"
+                    );
+        }
+
+        // =====================================================
+        // BUILD APK
+        // =====================================================
+
+        if (containsAny(
+                cmd,
+                "بني apk",
+                "ابني apk",
+                "بناء apk",
+                "صايب apk",
+                "صنع apk",
+                "build apk",
+                "build debug",
+                "assemble debug"
+        )) {
+
+            return evolutionEngine
+                    .buildDebugApk();
+        }
+
+        // =====================================================
+        // APK BUILD STATUS
+        // =====================================================
+
+        if (containsAny(
+                cmd,
+                "حالة apk",
+                "حالة البناء",
+                "حالة build",
+                "build status",
+                "apk status"
+        )) {
+
+            return evolutionEngine
+                    .getApkBuildStatus();
+        }
+
+        // =====================================================
+        // FIND APK
+        // =====================================================
+
+        if (containsAny(
+                cmd,
+                "فين apk",
+                "أين apk",
+                "اين apk",
+                "لقا apk",
+                "ابحث عن apk",
+                "find apk",
+                "latest apk"
+        )) {
+
+            return evolutionEngine
+                    .getLatestApk();
+        }
+
+        // =====================================================
+        // APK BUILD HISTORY
+        // =====================================================
+
+        if (containsAny(
+                cmd,
+                "سجل apk",
+                "تاريخ apk",
+                "سجل البناء",
+                "build history"
+        )) {
+
+            return evolutionEngine
+                    .getApkBuildHistory();
+        }
+
+        // =====================================================
+        // CAPABILITIES
+        // =====================================================
 
         if (containsAny(
                 cmd,
                 "شنو عندك",
                 "القدرات",
+                "قدراتك",
                 "capabilities"
         )) {
 
-            return
-                    capabilityManager
-                            .getReport();
+            return capabilityManager
+                    .getReport();
         }
 
-        /*
-         * =================================================
-         * SKILLS
-         * =================================================
-         */
+        // =====================================================
+        // SKILLS
+        // =====================================================
 
         if (containsAny(
                 cmd,
                 "المهارات",
+                "مهاراتك",
                 "skills"
         )) {
 
-            return
-                    skillManager
-                            .getReport();
+            return skillManager
+                    .getReport();
         }
 
-        /*
-         * =================================================
-         * MEMORY
-         * =================================================
-         */
+        // =====================================================
+        // MEMORY
+        // =====================================================
 
         if (containsAny(
                 cmd,
                 "الذاكرة",
                 "ذكرياتك",
-                "شنو حافظ"
+                "شنو حافظ",
+                "شنو كتعقل",
+                "memory"
         )) {
 
-            return
-                    memoryManager
-                            .getAllMemories();
+            return memoryManager
+                    .getAllMemories();
         }
 
-        /*
-         * =================================================
-         * TASKS
-         * =================================================
-         */
+        // =====================================================
+        // TASKS
+        // =====================================================
 
         if (containsAny(
                 cmd,
                 "المهام",
+                "مهامي",
                 "tasks"
         )) {
 
-            return
-                    taskManager
-                            .getTasks();
+            return taskManager
+                    .getTasks();
         }
 
-        /*
-         * =================================================
-         * PLAN
-         * =================================================
-         */
+        // =====================================================
+        // PLAN
+        // =====================================================
 
         if (containsAny(
                 cmd,
                 "الخطة",
                 "plan",
-                "خطط"
+                "خطط",
+                "خطتي"
         )) {
 
-            return
-                    planningEngine
-                            .getActivePlan();
+            return planningEngine
+                    .getActivePlan();
         }
 
-        /*
-         * =================================================
-         * KNOWLEDGE
-         * =================================================
-         */
+        // =====================================================
+        // KNOWLEDGE
+        // =====================================================
 
         if (containsAny(
                 cmd,
@@ -480,16 +636,13 @@ public class JarvisCore {
                 "knowledge"
         )) {
 
-            return
-                    knowledgeEngine
-                            .getKnowledgeReport();
+            return knowledgeEngine
+                    .getKnowledgeReport();
         }
 
-        /*
-         * =================================================
-         * NOTIFICATIONS
-         * =================================================
-         */
+        // =====================================================
+        // NOTIFICATIONS
+        // =====================================================
 
         if (containsAny(
                 cmd,
@@ -498,16 +651,13 @@ public class JarvisCore {
                 "notifications"
         )) {
 
-            return
-                    notificationIntelligence
-                            .getStatus();
+            return notificationIntelligence
+                    .getStatus();
         }
 
-        /*
-         * =================================================
-         * SCREEN
-         * =================================================
-         */
+        // =====================================================
+        // SCREEN
+        // =====================================================
 
         if (containsAny(
                 cmd,
@@ -515,73 +665,53 @@ public class JarvisCore {
                 "screen"
         )) {
 
-            return
-                    screenIntelligence
-                            .getStatus();
+            return screenIntelligence
+                    .getStatus();
         }
 
-        /*
-         * =================================================
-         * AUTOMATION
-         * =================================================
-         */
+        // =====================================================
+        // AUTOMATION
+        // =====================================================
 
         if (containsAny(
                 cmd,
                 "الأتمتة",
+                "الاتمتة",
                 "automation"
         )) {
 
-            return
-                    automationEngine
-                            .getAutomationStatus();
+            return automationEngine
+                    .getAutomationStatus();
         }
 
-        /*
-         * =================================================
-         * SYSTEM MONITOR
-         * =================================================
-         */
+        // =====================================================
+        // SYSTEM MONITOR
+        // =====================================================
 
         if (containsAny(
                 cmd,
                 "المراقبة",
                 "monitor",
-                "مراقبة النظام"
+                "مراقبة النظام",
+                "system monitor"
         )) {
 
-            return
-                    systemMonitor
-                            .getFullStatus();
+            return systemMonitor
+                    .getFullStatus();
         }
 
-        /*
-         * =================================================
-         * DEVELOPMENT TARGET
-         * =================================================
-         */
-
-        if (containsAny(
-                cmd,
-                "شنو الهدف الحالي",
-                "الهدف الحالي"
-        )) {
-
-            return
-                    evolutionEngine
-                            .getActiveDevelopmentTarget();
-        }
-
-        /*
-         * =================================================
-         * DEFAULT AUTOMATION
-         * =================================================
-         */
+        // =====================================================
+        // DEFAULT AUTOMATION
+        // =====================================================
 
         return automationEngine.execute(
                 command
         );
     }
+
+    // =========================================================
+    // MEMORY
+    // =========================================================
 
     public String remember(
             String key,
@@ -609,26 +739,33 @@ public class JarvisCore {
                 "تم حفظ المعلومة في ذاكرة JARVIS.";
     }
 
+    // =========================================================
+    // COMMAND LEARNING
+    // =========================================================
+
     public String rememberCommand(
             String command,
             String action
     ) {
 
-        return
-                commandLearningEngine
-                        .learnCommand(
-                                command,
-                                action
-                        );
+        return commandLearningEngine
+                .learnCommand(
+                        command,
+                        action
+                );
     }
+
+    // =========================================================
+    // KNOWLEDGE
+    // =========================================================
 
     public String learn(
             String subject,
             String information
     ) {
 
-        return
-                knowledgeEngine.learn(
+        return knowledgeEngine
+                .learn(
                         subject,
                         information
                 );
@@ -638,18 +775,22 @@ public class JarvisCore {
             String subject
     ) {
 
-        return
-                knowledgeEngine.remember(
+        return knowledgeEngine
+                .remember(
                         subject
                 );
     }
+
+    // =========================================================
+    // TASKS
+    // =========================================================
 
     public String addTask(
             String task
     ) {
 
-        return
-                taskManager.addTask(
+        return taskManager
+                .addTask(
                         task
                 );
     }
@@ -658,8 +799,8 @@ public class JarvisCore {
             int index
     ) {
 
-        return
-                taskManager.completeTask(
+        return taskManager
+                .completeTask(
                         index
                 );
     }
@@ -668,88 +809,97 @@ public class JarvisCore {
             int index
     ) {
 
-        return
-                taskManager.removeTask(
+        return taskManager
+                .removeTask(
                         index
                 );
     }
+
+    // =========================================================
+    // PLANNING
+    // =========================================================
 
     public String createPlan(
             String goal
     ) {
 
-        return
-                planningEngine.createPlan(
+        return planningEngine
+                .createPlan(
                         goal
                 );
     }
 
     public String getPlan() {
 
-        return
-                planningEngine.getActivePlan();
+        return planningEngine
+                .getActivePlan();
     }
+
+    // =========================================================
+    // REMINDERS
+    // =========================================================
 
     public String createReminder(
             String title,
             long triggerTime
     ) {
 
-        return
-                reminderEngine.createReminder(
+        return reminderEngine
+                .createReminder(
                         title,
                         triggerTime
                 );
     }
 
+    // =========================================================
+    // ANDROID CONTROL
+    // =========================================================
+
     public String openWifi() {
 
-        return
-                androidControlEngine
-                        .openWifiSettings();
+        return androidControlEngine
+                .openWifiSettings();
     }
 
     public String openBluetooth() {
 
-        return
-                androidControlEngine
-                        .openBluetoothSettings();
+        return androidControlEngine
+                .openBluetoothSettings();
     }
 
     public String openDeviceInfo() {
 
-        return
-                androidControlEngine
-                        .openDeviceInfo();
+        return androidControlEngine
+                .openDeviceInfo();
     }
 
     public String openNotificationSettings() {
 
-        return
-                androidControlEngine
-                        .openNotificationSettings();
+        return androidControlEngine
+                .openNotificationSettings();
     }
 
     public String openDisplaySettings() {
 
-        return
-                androidControlEngine
-                        .openDisplaySettings();
+        return androidControlEngine
+                .openDisplaySettings();
     }
 
     public String openSoundSettings() {
 
-        return
-                androidControlEngine
-                        .openSoundSettings();
+        return androidControlEngine
+                .openSoundSettings();
     }
 
     public String openBatterySettings() {
 
-        return
-                androidControlEngine
-                        .openBatterySettings();
+        return androidControlEngine
+                .openBatterySettings();
     }
+
+    // =========================================================
+    // APPROVAL
+    // =========================================================
 
     public String requestApproval(
             String action
@@ -763,8 +913,8 @@ public class JarvisCore {
                             + "نطلب عليه الموافقة.";
         }
 
-        return
-                approvalEngine.requestApproval(
+        return approvalEngine
+                .requestApproval(
                         action.trim()
                 );
     }
@@ -797,32 +947,43 @@ public class JarvisCore {
                 "ما تمت الموافقة على الأمر.";
     }
 
+    // =========================================================
+    // DEVELOPMENT
+    // =========================================================
+
     public String getDevelopmentTarget() {
 
-        return
-                evolutionEngine
-                        .getActiveDevelopmentTarget();
+        return evolutionEngine
+                .getActiveDevelopmentTarget();
     }
 
     public String createBuildPlan(
             String systemName
     ) {
 
-        return
-                selfBuilderEngine.createBuildPlan(
+        return selfBuilderEngine
+                .createBuildPlan(
                         systemName
                 );
     }
+
+    // =========================================================
+    // SCREEN INTELLIGENCE
+    // =========================================================
 
     public String analyzeScreen(
             String description
     ) {
 
-        return
-                screenIntelligence.analyzeScreen(
+        return screenIntelligence
+                .analyzeScreen(
                         description
                 );
     }
+
+    // =========================================================
+    // NOTIFICATION INTELLIGENCE
+    // =========================================================
 
     public String processNotification(
             String appName,
@@ -830,14 +991,17 @@ public class JarvisCore {
             String message
     ) {
 
-        return
-                notificationIntelligence
-                        .processNotification(
-                                appName,
-                                title,
-                                message
-                        );
+        return notificationIntelligence
+                .processNotification(
+                        appName,
+                        title,
+                        message
+                );
     }
+
+    // =========================================================
+    // FULL STATUS
+    // =========================================================
 
     public String getFullStatus() {
 
@@ -868,226 +1032,4 @@ public class JarvisCore {
         );
 
         report.append(
-                "Diagnosis:\n"
-        );
-
-        report.append(
-                safe(
-                        selfDiagnosisManager
-                                .runDiagnosis()
-                )
-        );
-
-        report.append(
-                "\n\n"
-        );
-
-        report.append(
-                "Automation:\n"
-        );
-
-        report.append(
-                safe(
-                        automationEngine
-                                .getAutomationStatus()
-                )
-        );
-
-        report.append(
-                "\n\n"
-        );
-
-        report.append(
-                "System Monitor:\n"
-        );
-
-        report.append(
-                safe(
-                        systemMonitor
-                                .getStatus()
-                )
-        );
-
-        report.append(
-                "\n\n"
-        );
-
-        report.append(
-                "Self Test:\n"
-        );
-
-        report.append(
-                safe(
-                        selfTestEngine
-                                .testSystem()
-                )
-        );
-
-        report.append(
-                "\n\n"
-        );
-
-        report.append(
-                "Recovery:\n"
-        );
-
-        report.append(
-                safe(
-                        recoverySystem
-                                .getStatus()
-                )
-        );
-
-        return report.toString();
-    }
-
-    public boolean isHealthy() {
-
-        try {
-
-            memoryManager.getMemoryCount();
-
-            skillManager.getReport();
-
-            capabilityManager.getReport();
-
-            evolutionEngine
-                    .getEvolutionStatus();
-
-            selfDiagnosisManager
-                    .runDiagnosis();
-
-            selfTestEngine
-                    .testSystem();
-
-            recoverySystem
-                    .getStatus();
-
-            taskManager
-                    .getTasks();
-
-            reminderEngine
-                    .getStatus();
-
-            learningEngine
-                    .getLearningStatus();
-
-            planningEngine
-                    .getStatus();
-
-            decisionEngine
-                    .getStatus();
-
-            approvalEngine
-                    .getLastApprovedAction();
-
-            actionHistoryManager
-                    .getHistory();
-
-            contextEngine
-                    .getStatus();
-
-            automationEngine
-                    .getStatus();
-
-            knowledgeEngine
-                    .getKnowledgeReport();
-
-            commandLearningEngine
-                    .getStatus();
-
-            androidControlEngine
-                    .getStatus();
-
-            screenIntelligence
-                    .getStatus();
-
-            notificationIntelligence
-                    .getStatus();
-
-            selfBuilderEngine
-                    .getBuildStatus();
-
-            systemMonitor
-                    .getStatus();
-
-            return true;
-
-        } catch (Exception e) {
-
-            return false;
-        }
-    }
-
-    public String getStatus() {
-
-        if (isHealthy()) {
-
-            return
-                    "JARVIS CORE: ONLINE ✓";
-        }
-
-        return
-                "JARVIS CORE: DEGRADED ⚠";
-    }
-
-    private String recoverFromError(
-            String operation,
-            Exception error
-    ) {
-
-        try {
-
-            recoverySystem
-                    .runRecovery();
-
-        } catch (Exception ignored) {
-        }
-
-        return
-                "وقع خطأ أثناء العملية: "
-                        + operation
-                        + "\n"
-                        + "JARVIS حاول استرجاع النظام تلقائياً.";
-    }
-
-    private boolean containsAny(
-            String text,
-            String... values
-    ) {
-
-        if (text == null) {
-
-            return false;
-        }
-
-        String normalized =
-                text.toLowerCase();
-
-        for (String value : values) {
-
-            if (value != null &&
-                    normalized.contains(
-                            value.toLowerCase()
-                    )) {
-
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private String safe(
-            String value
-    ) {
-
-        if (value == null ||
-                value.trim().isEmpty()) {
-
-            return "UNKNOWN";
-        }
-
-        return value;
-    }
-}
+                "APK Builder
