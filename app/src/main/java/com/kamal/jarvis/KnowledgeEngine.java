@@ -2,6 +2,8 @@ package com.kamal.jarvis;
 
 import android.content.Context;
 
+import java.util.Locale;
+
 public class KnowledgeEngine {
 
     private static final String PREFIX = "__knowledge__";
@@ -12,7 +14,6 @@ public class KnowledgeEngine {
     private final SkillManager skillManager;
 
     public KnowledgeEngine(Context context) {
-
         this.context = context.getApplicationContext();
 
         memoryManager = new MemoryManager(this.context);
@@ -20,15 +21,7 @@ public class KnowledgeEngine {
         skillManager = new SkillManager(this.context);
     }
 
-    // ==========================================
-    // LEARN
-    // ==========================================
-
-    public String learn(
-            String topic,
-            String information
-    ) {
-
+    public String learn(String topic, String information) {
         if (topic == null || topic.trim().isEmpty()) {
             return "حدد الموضوع اللي بغيتي JARVIS يتعلمو.";
         }
@@ -40,230 +33,261 @@ public class KnowledgeEngine {
         String cleanTopic = topic.trim();
         String cleanInformation = information.trim();
 
-        String key =
-                PREFIX
-                        + cleanTopic.toLowerCase();
+        try {
+            String key = createKnowledgeKey(cleanTopic);
 
-        memoryManager.saveMemory(
-                key,
-                cleanInformation
-        );
+            // حفظ المعرفة في النظام القديم لضمان التوافق
+            memoryManager.saveMemory(key, cleanInformation);
 
-        return
-                "تم حفظ المعرفة ✓\n\n"
-                + "الموضوع: "
-                + cleanTopic
-                + "\n"
-                + "المعلومة: "
-                + cleanInformation;
+            // إرسال المعلومة إلى نظام التعلم أيضا
+            String learningResult = learningEngine.learn(
+                    cleanTopic,
+                    cleanInformation
+            );
+
+            return "تم تعليم JARVIS بنجاح ✓\n\n"
+                    + "الموضوع: " + cleanTopic + "\n"
+                    + "المعلومة: " + cleanInformation
+                    + "\n\n"
+                    + "Knowledge System: SAVED\n"
+                    + "Learning System: "
+                    + (learningResult == null ? "UPDATED" : "UPDATED");
+
+        } catch (Exception e) {
+            return "وقع خطأ أثناء حفظ المعرفة: " + safeMessage(e);
+        }
     }
 
-    // ==========================================
-    // REMEMBER
-    // ==========================================
-
     public String remember(String topic) {
-
         if (topic == null || topic.trim().isEmpty()) {
             return "حدد الموضوع اللي بغيتي نبحث عليه.";
         }
 
         String cleanTopic = topic.trim();
 
-        String key =
-                PREFIX
-                        + cleanTopic.toLowerCase();
+        try {
+            String key = createKnowledgeKey(cleanTopic);
 
-        String information =
-                memoryManager.getMemory(key);
+            // البحث أولا في قاعدة المعرفة الأساسية
+            String information = memoryManager.getMemory(key);
 
-        if (information == null
-                || information.trim().isEmpty()) {
+            if (information != null && !information.trim().isEmpty()) {
+                return "المعرفة المحفوظة ✓\n\n"
+                        + "الموضوع: " + cleanTopic + "\n"
+                        + information;
+            }
 
-            return
-                    "ما عنديش معرفة محفوظة على: "
-                    + cleanTopic;
+            // إذا لم توجد، البحث في نظام التعلم
+            String learnedInformation =
+                    learningEngine.rememberLearning(cleanTopic);
+
+            if (learnedInformation != null
+                    && !learnedInformation.trim().isEmpty()
+                    && !isLearningNotFoundMessage(learnedInformation)) {
+
+                return "المعرفة المتعلمة ✓\n\n"
+                        + "الموضوع: " + cleanTopic + "\n"
+                        + learnedInformation;
+            }
+
+            return "ما عنديش معرفة محفوظة على: " + cleanTopic;
+
+        } catch (Exception e) {
+            return "وقع خطأ أثناء البحث عن المعرفة: " + safeMessage(e);
         }
-
-        return
-                "المعرفة المحفوظة ✓\n\n"
-                + "الموضوع: "
-                + cleanTopic
-                + "\n"
-                + information;
     }
 
-    // ==========================================
-    // HAS KNOWLEDGE
-    // ==========================================
-
     public boolean hasKnowledge(String topic) {
-
         if (topic == null || topic.trim().isEmpty()) {
             return false;
         }
 
-        String key =
-                PREFIX
-                        + topic.trim().toLowerCase();
+        try {
+            String cleanTopic = topic.trim();
+            String key = createKnowledgeKey(cleanTopic);
 
-        return memoryManager.hasMemory(key);
+            if (memoryManager.hasMemory(key)) {
+                return true;
+            }
+
+            String learnedInformation =
+                    learningEngine.rememberLearning(cleanTopic);
+
+            return learnedInformation != null
+                    && !learnedInformation.trim().isEmpty()
+                    && !isLearningNotFoundMessage(learnedInformation);
+
+        } catch (Exception e) {
+            return false;
+        }
     }
 
-    // ==========================================
-    // FORGET
-    // ==========================================
-
     public String forget(String topic) {
-
         if (topic == null || topic.trim().isEmpty()) {
             return "حدد المعرفة اللي بغيتي نحيد.";
         }
 
         String cleanTopic = topic.trim();
 
-        String key =
-                PREFIX
-                        + cleanTopic.toLowerCase();
+        try {
+            String key = createKnowledgeKey(cleanTopic);
 
-        memoryManager.removeMemory(key);
+            memoryManager.removeMemory(key);
 
-        return
-                "تم حذف المعرفة ✓\n\n"
-                + cleanTopic;
+            return "تم حذف المعرفة الأساسية ✓\n\n"
+                    + cleanTopic
+                    + "\n\n"
+                    + "ملاحظة: سجل التعلم السابق يمكن يبقى محفوظا "
+                    + "ضمن Learning Engine.";
+
+        } catch (Exception e) {
+            return "وقع خطأ أثناء حذف المعرفة: " + safeMessage(e);
+        }
     }
 
-    // ==========================================
-    // CREATE KNOWLEDGE SKILL
-    // ==========================================
-
-    public String createKnowledgeSkill(
-            String name,
-            String description
-    ) {
-
+    public String createKnowledgeSkill(String name, String description) {
         if (name == null || name.trim().isEmpty()) {
             return "حدد اسم المهارة.";
         }
 
-        if (description == null
-                || description.trim().isEmpty()) {
-
+        if (description == null || description.trim().isEmpty()) {
             return "حدد وصف المهارة.";
         }
 
-        skillManager.addSkill(
-                name.trim(),
-                description.trim()
-        );
+        String cleanName = name.trim();
+        String cleanDescription = description.trim();
 
-        return
-                "تم إنشاء المهارة من المعرفة ✓\n\n"
-                + "المهارة: "
-                + name.trim()
-                + "\n"
-                + "الوصف: "
-                + description.trim();
+        try {
+            skillManager.addSkill(cleanName, cleanDescription);
+
+            return "تم إنشاء المهارة من المعرفة ✓\n\n"
+                    + "المهارة: " + cleanName + "\n"
+                    + "الوصف: " + cleanDescription;
+
+        } catch (Exception e) {
+            return "وقع خطأ أثناء إنشاء المهارة: " + safeMessage(e);
+        }
     }
 
-    // ==========================================
-    // IMPORT LEARNING
-    // ==========================================
-
     public String importLearning(String topic) {
-
         if (topic == null || topic.trim().isEmpty()) {
             return "حدد موضوع التعلم.";
         }
 
-        String learning =
-                learningEngine.rememberLearning(
-                        topic.trim()
-                );
-
-        if (learning == null
-                || learning.trim().isEmpty()) {
-
-            return
-                    "ما لقيتش تعلم محفوظ على هاد الموضوع.";
-        }
-
-        return learning;
-    }
-
-    // ==========================================
-    // KNOWLEDGE REPORT
-    // ==========================================
-
-    public String getKnowledgeReport() {
-
-        int count = 0;
-
-        String memories =
-                memoryManager.getAllMemories();
-
-        if (memories != null
-                && !memories.trim().isEmpty()
-                && !memories.equals(
-                        "ما عنديش معلومات محفوظة حاليا."
-                )) {
-
-            String[] lines =
-                    memories.split("\\n");
-
-            for (String line : lines) {
-
-                if (line.contains(PREFIX)) {
-                    count++;
-                }
-            }
-        }
-
-        return
-                "=== KNOWLEDGE ENGINE ===\n\n"
-                + "المعارف المحفوظة: "
-                + count
-                + "\n"
-                + "Learning Engine: ONLINE\n"
-                + "Memory System: ONLINE\n"
-                + "Skill System: ONLINE";
-    }
-
-    // ==========================================
-    // STATUS
-    // ==========================================
-
-    public String getStatus() {
-
-        if (isHealthy()) {
-
-            return
-                    "Knowledge Engine: ONLINE ✓";
-        }
-
-        return
-                "Knowledge Engine: ERROR ⚠";
-    }
-
-    // ==========================================
-    // HEALTH
-    // ==========================================
-
-    public boolean isHealthy() {
+        String cleanTopic = topic.trim();
 
         try {
+            String learning =
+                    learningEngine.rememberLearning(cleanTopic);
 
+            if (learning == null
+                    || learning.trim().isEmpty()
+                    || isLearningNotFoundMessage(learning)) {
+
+                return "ما لقيتش تعلم محفوظ على هاد الموضوع.";
+            }
+
+            return learning;
+
+        } catch (Exception e) {
+            return "وقع خطأ أثناء استيراد التعلم: " + safeMessage(e);
+        }
+    }
+
+    public String getKnowledgeReport() {
+        int count = 0;
+
+        try {
+            String memories = memoryManager.getAllMemories();
+
+            if (memories != null
+                    && !memories.trim().isEmpty()
+                    && !memories.equals("ما عنديش معلومات محفوظة حاليا.")) {
+
+                String[] lines = memories.split("\\n");
+
+                for (String line : lines) {
+                    if (line.contains(PREFIX)) {
+                        count++;
+                    }
+                }
+            }
+
+            String learningStatus =
+                    learningEngine.getLearningStatus();
+
+            return "=== KNOWLEDGE ENGINE ===\n\n"
+                    + "المعارف الأساسية: " + count + "\n"
+                    + "Knowledge Storage: ONLINE\n"
+                    + "Learning Engine: ONLINE\n"
+                    + "Memory System: ONLINE\n"
+                    + "Skill System: ONLINE\n\n"
+                    + "Learning Status:\n"
+                    + learningStatus;
+
+        } catch (Exception e) {
+            return "Knowledge Report Error: " + safeMessage(e);
+        }
+    }
+
+    public String getStatus() {
+        if (isHealthy()) {
+            return "Knowledge Engine: ONLINE ✓";
+        }
+
+        return "Knowledge Engine: ERROR ⚠";
+    }
+
+    public boolean isHealthy() {
+        try {
             memoryManager.getMemoryCount();
-
             learningEngine.getLearningStatus();
-
             skillManager.getSkillCount();
 
             return true;
 
         } catch (Exception e) {
-
             return false;
         }
+    }
+
+    public Context getContext() {
+        return context;
+    }
+
+    private String createKnowledgeKey(String topic) {
+        return PREFIX + normalizeTopic(topic);
+    }
+
+    private String normalizeTopic(String topic) {
+        if (topic == null) {
+            return "";
+        }
+
+        return topic.trim()
+                .toLowerCase(Locale.ROOT);
+    }
+
+    private boolean isLearningNotFoundMessage(String message) {
+        String cleanMessage = message.trim();
+
+        return cleanMessage.contains("مازال ما تعلمتش")
+                || cleanMessage.contains("ما لقيتش تعلم")
+                || cleanMessage.contains("لا توجد")
+                || cleanMessage.contains("غير موجود");
+    }
+
+    private String safeMessage(Exception exception) {
+        if (exception == null) {
+            return "خطأ غير معروف";
+        }
+
+        String message = exception.getMessage();
+
+        if (message == null || message.trim().isEmpty()) {
+            return exception.getClass().getSimpleName();
+        }
+
+        return message;
     }
 }
