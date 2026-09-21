@@ -13,13 +13,29 @@ import java.util.Locale;
 
 public class EvolutionEngine {
 
-    private static final String PREFS_NAME = "jarvis_evolution";
-    private static final String KEY_GOALS = "goals";
-    private static final String KEY_HISTORY = "history";
-    private static final String KEY_PENDING = "pending_approvals";
-    private static final String KEY_VERSION = "engine_version";
-    private static final String KEY_ACTIVE_TARGET = "active_development_target";
-    private static final String KEY_LAST_RESULT = "last_evolution_result";
+    private static final String PREFS_NAME =
+            "jarvis_evolution";
+
+    private static final String KEY_GOALS =
+            "goals";
+
+    private static final String KEY_HISTORY =
+            "history";
+
+    private static final String KEY_PENDING =
+            "pending_approvals";
+
+    private static final String KEY_VERSION =
+            "engine_version";
+
+    private static final String KEY_ACTIVE_TARGET =
+            "active_development_target";
+
+    private static final String KEY_LAST_RESULT =
+            "last_evolution_result";
+
+    private static final String KEY_LAST_SUCCESS =
+            "last_successful_evolution";
 
     private final Context context;
     private final SharedPreferences prefs;
@@ -33,44 +49,42 @@ public class EvolutionEngine {
     private final SelfTestEngine selfTestEngine;
     private final ApkBuilderEngine apkBuilderEngine;
     private final CodeEvolutionEngine codeEvolutionEngine;
-
-    /*
-     * المحرك الجديد للتطور الذاتي:
-     *
-     * Diagnosis
-     *    ↓
-     * Snapshot
-     *    ↓
-     * Modify/Create Source
-     *    ↓
-     * Test
-     *    ↓
-     * Rollback عند الفشل
-     *    ↓
-     * Build preparation
-     *    ↓
-     * Memory + History
-     */
     private final AutonomousEvolutionEngine autonomousEvolutionEngine;
 
     public EvolutionEngine(Context context) {
 
-        this.context = context.getApplicationContext();
+        this.context =
+                context.getApplicationContext();
 
-        prefs = this.context.getSharedPreferences(
-                PREFS_NAME,
-                Context.MODE_PRIVATE
-        );
+        prefs =
+                this.context.getSharedPreferences(
+                        PREFS_NAME,
+                        Context.MODE_PRIVATE
+                );
 
-        memoryManager = new MemoryManager(this.context);
-        skillManager = new SkillManager(this.context);
-        capabilityManager = new CapabilityManager(this.context);
-        diagnosisManager = new SelfDiagnosisManager(this.context);
+        memoryManager =
+                new MemoryManager(this.context);
 
-        selfBuilderEngine = new SelfBuilderEngine(this.context);
-        selfTestEngine = new SelfTestEngine(this.context);
-        apkBuilderEngine = new ApkBuilderEngine(this.context);
-        codeEvolutionEngine = new CodeEvolutionEngine(this.context);
+        skillManager =
+                new SkillManager(this.context);
+
+        capabilityManager =
+                new CapabilityManager(this.context);
+
+        diagnosisManager =
+                new SelfDiagnosisManager(this.context);
+
+        selfBuilderEngine =
+                new SelfBuilderEngine(this.context);
+
+        selfTestEngine =
+                new SelfTestEngine(this.context);
+
+        apkBuilderEngine =
+                new ApkBuilderEngine(this.context);
+
+        codeEvolutionEngine =
+                new CodeEvolutionEngine(this.context);
 
         autonomousEvolutionEngine =
                 new AutonomousEvolutionEngine(this.context);
@@ -78,52 +92,103 @@ public class EvolutionEngine {
         if (!prefs.contains(KEY_VERSION)) {
 
             prefs.edit()
-                    .putString(KEY_VERSION, "9.0")
+                    .putString(
+                            KEY_VERSION,
+                            "10.0"
+                    )
                     .apply();
         }
     }
+
+    // =========================================================
+    // TIME
+    // =========================================================
 
     private String now() {
 
         return new SimpleDateFormat(
                 "yyyy-MM-dd HH:mm:ss",
                 Locale.getDefault()
-        ).format(new Date());
+        ).format(
+                new Date()
+        );
     }
 
     // =========================================================
     // GOALS
     // =========================================================
 
-    public void createEvolutionGoal(String goal) {
+    public void createEvolutionGoal(
+            String goal
+    ) {
 
-        if (goal == null || goal.trim().isEmpty()) {
+        if (isBlank(goal)) {
             return;
         }
 
         try {
 
-            JSONArray goals = new JSONArray(
-                    prefs.getString(KEY_GOALS, "[]")
+            String cleanGoal =
+                    goal.trim();
+
+            JSONArray goals =
+                    new JSONArray(
+                            prefs.getString(
+                                    KEY_GOALS,
+                                    "[]"
+                            )
+                    );
+
+            JSONObject item =
+                    new JSONObject();
+
+            item.put(
+                    "goal",
+                    cleanGoal
             );
 
-            JSONObject item = new JSONObject();
+            item.put(
+                    "status",
+                    "pending"
+            );
 
-            item.put("goal", goal.trim());
-            item.put("status", "pending");
-            item.put("created", now());
+            item.put(
+                    "created",
+                    now()
+            );
 
             goals.put(item);
 
             prefs.edit()
-                    .putString(KEY_GOALS, goals.toString())
+                    .putString(
+                            KEY_GOALS,
+                            goals.toString()
+                    )
                     .apply();
+
+            prefs.edit()
+                    .putString(
+                            KEY_ACTIVE_TARGET,
+                            cleanGoal
+                    )
+                    .apply();
+
+            memoryManager.saveMemory(
+                    "__active_evolution_goal__",
+                    cleanGoal
+            );
+
+            recordHistory(
+                    "GOAL_CREATED",
+                    cleanGoal
+            );
 
         } catch (Exception e) {
 
             recordHistory(
                     "ERROR",
-                    "فشل إنشاء الهدف: " + safeError(e)
+                    "فشل إنشاء الهدف: "
+                            + safeError(e)
             );
         }
     }
@@ -132,32 +197,60 @@ public class EvolutionEngine {
 
         try {
 
-            JSONArray goals = new JSONArray(
-                    prefs.getString(KEY_GOALS, "[]")
-            );
+            JSONArray goals =
+                    new JSONArray(
+                            prefs.getString(
+                                    KEY_GOALS,
+                                    "[]"
+                            )
+                    );
 
             if (goals.length() == 0) {
-                return "لا توجد أهداف تطور مسجلة حاليا.";
+
+                return
+                        "لا توجد أهداف تطور مسجلة حاليا.";
             }
 
-            StringBuilder result = new StringBuilder();
+            StringBuilder result =
+                    new StringBuilder();
 
-            result.append("أهداف JARVIS:\n\n");
+            result.append(
+                    "أهداف JARVIS:\n\n"
+            );
 
-            for (int i = 0; i < goals.length(); i++) {
+            for (int i = 0;
+                 i < goals.length();
+                 i++) {
 
-                JSONObject item = goals.getJSONObject(i);
+                JSONObject item =
+                        goals.getJSONObject(i);
 
                 result.append("• ")
-                        .append(item.optString("goal"))
+                        .append(
+                                item.optString(
+                                        "goal"
+                                )
+                        )
                         .append("\n");
 
-                result.append("الحالة: ")
-                        .append(item.optString("status"))
+                result.append(
+                        "الحالة: "
+                )
+                        .append(
+                                item.optString(
+                                        "status"
+                                )
+                        )
                         .append("\n");
 
-                result.append("التاريخ: ")
-                        .append(item.optString("created"))
+                result.append(
+                        "التاريخ: "
+                )
+                        .append(
+                                item.optString(
+                                        "created"
+                                )
+                        )
                         .append("\n\n");
             }
 
@@ -165,8 +258,9 @@ public class EvolutionEngine {
 
         } catch (Exception e) {
 
-            return "تعذر قراءة الأهداف:\n"
-                    + safeError(e);
+            return
+                    "تعذر قراءة الأهداف:\n"
+                            + safeError(e);
         }
     }
 
@@ -179,58 +273,86 @@ public class EvolutionEngine {
             String description
     ) {
 
-        if (name == null || name.trim().isEmpty()) {
+        if (isBlank(name)) {
             return;
         }
 
-        boolean added = skillManager.addSkill(
-                name,
-                description
-        );
+        boolean added =
+                skillManager.addSkill(
+                        name.trim(),
+                        description
+                );
 
         recordHistory(
                 "SKILL_ADDED",
                 added
-                        ? "تم تسجيل مهارة: " + name
-                        : "المهارة موجودة مسبقا: " + name
+                        ? "تم تسجيل مهارة: "
+                        + name
+                        : "المهارة موجودة مسبقا: "
+                        + name
         );
     }
 
-    public void removeSkill(String name) {
+    public void removeSkill(
+            String name
+    ) {
 
-        boolean removed = skillManager.removeSkill(name);
+        boolean removed =
+                skillManager.removeSkill(
+                        name
+                );
 
         recordHistory(
                 "SKILL_REMOVED",
                 removed
-                        ? "تم حذف مهارة: " + name
-                        : "المهارة غير موجودة: " + name
+                        ? "تم حذف مهارة: "
+                        + name
+                        : "المهارة غير موجودة: "
+                        + name
         );
     }
 
-    public void recordSkillSuccess(String name) {
-        skillManager.recordSuccess(name);
+    public void recordSkillSuccess(
+            String name
+    ) {
+
+        skillManager.recordSuccess(
+                name
+        );
     }
 
-    public void recordSkillFailure(String name) {
-        skillManager.recordFailure(name);
+    public void recordSkillFailure(
+            String name
+    ) {
+
+        skillManager.recordFailure(
+                name
+        );
     }
 
     public String getSkillsStatus() {
+
         return skillManager.getReport();
     }
 
     public String getSkillNames() {
 
-        List<String> names = skillManager.getSkillNames();
+        List<String> names =
+                skillManager.getSkillNames();
 
-        if (names == null || names.isEmpty()) {
-            return "لا توجد مهارات مسجلة.";
+        if (names == null ||
+                names.isEmpty()) {
+
+            return
+                    "لا توجد مهارات مسجلة.";
         }
 
-        StringBuilder result = new StringBuilder();
+        StringBuilder result =
+                new StringBuilder();
 
-        for (int i = 0; i < names.size(); i++) {
+        for (int i = 0;
+             i < names.size();
+             i++) {
 
             if (i > 0) {
                 result.append("\n");
@@ -248,7 +370,9 @@ public class EvolutionEngine {
     // CAPABILITIES
     // =========================================================
 
-    public CapabilityManager getCapabilityManager() {
+    public CapabilityManager
+    getCapabilityManager() {
+
         return capabilityManager;
     }
 
@@ -257,24 +381,29 @@ public class EvolutionEngine {
             String description
     ) {
 
-        if (name == null || name.trim().isEmpty()) {
+        if (isBlank(name)) {
             return;
         }
 
-        boolean added = capabilityManager.addCapability(
-                name,
-                description
-        );
+        boolean added =
+                capabilityManager.addCapability(
+                        name.trim(),
+                        description
+                );
 
         recordHistory(
                 "CAPABILITY_ADDED",
                 added
-                        ? "تم تسجيل قدرة: " + name
-                        : "القدرة موجودة مسبقا: " + name
+                        ? "تم تسجيل قدرة: "
+                        + name
+                        : "القدرة موجودة مسبقا: "
+                        + name
         );
     }
 
-    public void enableCapability(String name) {
+    public void enableCapability(
+            String name
+    ) {
 
         capabilityManager.setStatus(
                 name,
@@ -282,7 +411,9 @@ public class EvolutionEngine {
         );
     }
 
-    public void disableCapability(String name) {
+    public void disableCapability(
+            String name
+    ) {
 
         capabilityManager.setStatus(
                 name,
@@ -290,15 +421,26 @@ public class EvolutionEngine {
         );
     }
 
-    public void recordCapabilitySuccess(String name) {
-        capabilityManager.recordSuccess(name);
+    public void recordCapabilitySuccess(
+            String name
+    ) {
+
+        capabilityManager.recordSuccess(
+                name
+        );
     }
 
-    public void recordCapabilityFailure(String name) {
-        capabilityManager.recordFailure(name);
+    public void recordCapabilityFailure(
+            String name
+    ) {
+
+        capabilityManager.recordFailure(
+                name
+        );
     }
 
     public String getCapabilitiesStatus() {
+
         return capabilityManager.getReport();
     }
 
@@ -307,19 +449,25 @@ public class EvolutionEngine {
     // =========================================================
 
     public String runFullDiagnosis() {
+
         return diagnosisManager.runDiagnosis();
     }
 
     public String selfDiagnosis() {
+
         return diagnosisManager.runDiagnosis();
     }
 
     public String getNextDevelopmentTarget() {
-        return diagnosisManager.getNextDevelopmentTarget();
+
+        return diagnosisManager
+                .getNextDevelopmentTarget();
     }
 
     public String getDevelopmentPlan() {
-        return diagnosisManager.getDevelopmentPlan();
+
+        return diagnosisManager
+                .getDevelopmentPlan();
     }
 
     // =========================================================
@@ -330,7 +478,8 @@ public class EvolutionEngine {
 
         try {
 
-            String result = selfBuilderEngine.initialize();
+            String result =
+                    selfBuilderEngine.initialize();
 
             recordHistory(
                     "BUILDER_INITIALIZED",
@@ -341,34 +490,44 @@ public class EvolutionEngine {
 
         } catch (Exception e) {
 
-            return "فشل تشغيل Self Builder:\n"
-                    + safeError(e);
+            return
+                    "فشل تشغيل Self Builder:\n"
+                            + safeError(e);
         }
     }
 
     public String getSelfBuilderStatus() {
 
         try {
-            return selfBuilderEngine.getStatus();
+
+            return selfBuilderEngine
+                    .getStatus();
 
         } catch (Exception e) {
 
-            return "Self Builder غير متاح:\n"
-                    + safeError(e);
+            return
+                    "Self Builder غير متاح:\n"
+                            + safeError(e);
         }
     }
 
     public String getSelfBuilderWorkspace() {
 
         try {
-            return selfBuilderEngine.getWorkspacePath();
+
+            return selfBuilderEngine
+                    .getWorkspacePath();
 
         } catch (Exception e) {
-            return "Workspace غير متاح.";
+
+            return
+                    "Workspace غير متاح.";
         }
     }
 
-    public SelfBuilderEngine getSelfBuilderEngine() {
+    public SelfBuilderEngine
+    getSelfBuilderEngine() {
+
         return selfBuilderEngine;
     }
 
@@ -376,28 +535,44 @@ public class EvolutionEngine {
     // CODE EVOLUTION
     // =========================================================
 
-    public CodeEvolutionEngine getCodeEvolutionEngine() {
+    public CodeEvolutionEngine
+    getCodeEvolutionEngine() {
+
         return codeEvolutionEngine;
     }
 
     public String getCodeEvolutionStatus() {
-        return codeEvolutionEngine.getStatus();
+
+        return codeEvolutionEngine
+                .getStatus();
     }
 
     public boolean isCodeEvolutionHealthy() {
-        return codeEvolutionEngine.isHealthy();
+
+        return codeEvolutionEngine
+                .isHealthy();
     }
 
     public String analyzeProjectCode() {
-        return codeEvolutionEngine.analyzeProject();
+
+        return codeEvolutionEngine
+                .analyzeProject();
     }
 
-    public String analyzeCodeFile(String path) {
-        return codeEvolutionEngine.readCode(path);
+    public String analyzeCodeFile(
+            String path
+    ) {
+
+        return codeEvolutionEngine
+                .readCode(path);
     }
 
-    public String searchCode(String query) {
-        return codeEvolutionEngine.searchCode(query);
+    public String searchCode(
+            String query
+    ) {
+
+        return codeEvolutionEngine
+                .searchCode(query);
     }
 
     public String generateJavaClass(
@@ -406,11 +581,12 @@ public class EvolutionEngine {
             String description
     ) {
 
-        return codeEvolutionEngine.generateJavaClass(
-                packageName,
-                className,
-                description
-        );
+        return codeEvolutionEngine
+                .generateJavaClass(
+                        packageName,
+                        className,
+                        description
+                );
     }
 
     public String generateJavaInterface(
@@ -419,18 +595,22 @@ public class EvolutionEngine {
             String description
     ) {
 
-        return codeEvolutionEngine.generateJavaInterface(
-                packageName,
-                interfaceName,
-                description
-        );
+        return codeEvolutionEngine
+                .generateJavaInterface(
+                        packageName,
+                        interfaceName,
+                        description
+                );
     }
 
-    public String generateDevelopmentPlan(String goal) {
+    public String generateDevelopmentPlan(
+            String goal
+    ) {
 
-        return codeEvolutionEngine.generateDevelopmentPlan(
-                goal
-        );
+        return codeEvolutionEngine
+                .generateDevelopmentPlan(
+                        goal
+                );
     }
 
     public String createCodeFile(
@@ -439,11 +619,12 @@ public class EvolutionEngine {
             String reason
     ) {
 
-        return codeEvolutionEngine.createCodeFile(
-                path,
-                content,
-                reason
-        );
+        return codeEvolutionEngine
+                .createCodeFile(
+                        path,
+                        content,
+                        reason
+                );
     }
 
     public String evolveCode(
@@ -453,12 +634,13 @@ public class EvolutionEngine {
             String reason
     ) {
 
-        String result = codeEvolutionEngine.modifyCode(
-                path,
-                oldCode,
-                newCode,
-                reason
-        );
+        String result =
+                codeEvolutionEngine.modifyCode(
+                        path,
+                        oldCode,
+                        newCode,
+                        reason
+                );
 
         recordHistory(
                 "CODE_ENGINE_EVOLUTION",
@@ -469,7 +651,9 @@ public class EvolutionEngine {
     }
 
     public String getCodeEvolutionHistory() {
-        return codeEvolutionEngine.getHistory();
+
+        return codeEvolutionEngine
+                .getHistory();
     }
 
     // =========================================================
@@ -485,26 +669,39 @@ public class EvolutionEngine {
 
         try {
 
-            String target = getActiveDevelopmentTarget();
+            String target =
+                    getActiveDevelopmentTarget();
 
             String finalReason =
-                    reason == null ||
-                    reason.trim().isEmpty()
-                            ? "Evolution target: " + target
+                    isBlank(reason)
+                            ? "Evolution target: "
+                            + target
                             : reason;
 
             String result =
-                    selfBuilderEngine.evolveSourceFile(
-                            path,
-                            oldText,
-                            newText,
-                            finalReason
-                    );
+                    selfBuilderEngine
+                            .evolveSourceFile(
+                                    path,
+                                    oldText,
+                                    newText,
+                                    finalReason
+                            );
 
             recordHistory(
                     "SOURCE_EVOLUTION",
                     path
             );
+
+            if (result != null &&
+                    result.contains(
+                            "EVOLUTION SUCCESS"
+                    )) {
+
+                markActiveGoalSuccess(
+                        target,
+                        result
+                );
+            }
 
             return result;
 
@@ -515,8 +712,9 @@ public class EvolutionEngine {
                     safeError(e)
             );
 
-            return "فشل التطوير:\n"
-                    + safeError(e);
+            return
+                    "فشل التطوير:\n"
+                            + safeError(e);
         }
     }
 
@@ -528,10 +726,11 @@ public class EvolutionEngine {
         try {
 
             String result =
-                    selfBuilderEngine.writeSourceFile(
-                            path,
-                            content
-                    );
+                    selfBuilderEngine
+                            .writeSourceFile(
+                                    path,
+                                    content
+                            );
 
             recordHistory(
                     "SOURCE_WRITE",
@@ -542,43 +741,55 @@ public class EvolutionEngine {
 
         } catch (Exception e) {
 
-            return "فشل كتابة Source:\n"
-                    + safeError(e);
+            return
+                    "فشل كتابة Source:\n"
+                            + safeError(e);
         }
     }
 
-    public String readSourceFile(String path) {
+    public String readSourceFile(
+            String path
+    ) {
 
         try {
 
-            return selfBuilderEngine.readSourceFile(path);
+            return selfBuilderEngine
+                    .readSourceFile(path);
 
         } catch (Exception e) {
 
-            return "فشل قراءة Source:\n"
-                    + safeError(e);
+            return
+                    "فشل قراءة Source:\n"
+                            + safeError(e);
         }
     }
 
-    public String searchSource(String query) {
+    public String searchSource(
+            String query
+    ) {
 
         try {
 
-            return selfBuilderEngine.searchSource(query);
+            return selfBuilderEngine
+                    .searchSource(query);
 
         } catch (Exception e) {
 
-            return "فشل البحث داخل Source:\n"
-                    + safeError(e);
+            return
+                    "فشل البحث داخل Source:\n"
+                            + safeError(e);
         }
     }
 
-    public String createDevelopmentSnapshot(String reason) {
+    public String createDevelopmentSnapshot(
+            String reason
+    ) {
 
         try {
 
             String result =
-                    selfBuilderEngine.createSnapshot(reason);
+                    selfBuilderEngine
+                            .createSnapshot(reason);
 
             recordHistory(
                     "SNAPSHOT",
@@ -589,17 +800,21 @@ public class EvolutionEngine {
 
         } catch (Exception e) {
 
-            return "فشل Snapshot:\n"
-                    + safeError(e);
+            return
+                    "فشل Snapshot:\n"
+                            + safeError(e);
         }
     }
 
-    public String rollbackDevelopment(String snapshotId) {
+    public String rollbackDevelopment(
+            String snapshotId
+    ) {
 
         try {
 
             String result =
-                    selfBuilderEngine.rollback(snapshotId);
+                    selfBuilderEngine
+                            .rollback(snapshotId);
 
             recordHistory(
                     "ROLLBACK",
@@ -610,13 +825,14 @@ public class EvolutionEngine {
 
         } catch (Exception e) {
 
-            return "فشل Rollback:\n"
-                    + safeError(e);
+            return
+                    "فشل Rollback:\n"
+                            + safeError(e);
         }
     }
 
     // =========================================================
-    // AUTONOMOUS EVOLUTION ENGINE
+    // AUTONOMOUS EVOLUTION
     // =========================================================
 
     public AutonomousEvolutionEngine
@@ -629,12 +845,14 @@ public class EvolutionEngine {
 
         try {
 
-            return autonomousEvolutionEngine.getStatus();
+            return autonomousEvolutionEngine
+                    .getStatus();
 
         } catch (Exception e) {
 
-            return "Autonomous Evolution غير متاح:\n"
-                    + safeError(e);
+            return
+                    "Autonomous Evolution غير متاح:\n"
+                            + safeError(e);
         }
     }
 
@@ -642,7 +860,8 @@ public class EvolutionEngine {
 
         try {
 
-            return autonomousEvolutionEngine.isHealthy();
+            return autonomousEvolutionEngine
+                    .isHealthy();
 
         } catch (Exception e) {
 
@@ -657,12 +876,15 @@ public class EvolutionEngine {
         try {
 
             return autonomousEvolutionEngine
-                    .analyzeBeforeEvolution(goal);
+                    .analyzeBeforeEvolution(
+                            goal
+                    );
 
         } catch (Exception e) {
 
-            return "فشل تحليل التطور الذاتي:\n"
-                    + safeError(e);
+            return
+                    "فشل تحليل التطور الذاتي:\n"
+                            + safeError(e);
         }
     }
 
@@ -673,12 +895,15 @@ public class EvolutionEngine {
         try {
 
             return autonomousEvolutionEngine
-                    .prepareEvolution(goal);
+                    .prepareEvolution(
+                            goal
+                    );
 
         } catch (Exception e) {
 
-            return "فشل تجهيز التطور الذاتي:\n"
-                    + safeError(e);
+            return
+                    "فشل تجهيز التطور الذاتي:\n"
+                            + safeError(e);
         }
     }
 
@@ -701,8 +926,9 @@ public class EvolutionEngine {
 
         } catch (Exception e) {
 
-            return "فشل التطور الذاتي:\n"
-                    + safeError(e);
+            return
+                    "فشل التطور الذاتي:\n"
+                            + safeError(e);
         }
     }
 
@@ -723,8 +949,9 @@ public class EvolutionEngine {
 
         } catch (Exception e) {
 
-            return "فشل إنشاء Source بالتطور الذاتي:\n"
-                    + safeError(e);
+            return
+                    "فشل إنشاء Source بالتطور الذاتي:\n"
+                            + safeError(e);
         }
     }
 
@@ -734,24 +961,20 @@ public class EvolutionEngine {
 
         try {
 
-            if (goal == null ||
-                    goal.trim().isEmpty()) {
+            String cleanGoal =
+                    isBlank(goal)
+                            ? "تحليل JARVIS والبحث عن أقرب تطوير آمن"
+                            : goal.trim();
 
-                goal = "تحليل JARVIS والبحث عن أقرب تطوير آمن";
-            }
-
-            createEvolutionGoal(goal);
-
-            prefs.edit()
-                    .putString(
-                            KEY_ACTIVE_TARGET,
-                            goal.trim()
-                    )
-                    .apply();
+            createEvolutionGoal(
+                    cleanGoal
+            );
 
             String result =
                     autonomousEvolutionEngine
-                            .runEvolutionCycle(goal);
+                            .runEvolutionCycle(
+                                    cleanGoal
+                            );
 
             prefs.edit()
                     .putString(
@@ -762,12 +985,12 @@ public class EvolutionEngine {
 
             recordHistory(
                     "AUTONOMOUS_EVOLUTION",
-                    goal
+                    cleanGoal
             );
 
             memoryManager.saveMemory(
                     "__last_autonomous_goal__",
-                    goal
+                    cleanGoal
             );
 
             memoryManager.saveMemory(
@@ -775,13 +998,28 @@ public class EvolutionEngine {
                     now()
             );
 
+            if (isSuccessfulEvolution(result)) {
+
+                prefs.edit()
+                        .putString(
+                                KEY_LAST_SUCCESS,
+                                now()
+                        )
+                        .apply();
+
+                markActiveGoalSuccess(
+                        cleanGoal,
+                        result
+                );
+            }
+
             return result;
 
         } catch (Exception e) {
 
             String error =
                     "فشل Autonomous Evolution:\n"
-                    + safeError(e);
+                            + safeError(e);
 
             recordHistory(
                     "AUTONOMOUS_EVOLUTION_ERROR",
@@ -796,13 +1034,22 @@ public class EvolutionEngine {
 
         try {
 
-            return autonomousEvolutionEngine
-                    .rollbackLastEvolution();
+            String result =
+                    autonomousEvolutionEngine
+                            .rollbackLastEvolution();
+
+            recordHistory(
+                    "AUTONOMOUS_ROLLBACK",
+                    result
+            );
+
+            return result;
 
         } catch (Exception e) {
 
-            return "فشل التراجع عن آخر تطور:\n"
-                    + safeError(e);
+            return
+                    "فشل التراجع عن آخر تطور:\n"
+                            + safeError(e);
         }
     }
 
@@ -815,8 +1062,9 @@ public class EvolutionEngine {
 
         } catch (Exception e) {
 
-            return "تعذر قراءة سجل التطور الذاتي:\n"
-                    + safeError(e);
+            return
+                    "تعذر قراءة سجل التطور الذاتي:\n"
+                            + safeError(e);
         }
     }
 
@@ -829,7 +1077,8 @@ public class EvolutionEngine {
 
         } catch (Exception e) {
 
-            return "لا توجد نتيجة متاحة.";
+            return
+                    "لا توجد نتيجة متاحة.";
         }
     }
 
@@ -841,26 +1090,33 @@ public class EvolutionEngine {
 
         try {
 
-            return apkBuilderEngine.validateProject();
+            return apkBuilderEngine
+                    .validateProject();
 
         } catch (Exception e) {
 
-            return "فشل فحص APK Project:\n"
-                    + safeError(e);
+            return
+                    "فشل فحص APK Project:\n"
+                            + safeError(e);
         }
     }
 
-    public String prepareApkBuild(String reason) {
+    public String prepareApkBuild(
+            String reason
+    ) {
 
         try {
 
             return apkBuilderEngine
-                    .prepareBuildRequest(reason);
+                    .prepareBuildRequest(
+                            reason
+                    );
 
         } catch (Exception e) {
 
-            return "فشل تجهيز APK Build:\n"
-                    + safeError(e);
+            return
+                    "فشل تجهيز APK Build:\n"
+                            + safeError(e);
         }
     }
 
@@ -869,7 +1125,8 @@ public class EvolutionEngine {
         try {
 
             String result =
-                    apkBuilderEngine.buildDebugApk();
+                    apkBuilderEngine
+                            .buildDebugApk();
 
             recordHistory(
                     "APK_BUILD",
@@ -880,24 +1137,33 @@ public class EvolutionEngine {
 
         } catch (Exception e) {
 
-            return "فشل بناء APK:\n"
-                    + safeError(e);
+            return
+                    "فشل بناء APK:\n"
+                            + safeError(e);
         }
     }
 
     public String getApkBuildStatus() {
-        return apkBuilderEngine.getStatus();
+
+        return apkBuilderEngine
+                .getStatus();
     }
 
     public String getLatestApk() {
-        return apkBuilderEngine.findLatestApk();
+
+        return apkBuilderEngine
+                .findLatestApk();
     }
 
     public String getApkBuildHistory() {
-        return apkBuilderEngine.getBuildHistory();
+
+        return apkBuilderEngine
+                .getBuildHistory();
     }
 
-    public ApkBuilderEngine getApkBuilderEngine() {
+    public ApkBuilderEngine
+    getApkBuilderEngine() {
+
         return apkBuilderEngine;
     }
 
@@ -910,7 +1176,8 @@ public class EvolutionEngine {
         try {
 
             String result =
-                    selfTestEngine.runAllTests();
+                    selfTestEngine
+                            .runAllTests();
 
             recordHistory(
                     "SELF_TEST",
@@ -921,62 +1188,45 @@ public class EvolutionEngine {
 
         } catch (Exception e) {
 
-            return "فشل Self Test:\n"
-                    + safeError(e);
+            return
+                    "فشل Self Test:\n"
+                            + safeError(e);
         }
     }
 
-    public SelfTestEngine getSelfTestEngine() {
+    public SelfTestEngine
+    getSelfTestEngine() {
+
         return selfTestEngine;
     }
 
     // =========================================================
-    // FULL EVOLUTION CYCLE
+    // MAIN EVOLUTION CYCLE
     // =========================================================
 
     public String runEvolutionCycle() {
 
-        /*
-         * من دابا الدورة الرئيسية كتستعمل
-         * AutonomousEvolutionEngine.
-         *
-         * هكذا "Evolution Engine" مايبقاش غير
-         * كيحلل ويخطط، بل كيدخل في دورة:
-         *
-         * Diagnose
-         * Analyze
-         * Snapshot
-         * Evolve
-         * Test
-         * Rollback عند الفشل
-         * Build preparation
-         * Memory
-         */
+        String target =
+                getActiveDevelopmentTarget();
 
-        String target = getActiveDevelopmentTarget();
+        if (isBlank(target) ||
+                target.contains(
+                        "لا يوجد هدف"
+                )) {
 
-        if (target == null ||
-                target.trim().isEmpty() ||
-                target.contains("لا يوجد هدف")) {
-
-            target = getNextDevelopmentTarget();
+            target =
+                    getNextDevelopmentTarget();
         }
 
-        if (target == null ||
-                target.trim().isEmpty()) {
+        if (isBlank(target)) {
 
             target =
                     "تحليل JARVIS والبحث عن أقرب تطوير آمن";
         }
 
-        prefs.edit()
-                .putString(
-                        KEY_ACTIVE_TARGET,
-                        target
-                )
-                .apply();
-
-        return runAutonomousEvolution(target);
+        return runAutonomousEvolution(
+                target
+        );
     }
 
     // =========================================================
@@ -985,21 +1235,38 @@ public class EvolutionEngine {
 
     public String getActiveDevelopmentTarget() {
 
-        return prefs.getString(
-                KEY_ACTIVE_TARGET,
-                "لا يوجد هدف تطوير نشط حاليا."
-        );
+        String target =
+                prefs.getString(
+                        KEY_ACTIVE_TARGET,
+                        ""
+                );
+
+        if (!isBlank(target)) {
+            return target;
+        }
+
+        String memoryTarget =
+                memoryManager.getMemory(
+                        "__active_evolution_goal__"
+                );
+
+        if (!isBlank(memoryTarget)) {
+            return memoryTarget;
+        }
+
+        return
+                "لا يوجد هدف تطوير نشط حاليا.";
     }
 
     // =========================================================
     // APPROVAL
     // =========================================================
 
-    public void requestApproval(String action) {
+    public void requestApproval(
+            String action
+    ) {
 
-        if (action == null ||
-                action.trim().isEmpty()) {
-
+        if (isBlank(action)) {
             return;
         }
 
@@ -1040,6 +1307,11 @@ public class EvolutionEngine {
                     )
                     .apply();
 
+            recordHistory(
+                    "APPROVAL_REQUEST",
+                    action
+            );
+
         } catch (Exception e) {
 
             recordHistory(
@@ -1050,7 +1322,9 @@ public class EvolutionEngine {
         }
     }
 
-    public boolean approve(String action) {
+    public boolean approve(
+            String action
+    ) {
 
         return updateApproval(
                 action,
@@ -1058,7 +1332,9 @@ public class EvolutionEngine {
         );
     }
 
-    public boolean reject(String action) {
+    public boolean reject(
+            String action
+    ) {
 
         return updateApproval(
                 action,
@@ -1071,9 +1347,7 @@ public class EvolutionEngine {
             String status
     ) {
 
-        if (action == null ||
-                action.trim().isEmpty()) {
-
+        if (isBlank(action)) {
             return false;
         }
 
@@ -1096,9 +1370,18 @@ public class EvolutionEngine {
                 JSONObject item =
                         pending.getJSONObject(i);
 
-                if (action.equals(
-                        item.optString("action")
-                )) {
+                if (action.trim().equals(
+                        item.optString(
+                                "action"
+                        )
+                )
+                &&
+                        "pending".equals(
+                                item.optString(
+                                        "status"
+                                )
+                        )
+                ) {
 
                     item.put(
                             "status",
@@ -1120,6 +1403,17 @@ public class EvolutionEngine {
                             pending.toString()
                     )
                     .apply();
+
+            if (found) {
+
+                recordHistory(
+                        "APPROVAL_" +
+                                status.toUpperCase(
+                                        Locale.ROOT
+                                ),
+                        action
+                );
+            }
 
             return found;
 
@@ -1152,7 +1446,7 @@ public class EvolutionEngine {
                 .append(
                         prefs.getString(
                                 KEY_VERSION,
-                                "9.0"
+                                "10.0"
                         )
                 )
                 .append("\n");
@@ -1165,7 +1459,8 @@ public class EvolutionEngine {
                 "Skills: "
         )
                 .append(
-                        skillManager.getSkillCount()
+                        skillManager
+                                .getSkillCount()
                 )
                 .append("\n");
 
@@ -1173,7 +1468,8 @@ public class EvolutionEngine {
                 "Capabilities: "
         )
                 .append(
-                        capabilityManager.getCount()
+                        capabilityManager
+                                .getCount()
                 )
                 .append("\n");
 
@@ -1181,7 +1477,8 @@ public class EvolutionEngine {
                 "Code Evolution: "
         )
                 .append(
-                        codeEvolutionEngine.isHealthy()
+                        codeEvolutionEngine
+                                .isHealthy()
                                 ? "ONLINE"
                                 : "ATTENTION"
                 )
@@ -1191,7 +1488,8 @@ public class EvolutionEngine {
                 "Self Builder: "
         )
                 .append(
-                        selfBuilderEngine.isHealthy()
+                        selfBuilderEngine
+                                .isHealthy()
                                 ? "ONLINE"
                                 : "ATTENTION"
                 )
@@ -1211,7 +1509,8 @@ public class EvolutionEngine {
                 "APK Builder: "
         )
                 .append(
-                        apkBuilderEngine.isHealthy()
+                        apkBuilderEngine
+                                .isHealthy()
                                 ? "ONLINE"
                                 : "ATTENTION"
                 )
@@ -1221,7 +1520,8 @@ public class EvolutionEngine {
                 "Self Test: "
         )
                 .append(
-                        selfTestEngine.isHealthy()
+                        selfTestEngine
+                                .isHealthy()
                                 ? "HEALTHY"
                                 : "ATTENTION"
                 )
@@ -1257,6 +1557,17 @@ public class EvolutionEngine {
         )
                 .append(
                         getActiveDevelopmentTarget()
+                )
+                .append("\n");
+
+        result.append(
+                "Last Success: "
+        )
+                .append(
+                        prefs.getString(
+                                KEY_LAST_SUCCESS,
+                                "NONE"
+                        )
                 )
                 .append("\n");
 
@@ -1308,7 +1619,7 @@ public class EvolutionEngine {
 
             history.put(item);
 
-            while (history.length() > 100) {
+            while (history.length() > 150) {
                 history.remove(0);
             }
 
@@ -1337,7 +1648,8 @@ public class EvolutionEngine {
 
             if (history.length() == 0) {
 
-                return "لا توجد سجلات تطور بعد.";
+                return
+                        "لا توجد سجلات تطور بعد.";
             }
 
             StringBuilder result =
@@ -1391,13 +1703,116 @@ public class EvolutionEngine {
 
             return
                     "تعذر قراءة سجل التطور:\n"
-                    + safeError(e);
+                            + safeError(e);
         }
     }
 
     // =========================================================
-    // COUNTERS
+    // HELPERS
     // =========================================================
+
+    private boolean isSuccessfulEvolution(
+            String result
+    ) {
+
+        if (result == null) {
+            return false;
+        }
+
+        String value =
+                result.toLowerCase(
+                        Locale.ROOT
+                );
+
+        return value.contains(
+                "evolution success"
+        )
+                || value.contains(
+                "evolution ناجح"
+        )
+                || value.contains(
+                "internal evolution success"
+        );
+    }
+
+    private void markActiveGoalSuccess(
+            String goal,
+            String result
+    ) {
+
+        if (isBlank(goal)) {
+            return;
+        }
+
+        try {
+
+            JSONArray goals =
+                    new JSONArray(
+                            prefs.getString(
+                                    KEY_GOALS,
+                                    "[]"
+                            )
+                    );
+
+            for (int i = 0;
+                 i < goals.length();
+                 i++) {
+
+                JSONObject item =
+                        goals.getJSONObject(i);
+
+                if (goal.equals(
+                        item.optString(
+                                "goal"
+                        )
+                )
+                &&
+                        "pending".equals(
+                                item.optString(
+                                        "status"
+                                )
+                        )
+                ) {
+
+                    item.put(
+                            "status",
+                            "completed"
+                    );
+
+                    item.put(
+                            "completed",
+                            now()
+                    );
+
+                    item.put(
+                            "result",
+                            result == null
+                                    ? ""
+                                    : result
+                    );
+                }
+            }
+
+            prefs.edit()
+                    .putString(
+                            KEY_GOALS,
+                            goals.toString()
+                    )
+                    .apply();
+
+            recordHistory(
+                    "GOAL_COMPLETED",
+                    goal
+            );
+
+        } catch (Exception e) {
+
+            recordHistory(
+                    "GOAL_COMPLETION_ERROR",
+                    safeError(e)
+            );
+        }
+    }
 
     private int getGoalCount() {
 
@@ -1444,14 +1859,18 @@ public class EvolutionEngine {
     // =========================================================
 
     public MemoryManager getMemoryManager() {
+
         return memoryManager;
     }
 
     public SkillManager getSkillManager() {
+
         return skillManager;
     }
 
-    public SelfDiagnosisManager getDiagnosisManager() {
+    public SelfDiagnosisManager
+    getDiagnosisManager() {
+
         return diagnosisManager;
     }
 
@@ -1459,21 +1878,31 @@ public class EvolutionEngine {
     // ERROR
     // =========================================================
 
-    private String safeError(Exception e) {
+    private String safeError(
+            Exception e
+    ) {
 
         if (e == null) {
             return "Unknown error";
         }
 
-        String message = e.getMessage();
+        String message =
+                e.getMessage();
 
-        if (message == null ||
-                message.trim().isEmpty()) {
+        if (isBlank(message)) {
 
             return e.getClass()
                     .getSimpleName();
         }
 
         return message;
+    }
+
+    private boolean isBlank(
+            String value
+    ) {
+
+        return value == null
+                || value.trim().isEmpty();
     }
 }
