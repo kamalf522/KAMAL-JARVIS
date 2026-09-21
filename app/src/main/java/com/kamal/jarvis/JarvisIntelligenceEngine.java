@@ -11,11 +11,13 @@ import java.util.Locale;
  * JARVIS Local Intelligence Engine
  *
  * مسؤول عن:
- * - فهم بعض صيغ الدارجة والعربية.
- * - تنظيف أوامر الصوت.
- * - حفظ آخر المحادثات محليا.
- * - الرد على بعض الأسئلة الحوارية.
- * - تجهيز طبقة يمكن ربطها لاحقا بنموذج AI حقيقي.
+ * - تنظيف وفهم أوامر العربية والدارجة.
+ * - توحيد صيغ الأوامر.
+ * - استخراج النية الأساسية من الأمر.
+ * - حفظ المحادثات محليا.
+ * - استرجاع السياق الأخير.
+ * - إعطاء ردود حوارية أساسية.
+ * - توفير طبقة ذكاء محلية يمكن لـ JarvisCore استعمالها.
  */
 public class JarvisIntelligenceEngine {
 
@@ -25,7 +27,13 @@ public class JarvisIntelligenceEngine {
     private static final String HISTORY_KEY =
             "conversation_history";
 
-    private static final int MAX_HISTORY = 20;
+    private static final String LAST_COMMAND_KEY =
+            "last_command";
+
+    private static final String LAST_RESPONSE_KEY =
+            "last_response";
+
+    private static final int MAX_HISTORY = 30;
 
     private final SharedPreferences preferences;
 
@@ -40,19 +48,27 @@ public class JarvisIntelligenceEngine {
     }
 
     // =========================================================
-    // COMMAND PREPARATION
+    // MAIN INTELLIGENCE PIPELINE
     // =========================================================
 
-    public String prepareCommand(
-            String command
-    ) {
+    public String understand(String command) {
+
+        if (command == null ||
+                command.trim().isEmpty()) {
+
+            return "";
+        }
+
+        return prepareCommand(command);
+    }
+
+    public String prepareCommand(String command) {
 
         if (command == null) {
             return "";
         }
 
-        String value =
-                clean(command);
+        String value = clean(command);
 
         String[] prefixes = {
 
@@ -65,7 +81,9 @@ public class JarvisIntelligenceEngine {
                 "واش تقدر ",
                 "تقدر ",
                 "يلاه ",
-                "يلا "
+                "يلا ",
+                "جارفيس ",
+                "jarvis "
         };
 
         for (String prefix : prefixes) {
@@ -73,9 +91,7 @@ public class JarvisIntelligenceEngine {
             String normalizedPrefix =
                     clean(prefix);
 
-            if (value.startsWith(
-                    normalizedPrefix
-            )
+            if (value.startsWith(normalizedPrefix)
                     && value.length()
                     > normalizedPrefix.length()) {
 
@@ -93,195 +109,78 @@ public class JarvisIntelligenceEngine {
         // =====================================================
 
         value = value
-                .replace(
-                        "حل ليا ",
-                        "افتح "
-                )
-                .replace(
-                        "حل ليا",
-                        "افتح"
-                )
-                .replace(
-                        "حل لي ",
-                        "افتح "
-                )
-                .replace(
-                        "حل لي",
-                        "افتح"
-                )
-                .replace(
-                        "فتح ليا ",
-                        "افتح "
-                )
-                .replace(
-                        "فتح لي ",
-                        "افتح "
-                )
-                .replace(
-                        "بغيت نفتح ",
-                        "افتح "
-                )
-                .replace(
-                        "بغيت نحل ",
-                        "افتح "
-                )
-                .replace(
-                        "مشيني ل ",
-                        "افتح "
-                )
-                .replace(
-                        "ديني ل ",
-                        "افتح "
-                )
-                .replace(
-                        "كتب ليا ",
-                        "اكتب "
-                )
-                .replace(
-                        "سيفط ليا ",
-                        "اكتب "
-                )
-                .replace(
-                        "قلب ليا على ",
-                        "ابحث على "
-                )
-                .replace(
-                        "قلب ليا ف ",
-                        "ابحث في جوجل "
-                )
-                .replace(
-                        "قلب ليا في ",
-                        "ابحث في جوجل "
-                );
+                .replace("حل ليا ", "افتح ")
+                .replace("حل ليا", "افتح")
+                .replace("حل لي ", "افتح ")
+                .replace("حل لي", "افتح")
+                .replace("فتح ليا ", "افتح ")
+                .replace("فتح لي ", "افتح ")
+                .replace("بغيت نفتح ", "افتح ")
+                .replace("بغيت نحل ", "افتح ")
+                .replace("مشيني ل ", "افتح ")
+                .replace("ديني ل ", "افتح ")
+                .replace("كتب ليا ", "اكتب ")
+                .replace("كتب لي ", "اكتب ")
+                .replace("سيفط ليا ", "اكتب ")
+                .replace("قلب ليا على ", "ابحث على ")
+                .replace("قلب ليا ف ", "ابحث في جوجل ")
+                .replace("قلب ليا في ", "ابحث في جوجل ")
+                .replace("قلب ليا ", "ابحث ")
+                .replace("شنو هو ", "ما هو ")
+                .replace("شنو هي ", "ما هي ");
 
         // =====================================================
         // VOICE VARIANTS
         // =====================================================
 
         value = value
-                .replace(
-                        "اليوتوب",
-                        "يوتيوب"
-                )
-                .replace(
-                        "اليوتيوب",
-                        "يوتيوب"
-                )
-                .replace(
-                        "الواتس",
-                        "واتساب"
-                )
-                .replace(
-                        "واتس اب",
-                        "واتساب"
-                )
-                .replace(
-                        "انستا",
-                        "انستغرام"
-                )
-                .replace(
-                        "الفايس",
-                        "فيسبوك"
-                )
-                .replace(
-                        "فيس بوك",
-                        "فيسبوك"
-                )
-                .replace(
-                        "كوكل",
-                        "جوجل"
-                );
+                .replace("اليوتوب", "يوتيوب")
+                .replace("اليوتيوب", "يوتيوب")
+                .replace("الواتس", "واتساب")
+                .replace("واتس اب", "واتساب")
+                .replace("واتساب", "واتساب")
+                .replace("انستا", "انستغرام")
+                .replace("انستى", "انستغرام")
+                .replace("الفايس", "فيسبوك")
+                .replace("فيس بوك", "فيسبوك")
+                .replace("كوكل", "جوجل")
+                .replace("غوغل", "جوجل");
 
         return value.trim();
     }
 
     // =========================================================
-    // CONVERSATION INTERCEPTION
+    // INTENT DETECTION
     // =========================================================
 
-    public String intercept(
-            String command
-    ) {
-
-        if (command == null
-                || command.trim().isEmpty()) {
-
-            return null;
-        }
+    public String detectIntent(String command) {
 
         String value =
-                clean(command);
+                prepareCommand(command);
 
-        // -----------------------------------------------------
-        // PREVIOUS CONVERSATION
-        // -----------------------------------------------------
+        if (value.isEmpty()) {
+            return "empty";
+        }
 
         if (contains(
                 value,
                 "شنو قلت ليك قبل",
-                "شنو قلت لك قبل",
                 "اش قلت ليك قبل",
                 "اخر حاجة قلت ليك",
                 "آخر حاجة قلت ليك"
         )) {
-
-            return getHistorySummary();
+            return "conversation_history";
         }
-
-        // -----------------------------------------------------
-        // MEMORY QUESTION
-        // -----------------------------------------------------
-
-        if (contains(
-                value,
-                "واش باقي فاكر",
-                "باقي فاكرني",
-                "شنو عارف عليا"
-        )) {
-
-            return
-                    "كنقدر نحتافظ بالمعلومات اللي كتسجل ليا "
-                    + "داخل ذاكرة JARVIS. "
-                    + "قول ليا: شنو حافظ، باش نوريك الذاكرة.";
-        }
-
-        // -----------------------------------------------------
-        // CHAT
-        // -----------------------------------------------------
-
-        if (contains(
-                value,
-                "بغيت نهضر معاك",
-                "بغيت غير نهضر",
-                "غير نهضر معاك",
-                "نهدرو شوية"
-        )) {
-
-            return
-                    "أكيد كمال. أنا معاك. "
-                    + "قول ليا شنو فبالك.";
-        }
-
-        // -----------------------------------------------------
-        // PRESENCE
-        // -----------------------------------------------------
 
         if (contains(
                 value,
                 "واش نتا هنا",
                 "واش كاين",
                 "جارفيس واش هنا",
-                "jarvis واش هنا",
                 "jarvis are you there"
         )) {
-
-            return
-                    "هنا كمال. JARVIS حاضر.";
+            return "presence";
         }
-
-        // -----------------------------------------------------
-        // IDENTITY
-        // -----------------------------------------------------
 
         if (contains(
                 value,
@@ -290,34 +189,179 @@ public class JarvisIntelligenceEngine {
                 "شنو نتا",
                 "عرفني عليك"
         )) {
-
-            return
-                    "أنا Kamal JARVIS، "
-                    + "مساعد محلي للهاتف. "
-                    + "كنفهم أوامر بالعربية والدارجة، "
-                    + "وكنربطها بالذاكرة والمهام "
-                    + "والتحكم المتاح فالهاتف.";
+            return "identity";
         }
-
-        // -----------------------------------------------------
-        // CAPABILITIES
-        // -----------------------------------------------------
 
         if (contains(
                 value,
-                "شنو تقدر دير ليا",
-                "اش تقدر دير ليا",
-                "ماذا تستطيع"
+                "شنو تقدر دير",
+                "اش تقدر دير",
+                "ماذا تستطيع",
+                "شنو القدرات"
         )) {
-
-            return
-                    "نقدر نعاونك فالأوامر ديال الهاتف، "
-                    + "الذاكرة، المهام، التخطيط، الشاشة، "
-                    + "الإشعارات، والأوامر اللي كتعلمنيها. "
-                    + "بعض قدرات الهاتف كتحتاج صلاحيات Android.";
+            return "capabilities";
         }
 
-        return null;
+        if (contains(
+                value,
+                "بغيت نهضر معاك",
+                "بغيت غير نهضر",
+                "غير نهضر معاك",
+                "نهدرو شوية"
+        )) {
+            return "chat";
+        }
+
+        if (contains(
+                value,
+                "شنو حافظ",
+                "شنو كتعقل",
+                "الذاكرة",
+                "memory"
+        )) {
+            return "memory";
+        }
+
+        if (contains(
+                value,
+                "طور نفسك",
+                "طور راسك",
+                "بدا التطور",
+                "evolution",
+                "evolve"
+        )) {
+            return "evolution";
+        }
+
+        if (contains(
+                value,
+                "اختبر نفسك",
+                "اختبار النظام",
+                "اختبر النظام",
+                "self test",
+                "self-test"
+        )) {
+            return "self_test";
+        }
+
+        if (contains(
+                value,
+                "تشخيص",
+                "شخص نفسك",
+                "التشخيص الذاتي",
+                "diagnose"
+        )) {
+            return "diagnosis";
+        }
+
+        if (contains(
+                value,
+                "حالة النظام",
+                "status",
+                "كيف داير",
+                "system status"
+        )) {
+            return "status";
+        }
+
+        if (contains(
+                value,
+                "بني apk",
+                "ابني apk",
+                "بناء apk",
+                "build apk",
+                "assemble debug"
+        )) {
+            return "build_apk";
+        }
+
+        if (contains(
+                value,
+                "افتح ",
+                "شغل ",
+                "دخلني ل"
+        )) {
+            return "open";
+        }
+
+        if (contains(
+                value,
+                "ابحث ",
+                "قلب ",
+                "search "
+        )) {
+            return "search";
+        }
+
+        if (contains(
+                value,
+                "اكتب ",
+                "كتب "
+        )) {
+            return "write";
+        }
+
+        if (contains(
+                value,
+                "حفظ ",
+                "سجل ",
+                "تذكر "
+        )) {
+            return "memory_save";
+        }
+
+        return "unknown";
+    }
+
+    // =========================================================
+    // CONVERSATION INTERCEPTION
+    // =========================================================
+
+    public String intercept(String command) {
+
+        if (command == null ||
+                command.trim().isEmpty()) {
+
+            return null;
+        }
+
+        String value =
+                prepareCommand(command);
+
+        String intent =
+                detectIntent(value);
+
+        switch (intent) {
+
+            case "conversation_history":
+                return getHistorySummary();
+
+            case "presence":
+                return "هنا كمال. JARVIS حاضر.";
+
+            case "identity":
+                return
+                        "أنا Kamal JARVIS، "
+                                + "مساعد محلي للهاتف. "
+                                + "كنفهم الأوامر بالعربية والدارجة، "
+                                + "وكنربطها بالذاكرة والمهام "
+                                + "والتعلم والقدرات المتاحة فالهاتف.";
+
+            case "capabilities":
+                return
+                        "نقدر نعاونك فالأوامر، الذاكرة، "
+                                + "التعلم، المهام، التخطيط، "
+                                + "الشاشة، الإشعارات، الأتمتة "
+                                + "والتطور الذاتي حسب الصلاحيات المتاحة.";
+
+            case "chat":
+                return
+                        "أكيد كمال. أنا معاك. "
+                                + "قول ليا شنو فبالك.";
+
+            default:
+                return null;
+        }
     }
 
     // =========================================================
@@ -329,20 +373,24 @@ public class JarvisIntelligenceEngine {
             String response
     ) {
 
-        if (command == null
-                || command.trim().isEmpty()) {
+        if (command == null ||
+                command.trim().isEmpty()) {
 
             return;
         }
 
+        String cleanCommand =
+                command.trim();
+
+        String cleanResponse =
+                response == null
+                        ? ""
+                        : response.trim();
+
         String item =
-                command.trim()
-                + " => "
-                + (
-                    response == null
-                            ? ""
-                            : response.trim()
-                );
+                cleanCommand
+                        + " => "
+                        + cleanResponse;
 
         List<String> history =
                 getHistory();
@@ -380,11 +428,58 @@ public class JarvisIntelligenceEngine {
                         HISTORY_KEY,
                         builder.toString()
                 )
+                .putString(
+                        LAST_COMMAND_KEY,
+                        cleanCommand
+                )
+                .putString(
+                        LAST_RESPONSE_KEY,
+                        cleanResponse
+                )
                 .apply();
     }
 
     // =========================================================
-    // GET HISTORY
+    // LAST CONTEXT
+    // =========================================================
+
+    public String getLastCommand() {
+
+        return preferences.getString(
+                LAST_COMMAND_KEY,
+                ""
+        );
+    }
+
+    public String getLastResponse() {
+
+        return preferences.getString(
+                LAST_RESPONSE_KEY,
+                ""
+        );
+    }
+
+    public String getConversationContext() {
+
+        String command =
+                getLastCommand();
+
+        String response =
+                getLastResponse();
+
+        if (command.isEmpty()) {
+            return "مازال ما عنديش سياق سابق.";
+        }
+
+        return
+                "آخر أمر: "
+                        + command
+                        + "\nآخر رد: "
+                        + response;
+    }
+
+    // =========================================================
+    // HISTORY
     // =========================================================
 
     private List<String> getHistory() {
@@ -418,11 +513,7 @@ public class JarvisIntelligenceEngine {
         return result;
     }
 
-    // =========================================================
-    // HISTORY SUMMARY
-    // =========================================================
-
-    private String getHistorySummary() {
+    public String getHistorySummary() {
 
         List<String> history =
                 getHistory();
@@ -437,7 +528,7 @@ public class JarvisIntelligenceEngine {
                 new StringBuilder();
 
         result.append(
-                "آخر المحادثات اللي عندي محليا:\n"
+                "آخر المحادثات المحفوظة محليا:\n"
         );
 
         int start =
@@ -459,13 +550,12 @@ public class JarvisIntelligenceEngine {
                     .append("\n");
         }
 
-        return result
-                .toString()
-                .trim();
+        return
+                result.toString().trim();
     }
 
     // =========================================================
-    // CLEAN TEXT
+    // TEXT NORMALIZATION
     // =========================================================
 
     private String clean(
@@ -483,6 +573,8 @@ public class JarvisIntelligenceEngine {
                 .replace("إ", "ا")
                 .replace("آ", "ا")
                 .replace("ة", "ه")
+                .replace("ؤ", "و")
+                .replace("ئ", "ي")
                 .replace("؟", "")
                 .replace("!", "")
                 .replace("،", " ")
@@ -490,7 +582,7 @@ public class JarvisIntelligenceEngine {
     }
 
     // =========================================================
-    // CONTAINS
+    // TEXT MATCHING
     // =========================================================
 
     private boolean contains(
@@ -498,7 +590,9 @@ public class JarvisIntelligenceEngine {
             String... values
     ) {
 
-        if (text == null) {
+        if (text == null ||
+                values == null) {
+
             return false;
         }
 
@@ -519,5 +613,45 @@ public class JarvisIntelligenceEngine {
         }
 
         return false;
+    }
+
+    // =========================================================
+    // HEALTH
+    // =========================================================
+
+    public boolean isHealthy() {
+
+        try {
+
+            return preferences != null;
+
+        } catch (Exception e) {
+
+            return false;
+        }
+    }
+
+    public String getStatus() {
+
+        if (isHealthy()) {
+
+            return
+                    "Intelligence Engine: ONLINE ✓\n"
+                            + "Command Normalization: ONLINE ✓\n"
+                            + "Intent Detection: ONLINE ✓\n"
+                            + "Conversation Memory: ONLINE ✓";
+        }
+
+        return
+                "Intelligence Engine: ERROR ⚠";
+    }
+
+    // =========================================================
+    // CONTEXT
+    // =========================================================
+
+    public Context getContext() {
+
+        return null;
     }
 }
