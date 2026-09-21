@@ -21,187 +21,139 @@ public class AutomationEngine {
     private long lastExecutionTime = 0L;
 
     public AutomationEngine(Context context) {
+        this.context = context.getApplicationContext();
 
-        this.context =
-                context.getApplicationContext();
-
-        decisionEngine =
-                new DecisionEngine(this.context);
-
-        taskManager =
-                new TaskManager(this.context);
-
-        reminderEngine =
-                new ReminderEngine(this.context);
-
-        androidControlEngine =
-                new AndroidControlEngine(this.context);
-
-        contextEngine =
-                new ContextEngine(this.context);
+        decisionEngine = new DecisionEngine(this.context);
+        taskManager = new TaskManager(this.context);
+        reminderEngine = new ReminderEngine(this.context);
+        androidControlEngine = new AndroidControlEngine(this.context);
+        contextEngine = new ContextEngine(this.context);
     }
+
+    // =========================================================
+    // COMMAND ANALYSIS
+    // =========================================================
 
     public String analyzeCommand(String command) {
 
-        if (command == null ||
-                command.trim().isEmpty()) {
-
+        if (isEmpty(command)) {
             return "ما عطيتيني حتى أمر.";
         }
 
-        String cleanCommand =
-                command.trim();
-
-        String decision =
-                safe(
-                        decisionEngine.decide(
-                                cleanCommand
-                        )
-                );
-
-        contextEngine.updateCommand(
-                cleanCommand,
-                decision
-        );
-
-        contextEngine.updateDecision(
-                decision
-        );
-
+        String cleanCommand = command.trim();
         lastCommand = cleanCommand;
 
-        return
-                "تم تحليل الأمر ✓\n\n"
-                + "الأمر:\n"
-                + cleanCommand
-                + "\n\n"
-                + "نوع العملية:\n"
-                + decision;
-    }
-
-    public String execute(String command) {
-
-        if (command == null ||
-                command.trim().isEmpty()) {
-
-            return "ما عطيتيني حتى أمر.";
-        }
-
-        String cleanCommand =
-                command.trim();
-
-        lastCommand =
-                cleanCommand;
-
-        lastExecutionTime =
-                System.currentTimeMillis();
-
         try {
-
-            /*
-             * الأتمتة متعددة الخطوات خاصها تتفحص
-             * قبل الأمر المفرد.
-             *
-             * مثال:
-             * افتح يوتيوب ثم انتظر 2 ثانية ثم رجع
-             *
-             * ما خاصش JARVIS ينفذ غير "افتح يوتيوب".
-             */
-
-            List<String> steps =
-                    splitIntoSteps(cleanCommand);
-
-            if (steps.size() > 1) {
-
-                String result =
-                        executeSequence(cleanCommand);
-
-                lastResult =
-                        result;
-
-                contextEngine.updateCommand(
-                        cleanCommand,
-                        "AUTOMATION"
-                );
-
-                contextEngine.updateDecision(
-                        "AUTOMATION"
-                );
-
-                return result;
-            }
-
-            String singleResult =
-                    executeSingleCommand(
-                            cleanCommand
-                    );
-
-            if (singleResult != null &&
-                    !singleResult.trim().isEmpty()) {
-
-                lastResult =
-                        singleResult;
-
-                contextEngine.updateCommand(
-                        cleanCommand,
-                        "EXECUTED"
-                );
-
-                contextEngine.updateDecision(
-                        "EXECUTED"
-                );
-
-                return singleResult;
-            }
-
-            String result =
-                    executeSequence(
-                            cleanCommand
-                    );
-
-            lastResult =
-                    result;
+            String decision = safe(
+                    decisionEngine.decide(cleanCommand)
+            );
 
             contextEngine.updateCommand(
                     cleanCommand,
-                    "AUTOMATION"
+                    decision
+            );
+
+            contextEngine.updateDecision(decision);
+
+            return "تم تحليل الأمر ✓\n\n"
+                    + "الأمر:\n"
+                    + cleanCommand
+                    + "\n\n"
+                    + "نوع العملية:\n"
+                    + decision;
+
+        } catch (Exception e) {
+            return "ما قدرتش نحلل الأمر دابا ⚠";
+        }
+    }
+
+    // =========================================================
+    // MAIN EXECUTION
+    // =========================================================
+
+    public synchronized String execute(String command) {
+
+        if (isEmpty(command)) {
+            return "ما عطيتيني حتى أمر.";
+        }
+
+        String cleanCommand = command.trim();
+
+        lastCommand = cleanCommand;
+        lastExecutionTime = System.currentTimeMillis();
+
+        try {
+
+            List<String> steps = splitIntoSteps(cleanCommand);
+
+            String result;
+
+            if (steps.size() > 1) {
+                result = executeSequence(cleanCommand);
+            } else {
+                result = executeSingleCommand(cleanCommand);
+
+                if (result == null || result.trim().isEmpty()) {
+                    result = executeSequence(cleanCommand);
+                }
+            }
+
+            lastResult = safe(result);
+
+            contextEngine.updateCommand(
+                    cleanCommand,
+                    lastResult
             );
 
             contextEngine.updateDecision(
-                    "AUTOMATION"
+                    steps.size() > 1
+                            ? "AUTOMATION"
+                            : "EXECUTED"
             );
 
-            return result;
+            return lastResult;
 
         } catch (Exception e) {
 
             lastResult =
-                    "وقع خطأ أثناء التنفيذ.";
-
-            return
                     "JARVIS Automation: وقع خطأ أثناء التنفيذ ⚠";
+
+            contextEngine.updateCommand(
+                    cleanCommand,
+                    lastResult
+            );
+
+            contextEngine.updateDecision(
+                    "ERROR"
+            );
+
+            return lastResult;
         }
     }
 
-    private String executeSingleCommand(
-            String command
-    ) {
+    // =========================================================
+    // SINGLE COMMAND ENGINE
+    // =========================================================
 
-        String cmd =
-                normalize(command);
+    private String executeSingleCommand(String command) {
+
+        String cmd = normalize(command);
 
         if (cmd.isEmpty()) {
-
             return "الأمر فارغ.";
         }
+
+        // -----------------------------------------------------
+        // SYSTEM NAVIGATION
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
                 "رجع للرئيسية",
                 "الصفحة الرئيسية",
+                "الرئيسية",
                 "home"
         )) {
-
             return androidControlEngine.goHome();
         }
 
@@ -212,7 +164,6 @@ public class AutomationEngine {
                 "رجع خطوة",
                 "back"
         )) {
-
             return androidControlEngine.goBack();
         }
 
@@ -221,9 +172,9 @@ public class AutomationEngine {
                 "التطبيقات الأخيرة",
                 "التطبيقات الاخيرة",
                 "افتح التطبيقات الأخيرة",
+                "افتح التطبيقات الاخيره",
                 "recents"
         )) {
-
             return androidControlEngine.openRecents();
         }
 
@@ -231,9 +182,10 @@ public class AutomationEngine {
                 cmd,
                 "افتح الإشعارات",
                 "افتح الاشعارات",
+                "الإشعارات",
+                "الاشعارات",
                 "notification panel"
         )) {
-
             return androidControlEngine.openNotifications();
         }
 
@@ -241,9 +193,9 @@ public class AutomationEngine {
                 cmd,
                 "لوحة الاختصارات",
                 "افتح لوحة الاختصارات",
+                "الاختصارات",
                 "quick settings"
         )) {
-
             return androidControlEngine.openQuickSettings();
         }
 
@@ -251,20 +203,24 @@ public class AutomationEngine {
                 cmd,
                 "قفل الشاشة",
                 "قفل الهاتف",
+                "سكر الشاشة",
                 "lock screen"
         )) {
-
             return androidControlEngine.lockScreen();
         }
+
+        // -----------------------------------------------------
+        // SETTINGS
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
                 "افتح الإعدادات",
                 "افتح الاعدادات",
                 "فتح الإعدادات",
+                "فتح الاعدادات",
                 "settings"
         )) {
-
             return androidControlEngine.openSettings();
         }
 
@@ -272,9 +228,9 @@ public class AutomationEngine {
                 cmd,
                 "افتح الواي فاي",
                 "الواي فاي",
-                "wifi"
+                "wifi",
+                "wi fi"
         )) {
-
             return androidControlEngine.openWifiSettings();
         }
 
@@ -284,21 +240,33 @@ public class AutomationEngine {
                 "البلوتوث",
                 "bluetooth"
         )) {
-
-            return androidControlEngine
-                    .openBluetoothSettings();
+            return androidControlEngine.openBluetoothSettings();
         }
 
         if (containsAny(
                 cmd,
                 "افتح إمكانية الوصول",
+                "افتح امكانية الوصول",
                 "افتح الاكسيسيبيليتي",
                 "accessibility"
         )) {
-
-            return androidControlEngine
-                    .openAccessibilitySettings();
+            return androidControlEngine.openAccessibilitySettings();
         }
+
+        if (containsAny(
+                cmd,
+                "معلومات الهاتف",
+                "معلومات الجهاز",
+                "حول الهاتف",
+                "حول الجهاز",
+                "device information"
+        )) {
+            return androidControlEngine.openDeviceInformation();
+        }
+
+        // -----------------------------------------------------
+        // COMMON APPS
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -306,7 +274,6 @@ public class AutomationEngine {
                 "فتح يوتيوب",
                 "youtube"
         )) {
-
             return androidControlEngine.openYouTube();
         }
 
@@ -316,7 +283,6 @@ public class AutomationEngine {
                 "فتح واتساب",
                 "whatsapp"
         )) {
-
             return androidControlEngine.openWhatsApp();
         }
 
@@ -326,7 +292,6 @@ public class AutomationEngine {
                 "فتح انستغرام",
                 "instagram"
         )) {
-
             return androidControlEngine.openInstagram();
         }
 
@@ -336,7 +301,6 @@ public class AutomationEngine {
                 "فتح فيسبوك",
                 "facebook"
         )) {
-
             return androidControlEngine.openFacebook();
         }
 
@@ -346,91 +310,176 @@ public class AutomationEngine {
                 "فتح كروم",
                 "chrome"
         )) {
-
             return androidControlEngine.openChrome();
         }
 
-        if (cmd.startsWith(
-                "افتح تطبيق "
+        // -----------------------------------------------------
+        // OPEN APPLICATION BY NAME
+        // -----------------------------------------------------
+
+        if (startsWithAny(
+                cmd,
+                "افتح تطبيق ",
+                "فتح تطبيق ",
+                "شغل تطبيق ",
+                "شغل "
         )) {
 
-            String app =
-                    removePrefix(
-                            command,
-                            "افتح تطبيق"
-                    );
+            String app = extractAfterPrefix(
+                    command,
+                    "افتح تطبيق",
+                    "فتح تطبيق",
+                    "شغل تطبيق",
+                    "شغل"
+            );
 
             if (!app.isEmpty()) {
-
                 return androidControlEngine
                         .openApplicationByName(app);
             }
         }
 
-        if (cmd.startsWith(
-                "فتح تطبيق "
+        // -----------------------------------------------------
+        // WEB SEARCH
+        // -----------------------------------------------------
+
+        if (startsWithAny(
+                cmd,
+                "قلب ليا على ",
+                "قلب لي على ",
+                "قلب على ",
+                "ابحث عن ",
+                "بحث عن ",
+                "بحث على ",
+                "search for "
         )) {
 
-            String app =
-                    removePrefix(
-                            command,
-                            "فتح تطبيق"
-                    );
+            String query = extractAfterPrefix(
+                    command,
+                    "قلب ليا على",
+                    "قلب لي على",
+                    "قلب على",
+                    "ابحث عن",
+                    "بحث عن",
+                    "بحث على",
+                    "search for"
+            );
 
-            if (!app.isEmpty()) {
-
+            if (!query.isEmpty()) {
                 return androidControlEngine
-                        .openApplicationByName(app);
+                        .searchWeb(query);
             }
         }
 
-        if (cmd.startsWith(
-                "اضغط على "
-        ) ||
-                cmd.startsWith(
-                        "ضغط على "
-                ) ||
-                cmd.startsWith(
-                        "كليك على "
-                ) ||
-                cmd.startsWith(
-                        "انقر على "
-                ) ||
-                cmd.startsWith(
-                        "click "
-                )) {
+        // -----------------------------------------------------
+        // OPEN WEBSITE
+        // -----------------------------------------------------
 
-            String target =
-                    extractTarget(
-                            command,
-                            "اضغط على",
-                            "ضغط على",
-                            "كليك على",
-                            "انقر على",
-                            "click"
-                    );
+        if (startsWithAny(
+                cmd,
+                "افتح الموقع ",
+                "فتح الموقع ",
+                "افتح رابط ",
+                "فتح رابط ",
+                "open website ",
+                "open site "
+        )) {
+
+            String url = extractAfterPrefix(
+                    command,
+                    "افتح الموقع",
+                    "فتح الموقع",
+                    "افتح رابط",
+                    "فتح رابط",
+                    "open website",
+                    "open site"
+            );
+
+            if (!url.isEmpty()) {
+                return androidControlEngine
+                        .openWebPage(url);
+            }
+        }
+
+        // -----------------------------------------------------
+        // PHONE
+        // -----------------------------------------------------
+
+        if (startsWithAny(
+                cmd,
+                "اتصل ب ",
+                "اتصل ب",
+                "عيط ل ",
+                "عيط ل",
+                "عيط على ",
+                "عيط على",
+                "call "
+        )) {
+
+            String number = extractAfterPrefix(
+                    command,
+                    "اتصل ب",
+                    "اتصل ب ",
+                    "عيط ل",
+                    "عيط ل ",
+                    "عيط على",
+                    "عيط على ",
+                    "call"
+            );
+
+            if (!number.isEmpty()) {
+                return androidControlEngine
+                        .dialNumber(number);
+            }
+        }
+
+        // -----------------------------------------------------
+        // SCREEN CLICK
+        // -----------------------------------------------------
+
+        if (startsWithAny(
+                cmd,
+                "اضغط على ",
+                "ضغط على ",
+                "كليك على ",
+                "انقر على ",
+                "click "
+        )) {
+
+            String target = extractAfterPrefix(
+                    command,
+                    "اضغط على",
+                    "ضغط على",
+                    "كليك على",
+                    "انقر على",
+                    "click"
+            );
 
             if (!target.isEmpty()) {
-
                 return androidControlEngine
-                        .clickScreenElement(
-                                target
-                        );
+                        .clickScreenElement(target);
             }
         }
 
-        if (cmd.startsWith(
-                "اكتب "
+        // -----------------------------------------------------
+        // SCREEN TEXT INPUT
+        // -----------------------------------------------------
+
+        if (startsWithAny(
+                cmd,
+                "اكتب ",
+                "كتب ",
+                "write "
         )) {
 
-            String text =
-                    removePrefix(
-                            command,
-                            "اكتب"
-                    );
+            String text = extractAfterPrefix(
+                    command,
+                    "اكتب",
+                    "كتب",
+                    "write"
+            );
 
             if (!text.isEmpty()) {
-
                 return androidControlEngine
                         .typeIntoScreen(
                                 "",
@@ -439,25 +488,9 @@ public class AutomationEngine {
             }
         }
 
-        if (cmd.startsWith(
-                "كتب "
-        )) {
-
-            String text =
-                    removePrefix(
-                            command,
-                            "كتب"
-                    );
-
-            if (!text.isEmpty()) {
-
-                return androidControlEngine
-                        .typeIntoScreen(
-                                "",
-                                text
-                        );
-            }
-        }
+        // -----------------------------------------------------
+        // SCROLL
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -467,11 +500,10 @@ public class AutomationEngine {
                 "مرر لتحت",
                 "مرر للأسفل",
                 "انزل",
+                "هبط",
                 "scroll down"
         )) {
-
-            return androidControlEngine
-                    .scrollDown();
+            return androidControlEngine.scrollDown();
         }
 
         if (containsAny(
@@ -482,117 +514,145 @@ public class AutomationEngine {
                 "مرر لفوق",
                 "مرر للأعلى",
                 "طلع",
+                "اصعد",
                 "scroll up"
         )) {
-
-            return androidControlEngine
-                    .scrollUp();
+            return androidControlEngine.scrollUp();
         }
+
+        // -----------------------------------------------------
+        // SCREEN INTELLIGENCE
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
                 "شوف الشاشة",
+                "اقرا الشاشة",
                 "اقرأ الشاشة",
                 "حلل الشاشة",
-                "analyze screen"
+                "شنو كاين فالشاشة",
+                "شنو فالشاشة",
+                "analyze screen",
+                "read screen"
         )) {
 
-            JarvisAccessibilityService service =
-                    JarvisAccessibilityService
-                            .getInstance();
-
-            if (service == null) {
-
-                return
-                        "Accessibility Service غير مفعلة.";
-            }
-
-            return service.getScreenText();
+            return androidControlEngine
+                    .getCurrentScreenText();
         }
 
         if (containsAny(
                 cmd,
-                "معلومات الهاتف",
-                "معلومات الجهاز",
-                "حول الهاتف"
+                "شوف شجرة الشاشة",
+                "شجرة الشاشة",
+                "screen tree"
         )) {
 
             return androidControlEngine
-                    .openDeviceInformation();
+                    .getCurrentScreenTree();
         }
+
+        // -----------------------------------------------------
+        // TASK COMMANDS
+        // -----------------------------------------------------
+
+        if (startsWithAny(
+                cmd,
+                "زيد مهمة ",
+                "اضف مهمة ",
+                "أضف مهمة ",
+                "ضيف مهمة ",
+                "add task "
+        )) {
+
+            String task = extractAfterPrefix(
+                    command,
+                    "زيد مهمة",
+                    "اضف مهمة",
+                    "أضف مهمة",
+                    "ضيف مهمة",
+                    "add task"
+            );
+
+            if (!task.isEmpty()) {
+                return createTask(task);
+            }
+        }
+
+        if (containsAny(
+                cmd,
+                "شوف المهام",
+                "المهام ديالي",
+                "المهام",
+                "show tasks"
+        )) {
+            return getTasks();
+        }
+
+        if (containsAny(
+                cmd,
+                "حيد المهام المكتملة",
+                "مسح المهام المكتملة",
+                "clear completed tasks"
+        )) {
+            return clearCompletedTasks();
+        }
+
+        if (containsAny(
+                cmd,
+                "حيد جميع المهام",
+                "مسح جميع المهام",
+                "clear all tasks"
+        )) {
+            return clearAllTasks();
+        }
+
+        // -----------------------------------------------------
+        // UNKNOWN
+        // -----------------------------------------------------
 
         return null;
     }
 
-    private String executeSequence(
-            String command
-    ) {
+    // =========================================================
+    // MULTI STEP AUTOMATION
+    // =========================================================
 
-        List<String> steps =
-                splitIntoSteps(command);
+    private String executeSequence(String command) {
+
+        List<String> steps = splitIntoSteps(command);
 
         if (steps.isEmpty()) {
-
-            return
-                    "JARVIS: ما قدرتش نفهم خطوات الأتمتة.";
+            return "JARVIS: ما قدرتش نفهم خطوات الأتمتة.";
         }
 
         StringBuilder report =
                 new StringBuilder();
 
-        report.append(
-                "JARVIS AUTOMATION\n"
-        );
-
-        report.append(
-                "=================\n\n"
-        );
+        report.append("JARVIS AUTOMATION\n");
+        report.append("=================\n\n");
 
         int successCount = 0;
+        int totalCount = steps.size();
 
-        int totalCount =
-                steps.size();
+        for (int i = 0; i < totalCount; i++) {
 
-        for (
-                int i = 0;
-                i < totalCount;
-                i++
-        ) {
+            String step = steps.get(i);
 
-            String step =
-                    steps.get(i);
+            report.append("STEP ")
+                    .append(i + 1)
+                    .append(":\n")
+                    .append(step)
+                    .append("\n");
 
-            report.append(
-                    "STEP "
-            )
-                    .append(
-                            i + 1
-                    )
-                    .append(
-                            ":\n"
-                    );
+            String result = executeStep(step);
 
-            report.append(step);
-            report.append("\n");
+            result = safe(result);
 
-            String result =
-                    executeStep(step);
-
-            if (result == null) {
-
-                result =
-                        "الأمر ما تعالجش.";
-            }
-
-            report.append(
-                    "RESULT:\n"
-            );
-
-            report.append(result);
-            report.append("\n\n");
+            report.append("RESULT:\n")
+                    .append(result)
+                    .append("\n\n");
 
             if (isSuccessResult(result)) {
-
                 successCount++;
             }
 
@@ -610,17 +670,11 @@ public class AutomationEngine {
             }
         }
 
-        report.append(
-                "SUMMARY:\n"
-        );
-
-        report.append(successCount);
-        report.append("/");
-        report.append(totalCount);
-
-        report.append(
-                " خطوات منفذة بنجاح."
-        );
+        report.append("SUMMARY:\n")
+                .append(successCount)
+                .append("/")
+                .append(totalCount)
+                .append(" خطوات منفذة بنجاح.");
 
         if (successCount == totalCount) {
 
@@ -638,62 +692,53 @@ public class AutomationEngine {
         return report.toString();
     }
 
-    private String executeStep(
-            String step
-    ) {
+    private String executeStep(String step) {
 
-        if (step == null ||
-                step.trim().isEmpty()) {
-
+        if (isEmpty(step)) {
             return "الخطوة فارغة.";
         }
 
-        String clean =
-                step.trim();
+        String clean = step.trim();
 
-        long delay =
-                extractDelay(clean);
+        long delay = extractDelay(clean);
 
         if (delay >= 0L) {
 
             try {
 
-                Thread.sleep(
-                        Math.min(
-                                delay,
-                                10000L
-                        )
-                );
+                long safeDelay =
+                        Math.min(delay, 10000L);
 
-                return
-                        "انتظرت "
-                                + delay
-                                + "ms ✓";
+                Thread.sleep(safeDelay);
 
-            } catch (
-                    InterruptedException e
-            ) {
+                return "انتظرت "
+                        + safeDelay
+                        + "ms ✓";
 
-                Thread.currentThread()
-                        .interrupt();
+            } catch (InterruptedException e) {
 
-                return
-                        "التنفيذ توقف أثناء الانتظار ⚠";
+                Thread.currentThread().interrupt();
+
+                return "التنفيذ توقف أثناء الانتظار ⚠";
             }
         }
 
         String result =
                 executeSingleCommand(clean);
 
-        if (result != null) {
+        if (result != null &&
+                !result.trim().isEmpty()) {
 
             return result;
         }
 
-        return
-                "JARVIS: ما فهمتش هاد الخطوة:\n"
-                        + clean;
+        return "JARVIS: ما فهمتش هاد الخطوة:\n"
+                + clean;
     }
+
+    // =========================================================
+    // STEP SPLITTER
+    // =========================================================
 
     private List<String> splitIntoSteps(
             String command
@@ -702,51 +747,36 @@ public class AutomationEngine {
         List<String> steps =
                 new ArrayList<>();
 
-        if (command == null) {
-
+        if (isEmpty(command)) {
             return steps;
         }
 
         String normalized =
-                command
-                        .trim()
-                        .replace(
-                                " ثم ",
-                                "||"
-                        )
-                        .replace(
-                                " ومن بعد ",
-                                "||"
-                        )
-                        .replace(
-                                " وبعدها ",
-                                "||"
-                        )
-                        .replace(
-                                " بعد ذلك ",
-                                "||"
-                        )
-                        .replace(
-                                " وبعد ",
-                                "||"
-                        )
-                        .replace(
-                                " و من بعد ",
-                                "||"
-                        )
-                        .replace(
-                                " ; ",
-                                "||"
-                        )
-                        .replace(
-                                ";",
-                                "||"
-                        );
+                command.trim();
+
+        String[] separators = {
+                " ثم ",
+                " ومن بعد ",
+                " و من بعد ",
+                " وبعدها ",
+                " و بعدها ",
+                " بعد ذلك ",
+                " وبعد ",
+                " ومن بعد",
+                "؛",
+                ";"
+        };
+
+        for (String separator : separators) {
+            normalized =
+                    normalized.replace(
+                            separator,
+                            "||"
+                    );
+        }
 
         String[] parts =
-                normalized.split(
-                        "\\|\\|"
-                );
+                normalized.split("\\|\\|");
 
         for (String part : parts) {
 
@@ -754,116 +784,118 @@ public class AutomationEngine {
                     part.trim();
 
             if (!clean.isEmpty()) {
-
                 steps.add(clean);
             }
         }
 
-        if (steps.isEmpty() &&
-                !command.trim().isEmpty()) {
-
-            steps.add(
-                    command.trim()
-            );
+        if (steps.isEmpty()) {
+            steps.add(command.trim());
         }
 
         return steps;
     }
 
-    public String createTask(
-            String task
-    ) {
+    // =========================================================
+    // TASK MANAGEMENT
+    // =========================================================
 
-        if (task == null ||
-                task.trim().isEmpty()) {
+    public String createTask(String task) {
 
-            return
-                    "حدد المهمة اللي بغيتي نضيف.";
+        if (isEmpty(task)) {
+            return "حدد المهمة اللي بغيتي نضيف.";
         }
 
+        String cleanTask = task.trim();
+
         String result =
-                taskManager.addTask(
-                        task.trim()
-                );
+                taskManager.addTask(cleanTask);
 
-        contextEngine.updateGoal(
-                task.trim()
+        contextEngine.updateGoal(cleanTask);
+
+        return safe(result);
+    }
+
+    public String completeTask(int index) {
+        return safe(
+                taskManager.completeTask(index)
         );
-
-        return result;
     }
 
-    public String completeTask(
-            int index
-    ) {
-
-        return taskManager.completeTask(index);
-    }
-
-    public String removeTask(
-            int index
-    ) {
-
-        return taskManager.removeTask(index);
+    public String removeTask(int index) {
+        return safe(
+                taskManager.removeTask(index)
+        );
     }
 
     public String getTasks() {
-
-        return taskManager.getTasks();
+        return safe(
+                taskManager.getTasks()
+        );
     }
 
     public String clearCompletedTasks() {
-
-        return taskManager.clearCompleted();
+        return safe(
+                taskManager.clearCompleted()
+        );
     }
 
     public String clearAllTasks() {
-
-        return taskManager.clearAll();
+        return safe(
+                taskManager.clearAll()
+        );
     }
 
-    public String createPlan(
-            String goal
-    ) {
+    // =========================================================
+    // PLANNING
+    // =========================================================
 
-        if (goal == null ||
-                goal.trim().isEmpty()) {
+    public String createPlan(String goal) {
 
+        if (isEmpty(goal)) {
             return "حدد الهدف الأول.";
         }
 
-        contextEngine.updateGoal(
-                goal.trim()
-        );
+        String cleanGoal =
+                goal.trim();
 
-        return contextEngine
-                .createContextPlan();
+        contextEngine.updateGoal(cleanGoal);
+
+        return safe(
+                contextEngine.createContextPlan()
+        );
     }
+
+    // =========================================================
+    // REMINDERS
+    // =========================================================
 
     public String createReminder(
             String title,
             long triggerTime
     ) {
 
-        if (title == null ||
-                title.trim().isEmpty()) {
-
-            return
-                    "خاصك تحدد اسم التذكير.";
+        if (isEmpty(title)) {
+            return "خاصك تحدد اسم التذكير.";
         }
 
-        return reminderEngine
-                .createReminder(
+        return safe(
+                reminderEngine.createReminder(
                         title.trim(),
                         triggerTime
-                );
+                )
+        );
     }
 
     public String getLastReminder() {
 
-        return reminderEngine
-                .getLastReminder();
+        return safe(
+                reminderEngine.getLastReminder()
+        );
     }
+
+    // =========================================================
+    // STATUS
+    // =========================================================
 
     public String getAutomationStatus() {
 
@@ -875,14 +907,18 @@ public class AutomationEngine {
         );
 
         report.append(
-                "Engine: ONLINE ✓\n"
+                "Engine: "
+        )
+        .append(
+                isHealthy()
+                        ? "ONLINE ✓"
+                        : "ERROR ⚠"
         );
 
         report.append(
-                "Decision Engine: "
-        );
-
-        report.append(
+                "\nDecision Engine: "
+        )
+        .append(
                 safe(
                         decisionEngine.getStatus()
                 )
@@ -890,9 +926,8 @@ public class AutomationEngine {
 
         report.append(
                 "\nTask Manager: "
-        );
-
-        report.append(
+        )
+        .append(
                 safe(
                         taskManager.getStatus()
                 )
@@ -900,9 +935,8 @@ public class AutomationEngine {
 
         report.append(
                 "\nReminder Engine: "
-        );
-
-        report.append(
+        )
+        .append(
                 safe(
                         reminderEngine.getStatus()
                 )
@@ -910,20 +944,17 @@ public class AutomationEngine {
 
         report.append(
                 "\nAndroid Control: "
-        );
-
-        report.append(
+        )
+        .append(
                 safe(
-                        androidControlEngine
-                                .getStatus()
+                        androidControlEngine.getStatus()
                 )
         );
 
         report.append(
                 "\nContext Engine: "
-        );
-
-        report.append(
+        )
+        .append(
                 safe(
                         contextEngine.getStatus()
                 )
@@ -931,9 +962,8 @@ public class AutomationEngine {
 
         report.append(
                 "\n\nLast Command: "
-        );
-
-        report.append(
+        )
+        .append(
                 lastCommand.isEmpty()
                         ? "NONE"
                         : lastCommand
@@ -941,9 +971,8 @@ public class AutomationEngine {
 
         report.append(
                 "\nLast Result: "
-        );
-
-        report.append(
+        )
+        .append(
                 lastResult.isEmpty()
                         ? "NONE"
                         : lastResult
@@ -954,27 +983,23 @@ public class AutomationEngine {
 
     public String getStatus() {
 
-        if (isHealthy()) {
-
-            return
-                    "Automation Engine: ONLINE ✓";
-        }
-
-        return
-                "Automation Engine: ERROR ⚠";
+        return isHealthy()
+                ? "Automation Engine: ONLINE ✓"
+                : "Automation Engine: ERROR ⚠";
     }
 
     public boolean isHealthy() {
 
         try {
 
-            decisionEngine.getStatus();
-            taskManager.getStatus();
-            reminderEngine.getStatus();
-            androidControlEngine.getStatus();
-            contextEngine.getStatus();
-
-            return true;
+            return context != null
+                    && decisionEngine != null
+                    && taskManager != null
+                    && reminderEngine != null
+                    && androidControlEngine != null
+                    && contextEngine != null
+                    && androidControlEngine.isHealthy()
+                    && reminderEngine.isHealthy();
 
         } catch (Exception e) {
 
@@ -982,105 +1007,104 @@ public class AutomationEngine {
         }
     }
 
-    public String getLastCommand() {
+    // =========================================================
+    // LAST EXECUTION
+    // =========================================================
 
+    public String getLastCommand() {
         return lastCommand;
     }
 
     public String getLastResult() {
-
         return lastResult;
     }
 
     public long getLastExecutionTime() {
-
         return lastExecutionTime;
     }
 
-    private long extractDelay(
-            String command
-    ) {
+    // =========================================================
+    // DELAY ENGINE
+    // =========================================================
 
-        String lower =
+    private long extractDelay(String command) {
+
+        String value =
                 normalize(command);
 
-        if (!lower.startsWith(
-                "انتظر "
-        ) &&
-                !lower.startsWith(
-                        "استنى "
-                ) &&
-                !lower.startsWith(
-                        "wait "
-                )) {
-
+        if (!startsWithAny(
+                value,
+                "انتظر ",
+                "استنى ",
+                "استنا ",
+                "تسنى ",
+                "wait "
+        )) {
             return -1L;
         }
 
-        String value =
-                lower
-                        .replace(
-                                "انتظر",
-                                ""
-                        )
-                        .replace(
-                                "استنى",
-                                ""
-                        )
-                        .replace(
-                                "wait",
-                                ""
-                        )
-                        .trim();
+        String delayText =
+                extractAfterPrefix(
+                        command,
+                        "انتظر",
+                        "استنى",
+                        "استنا",
+                        "تسنى",
+                        "wait"
+                );
 
-        if (value.isEmpty()) {
+        if (delayText.isEmpty()) {
+            return 1000L;
+        }
 
+        String normalized =
+                normalize(delayText);
+
+        String digits =
+                normalized.replaceAll(
+                        "[^0-9]",
+                        ""
+                );
+
+        if (digits.isEmpty()) {
             return 1000L;
         }
 
         try {
 
-            String digits =
-                    value.replaceAll(
-                            "[^0-9]",
-                            ""
-                    );
-
-            if (digits.isEmpty()) {
-
-                return 1000L;
-            }
-
             long number =
                     Long.parseLong(digits);
 
-            if (value.contains(
-                    "ثانيه"
-            ) ||
-                    value.contains(
-                            "ثانية"
-                    ) ||
-                    value.contains(
-                            "second"
-                    )) {
-
+            if (containsAny(
+                    normalized,
+                    "ثانيه",
+                    "ثواني",
+                    "second",
+                    "seconds",
+                    "s"
+            )) {
                 return number * 1000L;
             }
 
-            if (value.contains(
-                    "دقيقه"
-            ) ||
-                    value.contains(
-                            "دقيقة"
-                    ) ||
-                    value.contains(
-                            "minute"
-                    )) {
-
+            if (containsAny(
+                    normalized,
+                    "دقيقه",
+                    "دقائق",
+                    "minute",
+                    "minutes",
+                    "min"
+            )) {
                 return number * 60000L;
             }
 
-            return number;
+            /*
+             * إذا قال:
+             * انتظر 2
+             *
+             * كنعتابروها ثواني،
+             * وهذا أكثر طبيعي فالأوامر الصوتية.
+             */
+            return number * 1000L;
 
         } catch (Exception e) {
 
@@ -1088,139 +1112,169 @@ public class AutomationEngine {
         }
     }
 
+    // =========================================================
+    // RESULT VALIDATION
+    // =========================================================
+
     private boolean isSuccessResult(
             String result
     ) {
 
-        if (result == null) {
-
+        if (isEmpty(result)) {
             return false;
         }
 
         String value =
                 normalize(result);
 
-        return
-                !value.contains(
-                        "ما قدرتش"
-                )
-                && !value.contains(
-                        "ما لقيتش"
-                )
-                && !value.contains(
-                        "غير مفعله"
-                )
-                && !value.contains(
-                        "غير مفعلة"
-                )
-                && !value.contains(
-                        "فشل"
-                )
-                && !value.contains(
-                        "error"
-                )
-                && !value.contains(
-                        "وقع خطا"
-                )
-                && !value.contains(
-                        "وقع خطأ"
-                );
+        return !value.contains("ما قدرتش")
+                && !value.contains("ما قدرتش")
+                && !value.contains("ما لقيتش")
+                && !value.contains("غير مفعله")
+                && !value.contains("غير مفعلة")
+                && !value.contains("فشل")
+                && !value.contains("error")
+                && !value.contains("وقع خطا")
+                && !value.contains("توقف");
     }
 
     private boolean isHardFailure(
             String result
     ) {
 
-        if (result == null) {
-
+        if (isEmpty(result)) {
             return true;
         }
 
         String value =
                 normalize(result);
 
-        return
-                value.contains(
-                        "وقع خطا"
-                )
-                || value.contains(
-                        "وقع خطأ"
-                )
-                || value.contains(
-                        "error"
-                )
-                || value.contains(
-                        "فشل التنفيذ"
-                );
+        return value.contains("وقع خطا")
+                || value.contains("error")
+                || value.contains("فشل التنفيذ")
+                || value.contains("التنفيذ توقف");
     }
 
-    private String removePrefix(
+    // =========================================================
+    // PREFIX HELPERS
+    // =========================================================
+
+    private String extractAfterPrefix(
             String original,
-            String prefix
+            String... prefixes
     ) {
 
-        if (original == null ||
-                prefix == null) {
-
+        if (isEmpty(original)) {
             return "";
         }
 
         String value =
                 original.trim();
 
-        String lowerValue =
+        String normalizedValue =
                 normalize(value);
-
-        String lowerPrefix =
-                normalize(prefix);
-
-        if (lowerValue.startsWith(
-                lowerPrefix
-        )) {
-
-            return value
-                    .substring(
-                            prefix.length()
-                    )
-                    .trim();
-        }
-
-        return "";
-    }
-
-    private String extractTarget(
-            String command,
-            String... prefixes
-    ) {
-
-        if (command == null) {
-
-            return "";
-        }
 
         for (String prefix : prefixes) {
 
-            String result =
-                    removePrefix(
-                            command,
-                            prefix
-                    );
+            if (isEmpty(prefix)) {
+                continue;
+            }
 
-            if (!result.isEmpty()) {
+            String normalizedPrefix =
+                    normalize(prefix);
 
-                return result;
+            if (normalizedValue.startsWith(
+                    normalizedPrefix
+            )) {
+
+                int originalIndex =
+                        findPrefixEnd(
+                                value,
+                                prefix
+                        );
+
+                if (originalIndex >= 0 &&
+                        originalIndex <= value.length()) {
+
+                    return value
+                            .substring(originalIndex)
+                            .trim();
+                }
             }
         }
 
         return "";
     }
 
-    private String normalize(
-            String value
+    private int findPrefixEnd(
+            String original,
+            String prefix
     ) {
 
-        if (value == null) {
+        if (original == null ||
+                prefix == null) {
+            return -1;
+        }
 
+        String normalizedOriginal =
+                normalize(original);
+
+        String normalizedPrefix =
+                normalize(prefix);
+
+        if (!normalizedOriginal.startsWith(
+                normalizedPrefix
+        )) {
+            return -1;
+        }
+
+        /*
+         * كنستعمل طول الـprefix الأصلي
+         * باش العربية ما تسببش مشاكل فـsubstring.
+         */
+        return Math.min(
+                prefix.length(),
+                original.length()
+        );
+    }
+
+    private boolean startsWithAny(
+            String text,
+            String... prefixes
+    ) {
+
+        if (text == null) {
+            return false;
+        }
+
+        String normalized =
+                normalize(text);
+
+        for (String prefix : prefixes) {
+
+            if (prefix == null) {
+                continue;
+            }
+
+            String target =
+                    normalize(prefix);
+
+            if (!target.isEmpty()
+                    && normalized.startsWith(target)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // =========================================================
+    // TEXT NORMALIZATION
+    // =========================================================
+
+    private String normalize(String value) {
+
+        if (value == null) {
             return "";
         }
 
@@ -1240,7 +1294,6 @@ public class AutomationEngine {
     ) {
 
         if (text == null) {
-
             return false;
         }
 
@@ -1250,16 +1303,14 @@ public class AutomationEngine {
         for (String value : values) {
 
             if (value == null) {
-
                 continue;
             }
 
             String target =
                     normalize(value);
 
-            if (!target.isEmpty() &&
-                    normalized.contains(target)) {
-
+            if (!target.isEmpty()
+                    && normalized.contains(target)) {
                 return true;
             }
         }
@@ -1267,9 +1318,17 @@ public class AutomationEngine {
         return false;
     }
 
-    private String safe(
-            String value
-    ) {
+    // =========================================================
+    // UTILITIES
+    // =========================================================
+
+    private boolean isEmpty(String value) {
+
+        return value == null
+                || value.trim().isEmpty();
+    }
+
+    private String safe(String value) {
 
         if (value == null ||
                 value.trim().isEmpty()) {
