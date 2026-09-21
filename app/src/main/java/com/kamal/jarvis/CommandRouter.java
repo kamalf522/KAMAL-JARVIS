@@ -17,6 +17,7 @@ public class CommandRouter {
     private final AndroidControlEngine androidControl;
     private final JarvisIntelligenceEngine intelligenceEngine;
     private final NotificationIntelligence notificationIntelligence;
+    private final DecisionEngine decisionEngine;
 
     public CommandRouter(Context context) {
         this.context = context.getApplicationContext();
@@ -30,6 +31,8 @@ public class CommandRouter {
                 new JarvisIntelligenceEngine(this.context);
         this.notificationIntelligence =
                 new NotificationIntelligence(this.context);
+        this.decisionEngine =
+                new DecisionEngine(this.context);
     }
 
     public String execute(String command) {
@@ -45,6 +48,16 @@ public class CommandRouter {
 
         if (original.isEmpty()) {
             return "ما سمعت حتى أمر.";
+        }
+
+        /*
+         * DecisionEngine كيحلل الأمر ويسجل القرار قبل التنفيذ.
+         * إذا وقع مشكل فالتحليل، ما خاصوش يوقف تنفيذ الأمر.
+         */
+        try {
+            decisionEngine.decide(original);
+        } catch (Exception ignored) {
+            // القرار مجرد طبقة ذكاء إضافية ولا يجب أن يمنع التنفيذ.
         }
 
         String intelligenceResponse =
@@ -1103,13 +1116,6 @@ public class CommandRouter {
         return false;
     }
 
-    /*
-     * إزالة البادئة بشكل آمن.
-     *
-     * الإصدار القديم كان يستعمل طول prefix الأصلي
-     * بعد مقارنة النص المنظم، وهذا يقدر يقطع من
-     * بداية كلمة البحث بشكل خاطئ خصوصا مع العربية.
-     */
     private String removePrefix(
             String value,
             String prefix
