@@ -1,3 +1,4 @@
+
 <?xml version="1.0" encoding="utf-8"?>
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -20,6 +21,8 @@
     <application
         android:theme="@style/AppTheme"
         android:label="Kamal JARVIS"
+        android:icon="@drawable/jarvis_logo"
+        android:roundIcon="@drawable/jarvis_logo"
         android:allowBackup="true"
         android:supportsRtl="true">
 
@@ -28,7 +31,6 @@
             android:exported="true">
 
             <intent-filter>
-
                 <action
                     android:name="android.intent.action.MAIN" />
 
@@ -49,10 +51,8 @@
             android:exported="false">
 
             <intent-filter>
-
                 <action
                     android:name="android.accessibilityservice.AccessibilityService" />
-
             </intent-filter>
 
             <meta-data
@@ -68,10 +68,8 @@
             android:exported="true">
 
             <intent-filter>
-
                 <action
                     android:name="android.service.notification.NotificationListenerService" />
-
             </intent-filter>
 
         </service>
