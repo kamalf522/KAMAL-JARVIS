@@ -11,6 +11,28 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * JARVIS EVOLUTION ENGINE
+ *
+ * العقل المنسق للتطور الذاتي.
+ *
+ * المسؤوليات:
+ * 1. التشخيص
+ * 2. اختيار هدف التطوير
+ * 3. إنشاء خطة التطوير
+ * 4. إدارة المهارات والقدرات
+ * 5. تشغيل Self Builder
+ * 6. تعديل Source داخل Workspace
+ * 7. Snapshot / Rollback
+ * 8. Self Test
+ * 9. APK Build
+ * 10. تسجيل تاريخ التطور
+ * 11. حفظ نتائج التطور في الذاكرة
+ *
+ * ملاحظة:
+ * Android لا يسمح للتطبيق بتعديل APK المثبت مباشرة.
+ * Self Builder يعدل Workspace ثم يمكن بناء APK جديد.
+ */
 public class EvolutionEngine {
 
     private static final String PREFS_NAME =
@@ -30,6 +52,9 @@ public class EvolutionEngine {
 
     private static final String KEY_ACTIVE_TARGET =
             "active_development_target";
+
+    private static final String KEY_LAST_RESULT =
+            "last_evolution_result";
 
     private final Context context;
     private final SharedPreferences prefs;
@@ -94,7 +119,7 @@ public class EvolutionEngine {
             prefs.edit()
                     .putString(
                             KEY_VERSION,
-                            "6.0"
+                            "7.0"
                     )
                     .apply();
         }
@@ -219,6 +244,16 @@ public class EvolutionEngine {
                                         "status"
                                 )
                         )
+                        .append("\n");
+
+                result.append(
+                        "التاريخ: "
+                )
+                        .append(
+                                item.optString(
+                                        "created"
+                                )
+                        )
                         .append("\n\n");
             }
 
@@ -227,7 +262,8 @@ public class EvolutionEngine {
         } catch (Exception e) {
 
             return
-                    "تعذر قراءة الأهداف.";
+                    "تعذر قراءة الأهداف:\n"
+                            + safeError(e);
         }
     }
 
@@ -324,7 +360,6 @@ public class EvolutionEngine {
              i++) {
 
             if (i > 0) {
-
                 result.append("\n");
             }
 
@@ -354,6 +389,12 @@ public class EvolutionEngine {
             String name,
             String description
     ) {
+
+        if (name == null ||
+                name.trim().isEmpty()) {
+
+            return;
+        }
 
         boolean added =
                 capabilityManager.addCapability(
@@ -504,6 +545,252 @@ public class EvolutionEngine {
     getSelfBuilderEngine() {
 
         return selfBuilderEngine;
+    }
+
+    // =========================================================
+    // REAL SOURCE EVOLUTION
+    // =========================================================
+
+    /**
+     * تعديل حقيقي وآمن لملف داخل Workspace.
+     *
+     * لا يتم التعديل إلا إذا كان oldText موجودا مرة واحدة.
+     */
+    public String evolveSourceFile(
+            String path,
+            String oldText,
+            String newText,
+            String reason
+    ) {
+
+        try {
+
+            String target =
+                    getActiveDevelopmentTarget();
+
+            String finalReason =
+                    reason == null ||
+                            reason.trim().isEmpty()
+                            ? "Evolution target: " + target
+                            : reason;
+
+            recordHistory(
+                    "SOURCE_EVOLUTION_START",
+                    path + " | " + finalReason
+            );
+
+            String result =
+                    selfBuilderEngine
+                            .evolveSourceFile(
+                                    path,
+                                    oldText,
+                                    newText,
+                                    finalReason
+                            );
+
+            boolean success =
+                    result != null &&
+                            !result
+                                    .toLowerCase(
+                                            Locale.US
+                                    )
+                                    .contains(
+                                            "failed"
+                                    ) &&
+                            !result
+                                    .contains(
+                                            "فشل"
+                                    );
+
+            if (success) {
+
+                recordHistory(
+                        "SOURCE_EVOLUTION_SUCCESS",
+                        path
+                );
+
+                memoryManager.saveMemory(
+                        "__last_source_evolution__",
+                        path
+                );
+
+                memoryManager.saveMemory(
+                        "__last_source_evolution_time__",
+                        now()
+                );
+
+            } else {
+
+                recordHistory(
+                        "SOURCE_EVOLUTION_FAILED",
+                        result
+                );
+            }
+
+            return result;
+
+        } catch (Exception e) {
+
+            recordHistory(
+                    "SOURCE_EVOLUTION_ERROR",
+                    safeError(e)
+            );
+
+            return
+                    "فشل التطوير:\n"
+                    + safeError(e);
+        }
+    }
+
+    /**
+     * إنشاء/استبدال ملف داخل Workspace.
+     */
+    public String writeSourceFile(
+            String path,
+            String content
+    ) {
+
+        try {
+
+            String result =
+                    selfBuilderEngine
+                            .writeSourceFile(
+                                    path,
+                                    content
+                            );
+
+            recordHistory(
+                    "SOURCE_WRITE",
+                    path
+            );
+
+            return result;
+
+        } catch (Exception e) {
+
+            recordHistory(
+                    "SOURCE_WRITE_ERROR",
+                    safeError(e)
+            );
+
+            return
+                    "فشل كتابة Source:\n"
+                    + safeError(e);
+        }
+    }
+
+    /**
+     * قراءة Source.
+     */
+    public String readSourceFile(
+            String path
+    ) {
+
+        try {
+
+            return selfBuilderEngine
+                    .readSourceFile(
+                            path
+                    );
+
+        } catch (Exception e) {
+
+            return
+                    "فشل قراءة Source:\n"
+                    + safeError(e);
+        }
+    }
+
+    /**
+     * بحث داخل Source.
+     */
+    public String searchSource(
+            String query
+    ) {
+
+        try {
+
+            return selfBuilderEngine
+                    .searchSource(
+                            query
+                    );
+
+        } catch (Exception e) {
+
+            return
+                    "فشل البحث داخل Source:\n"
+                    + safeError(e);
+        }
+    }
+
+    /**
+     * إنشاء Snapshot قبل التعديل.
+     */
+    public String createDevelopmentSnapshot(
+            String reason
+    ) {
+
+        try {
+
+            String result =
+                    selfBuilderEngine
+                            .createSnapshot(
+                                    reason
+                            );
+
+            recordHistory(
+                    "SNAPSHOT",
+                    result
+            );
+
+            return result;
+
+        } catch (Exception e) {
+
+            recordHistory(
+                    "SNAPSHOT_ERROR",
+                    safeError(e)
+            );
+
+            return
+                    "فشل Snapshot:\n"
+                    + safeError(e);
+        }
+    }
+
+    /**
+     * Rollback إلى Snapshot.
+     */
+    public String rollbackDevelopment(
+            String snapshotId
+    ) {
+
+        try {
+
+            String result =
+                    selfBuilderEngine
+                            .rollback(
+                                    snapshotId
+                            );
+
+            recordHistory(
+                    "ROLLBACK",
+                    result
+            );
+
+            return result;
+
+        } catch (Exception e) {
+
+            recordHistory(
+                    "ROLLBACK_ERROR",
+                    safeError(e)
+            );
+
+            return
+                    "فشل Rollback:\n"
+                    + safeError(e);
+        }
     }
 
     // =========================================================
@@ -733,7 +1020,7 @@ public class EvolutionEngine {
                 new StringBuilder();
 
         result.append(
-                "JARVIS EVOLUTION ENGINE 6.0\n"
+                "JARVIS EVOLUTION ENGINE 7.0\n"
         );
 
         result.append(
@@ -754,7 +1041,7 @@ public class EvolutionEngine {
         );
 
         result.append(
-                "✓ فحص الحالة العامة للنظام.\n\n"
+                "✓ تم فحص حالة النظام.\n\n"
         );
 
         // =====================================================
@@ -786,7 +1073,7 @@ public class EvolutionEngine {
         );
 
         result.append(
-                "✓ جاهزية النظام: "
+                "✓ الجاهزية: "
         )
                 .append(
                         readiness
@@ -794,7 +1081,7 @@ public class EvolutionEngine {
                 .append("%\n\n");
 
         // =====================================================
-        // 3 CAPABILITY SCAN
+        // 3 CAPABILITIES
         // =====================================================
 
         int capabilityCount =
@@ -840,7 +1127,7 @@ public class EvolutionEngine {
                 .append("\n\n");
 
         // =====================================================
-        // 5 DEVELOPMENT PLAN
+        // 5 PLAN
         // =====================================================
 
         String developmentPlan;
@@ -854,13 +1141,8 @@ public class EvolutionEngine {
         } catch (Exception e) {
 
             developmentPlan =
-                    "خطة التطوير غير متاحة.";
+                    "الخطة غير متاحة.";
         }
-
-        recordHistory(
-                "DEVELOPMENT_PLAN",
-                target
-        );
 
         result.append(
                 "5. DEVELOPMENT PLAN\n"
@@ -871,25 +1153,13 @@ public class EvolutionEngine {
         )
                 .append("\n\n");
 
-        // =====================================================
-        // 6 LEARNING
-        // =====================================================
-
         recordHistory(
-                "LEARN",
-                "Learning stage active"
-        );
-
-        result.append(
-                "6. LEARN\n"
-        );
-
-        result.append(
-                "✓ Skill Manager جاهز للتعلم.\n\n"
+                "DEVELOPMENT_PLAN",
+                target
         );
 
         // =====================================================
-        // 7 SELF BUILDER
+        // 6 BUILDER INIT
         // =====================================================
 
         String builderInit;
@@ -897,28 +1167,23 @@ public class EvolutionEngine {
         try {
 
             builderInit =
-                    selfBuilderEngine
-                            .initialize();
+                    selfBuilderEngine.initialize();
 
-            recordHistory(
-                    "BUILDER_INITIALIZED",
-                    "Self Builder online"
-            );
+            selfBuilderEngine
+                    .registerDevelopment(
+                            target,
+                            "Automatic evolution target"
+                    );
 
         } catch (Exception e) {
 
             builderInit =
                     "ERROR: "
                             + safeError(e);
-
-            recordHistory(
-                    "BUILDER_ERROR",
-                    builderInit
-            );
         }
 
         result.append(
-                "7. SELF BUILDER\n"
+                "6. SELF BUILDER\n"
         );
 
         result.append(
@@ -926,49 +1191,46 @@ public class EvolutionEngine {
         )
                 .append("\n\n");
 
+        recordHistory(
+                "BUILDER_READY",
+                builderInit
+        );
+
         // =====================================================
-        // 8 DEVELOPMENT REGISTRATION
+        // 7 SELF TEST BEFORE
         // =====================================================
 
-        String development;
+        String beforeTest;
 
         try {
 
-            development =
-                    selfBuilderEngine
-                            .registerDevelopment(
-                                    target,
-                                    "تطوير تلقائي بناء على التشخيص الذاتي"
-                            );
-
-            recordHistory(
-                    "DEVELOPMENT_REGISTERED",
-                    target
-            );
+            beforeTest =
+                    selfTestEngine
+                            .runAllTests();
 
         } catch (Exception e) {
 
-            development =
+            beforeTest =
                     "ERROR: "
                             + safeError(e);
-
-            recordHistory(
-                    "DEVELOPMENT_ERROR",
-                    development
-            );
         }
 
         result.append(
-                "8. DEVELOPMENT TARGET\n"
+                "7. PRE-EVOLUTION TEST\n"
         );
 
         result.append(
-                development
+                beforeTest
         )
                 .append("\n\n");
 
+        recordHistory(
+                "PRE_TEST",
+                "تم الاختبار قبل التطوير"
+        );
+
         // =====================================================
-        // 9 SAFETY SNAPSHOT
+        // 8 SNAPSHOT
         // =====================================================
 
         String snapshot;
@@ -978,29 +1240,19 @@ public class EvolutionEngine {
             snapshot =
                     selfBuilderEngine
                             .createSnapshot(
-                                    "قبل دورة التطور: "
+                                    "Before evolution: "
                                             + target
                             );
-
-            recordHistory(
-                    "SNAPSHOT",
-                    snapshot
-            );
 
         } catch (Exception e) {
 
             snapshot =
                     "ERROR: "
                             + safeError(e);
-
-            recordHistory(
-                    "SNAPSHOT_ERROR",
-                    snapshot
-            );
         }
 
         result.append(
-                "9. SAFETY SNAPSHOT\n"
+                "8. SAFETY SNAPSHOT\n"
         );
 
         result.append(
@@ -1008,8 +1260,13 @@ public class EvolutionEngine {
         )
                 .append("\n\n");
 
+        recordHistory(
+                "SNAPSHOT",
+                snapshot
+        );
+
         // =====================================================
-        // 10 BUILD PLAN
+        // 9 BUILD PLAN
         // =====================================================
 
         String buildPlan;
@@ -1022,74 +1279,29 @@ public class EvolutionEngine {
                                     target
                             );
 
-            recordHistory(
-                    "BUILD_PLAN",
-                    target
-            );
-
         } catch (Exception e) {
 
             buildPlan =
                     "ERROR: "
                             + safeError(e);
-
-            recordHistory(
-                    "BUILD_PLAN_ERROR",
-                    buildPlan
-            );
         }
 
         result.append(
-                "10. CODE BUILD PLAN\n"
+                "9. CODE BUILD PLAN\n"
         );
 
         result.append(
-                "✓ تم تجهيز خطوات تحليل وتعديل واختبار الكود.\n\n"
-        );
-
-        // =====================================================
-        // 11 APK BUILD PREPARATION
-        // =====================================================
-
-        String apkPreparation;
-
-        try {
-
-            apkPreparation =
-                    apkBuilderEngine
-                            .prepareBuildRequest(
-                                    "Evolution target: "
-                                            + target
-                            );
-
-            recordHistory(
-                    "APK_BUILD_PREPARED",
-                    target
-            );
-
-        } catch (Exception e) {
-
-            apkPreparation =
-                    "ERROR: "
-                            + safeError(e);
-
-            recordHistory(
-                    "APK_BUILD_PREPARATION_ERROR",
-                    apkPreparation
-            );
-        }
-
-        result.append(
-                "11. APK BUILDER\n"
-        );
-
-        result.append(
-                apkPreparation
+                buildPlan
         )
                 .append("\n\n");
 
+        recordHistory(
+                "BUILD_PLAN",
+                target
+        );
+
         // =====================================================
-        // 12 PROJECT VALIDATION
+        // 10 APK PROJECT VALIDATION
         // =====================================================
 
         String projectStatus;
@@ -1100,25 +1312,15 @@ public class EvolutionEngine {
                     apkBuilderEngine
                             .validateProject();
 
-            recordHistory(
-                    "APK_PROJECT_VALIDATION",
-                    projectStatus
-            );
-
         } catch (Exception e) {
 
             projectStatus =
                     "ERROR: "
                             + safeError(e);
-
-            recordHistory(
-                    "APK_PROJECT_ERROR",
-                    projectStatus
-            );
         }
 
         result.append(
-                "12. APK PROJECT CHECK\n"
+                "10. APK PROJECT CHECK\n"
         );
 
         result.append(
@@ -1126,63 +1328,82 @@ public class EvolutionEngine {
         )
                 .append("\n\n");
 
+        recordHistory(
+                "APK_PROJECT_VALIDATION",
+                projectStatus
+        );
+
         // =====================================================
-        // 13 SELF TEST
+        // 11 BUILD REQUEST
         // =====================================================
 
-        String tests;
+        String buildRequest;
 
         try {
 
-            tests =
-                    selfTestEngine
-                            .runAllTests();
-
-            recordHistory(
-                    "TEST",
-                    "Self tests executed"
-            );
+            buildRequest =
+                    apkBuilderEngine
+                            .prepareBuildRequest(
+                                    "Evolution target: "
+                                            + target
+                            );
 
         } catch (Exception e) {
 
-            tests =
+            buildRequest =
                     "ERROR: "
                             + safeError(e);
-
-            recordHistory(
-                    "TEST_ERROR",
-                    tests
-            );
         }
 
         result.append(
-                "13. SELF TEST\n"
+                "11. APK BUILD REQUEST\n"
         );
 
         result.append(
-                tests
+                buildRequest
         )
                 .append("\n\n");
 
+        recordHistory(
+                "APK_BUILD_PREPARED",
+                target
+        );
+
         // =====================================================
-        // 14 IMPROVE
+        // 12 POST TEST
         // =====================================================
+
+        String afterTest;
+
+        try {
+
+            afterTest =
+                    selfTestEngine
+                            .runAllTests();
+
+        } catch (Exception e) {
+
+            afterTest =
+                    "ERROR: "
+                            + safeError(e);
+        }
+
+        result.append(
+                "12. POST-EVOLUTION TEST\n"
+        );
+
+        result.append(
+                afterTest
+        )
+                .append("\n\n");
 
         recordHistory(
-                "IMPROVE",
-                "Evolution workspace and APK pipeline prepared"
-        );
-
-        result.append(
-                "14. IMPROVE\n"
-        );
-
-        result.append(
-                "✓ تم تجهيز بيئة التطوير وAPK Builder.\n\n"
+                "POST_TEST",
+                "تم اختبار النظام بعد تجهيز دورة التطور"
         );
 
         // =====================================================
-        // 15 MEMORY
+        // 13 MEMORY
         // =====================================================
 
         memoryManager.saveMemory(
@@ -1200,22 +1421,63 @@ public class EvolutionEngine {
                 apkBuilderEngine.getStatus()
         );
 
+        memoryManager.saveMemory(
+                "__last_evolution_workspace__",
+                selfBuilderEngine.getWorkspacePath()
+        );
+
         recordHistory(
                 "MEMORY",
-                "تم حفظ نتيجة دورة التطور"
+                "تم حفظ نتائج دورة التطور"
         );
 
         result.append(
-                "15. MEMORY\n"
+                "13. LEARNING MEMORY\n"
         );
 
         result.append(
-                "✓ تم حفظ هدف التطور وحالة APK Builder.\n\n"
+                "✓ تم حفظ الهدف والنتائج والحالة.\n\n"
         );
 
         // =====================================================
-        // FINAL
+        // 14 FINAL
         // =====================================================
+
+        String finalStatus;
+
+        if (afterTest != null &&
+                afterTest.contains(
+                        "SYSTEM STATUS: HEALTHY"
+                )) {
+
+            finalStatus =
+                    "HEALTHY";
+
+        } else {
+
+            finalStatus =
+                    "ATTENTION";
+        }
+
+        result.append(
+                "14. EVOLUTION RESULT\n"
+        );
+
+        result.append(
+                "Status: "
+        )
+                .append(
+                        finalStatus
+                )
+                .append("\n");
+
+        result.append(
+                "Target: "
+        )
+                .append(
+                        target
+                )
+                .append("\n\n");
 
         result.append(
                 "============================\n"
@@ -1226,34 +1488,64 @@ public class EvolutionEngine {
         );
 
         result.append(
-                "الهدف:\n"
+                "JARVIS يقدر دابا يدير:\n"
         );
 
         result.append(
-                target
+                "✓ Diagnosis\n"
         );
 
         result.append(
-                "\n\n"
+                "✓ Goal Selection\n"
         );
 
         result.append(
-                "الحالة:\n"
+                "✓ Development Planning\n"
         );
 
         result.append(
-                "التشخيص + التعلم + Self Builder + Snapshot + Build Plan + APK Builder + Self Test جاهزين.\n"
+                "✓ Workspace Evolution\n"
         );
 
         result.append(
-                "\n"
+                "✓ Source Modification API\n"
         );
 
         result.append(
-                "مهم: JARVIS لا يعتبر APK مبنيا إلا إذا وجد APK فعلياً بعد Build."
+                "✓ Snapshot\n"
         );
 
-        return result.toString();
+        result.append(
+                "✓ Rollback\n"
+        );
+
+        result.append(
+                "✓ Self Testing\n"
+        );
+
+        result.append(
+                "✓ APK Build Pipeline\n"
+        );
+
+        result.append(
+                "✓ Evolution Memory\n\n"
+        );
+
+        result.append(
+                "مهم: ما كيتحسبش APK مبني حتى يكون APK فعلي موجود."
+        );
+
+        String finalResult =
+                result.toString();
+
+        prefs.edit()
+                .putString(
+                        KEY_LAST_RESULT,
+                        finalResult
+                )
+                .apply();
+
+        return finalResult;
     }
 
     // =========================================================
@@ -1323,7 +1615,8 @@ public class EvolutionEngine {
 
             recordHistory(
                     "ERROR",
-                    "فشل إنشاء طلب موافقة"
+                    "فشل إنشاء طلب الموافقة: "
+                            + safeError(e)
             );
         }
     }
@@ -1435,11 +1728,11 @@ public class EvolutionEngine {
                 new StringBuilder();
 
         result.append(
-                "JARVIS STATUS\n"
+                "JARVIS EVOLUTION STATUS\n"
         );
 
         result.append(
-                "================\n"
+                "============================\n"
         );
 
         result.append(
@@ -1448,7 +1741,7 @@ public class EvolutionEngine {
                 .append(
                         prefs.getString(
                                 KEY_VERSION,
-                                "6.0"
+                                "7.0"
                         )
                 )
                 .append("\n");
@@ -1473,14 +1766,23 @@ public class EvolutionEngine {
                 )
                 .append("\n");
 
-        result.append(
-                "Readiness: "
-        )
-                .append(
-                        diagnosisManager
-                                .getReadinessScore()
-                )
-                .append("%\n");
+        try {
+
+            result.append(
+                    "Readiness: "
+            )
+                    .append(
+                            diagnosisManager
+                                    .getReadinessScore()
+                    )
+                    .append("%\n");
+
+        } catch (Exception e) {
+
+            result.append(
+                    "Readiness: ERROR\n"
+            );
+        }
 
         result.append(
                 "Goals: "
@@ -1549,7 +1851,7 @@ public class EvolutionEngine {
                     .append("\n");
 
             result.append(
-                    "APK Build Status: "
+                    "APK Status: "
             )
                     .append(
                             apkBuilderEngine
@@ -1583,6 +1885,16 @@ public class EvolutionEngine {
                     "Self Test: ERROR\n"
             );
         }
+
+        result.append(
+                "Last Evolution: "
+        )
+                .append(
+                        memoryManager.getMemory(
+                                "__last_evolution_time__"
+                        )
+                )
+                .append("\n");
 
         result.append(
                 "\nCORE STATUS: ONLINE"
@@ -1634,26 +1946,10 @@ public class EvolutionEngine {
 
             int maxEntries = 100;
 
-            if (history.length() >
+            while (history.length() >
                     maxEntries) {
 
-                JSONArray trimmed =
-                        new JSONArray();
-
-                int start =
-                        history.length()
-                                - maxEntries;
-
-                for (int i = start;
-                     i < history.length();
-                     i++) {
-
-                    trimmed.put(
-                            history.get(i)
-                    );
-                }
-
-                history = trimmed;
+                history.remove(0);
             }
 
             prefs.edit()
@@ -1695,7 +1991,7 @@ public class EvolutionEngine {
             int start =
                     Math.max(
                             0,
-                            history.length() - 20
+                            history.length() - 30
                     );
 
             for (int i = start;
@@ -1735,7 +2031,8 @@ public class EvolutionEngine {
         } catch (Exception e) {
 
             return
-                    "تعذر قراءة سجل التطور.";
+                    "تعذر قراءة سجل التطور:\n"
+                    + safeError(e);
         }
     }
 
