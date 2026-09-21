@@ -11,6 +11,12 @@ import java.util.Locale;
 
 public class ReminderEngine {
 
+    private static final String PREFIX =
+            "__reminder__";
+
+    private static final String LAST_REMINDER =
+            "__last_reminder__";
+
     private final Context context;
     private final MemoryManager memoryManager;
 
@@ -23,7 +29,7 @@ public class ReminderEngine {
                 new MemoryManager(this.context);
     }
 
-    public String createReminder(
+    public synchronized String createReminder(
             String title,
             long triggerTime
     ) {
@@ -42,31 +48,6 @@ public class ReminderEngine {
 
         try {
 
-            Intent intent =
-                    new Intent(
-                            context,
-                            ReminderReceiver.class
-                    );
-
-            intent.putExtra(
-                    "reminder_title",
-                    title.trim()
-            );
-
-            int requestCode =
-                    (int)
-                            (System.currentTimeMillis()
-                                    & 0x7fffffff);
-
-            PendingIntent pendingIntent =
-                    PendingIntent.getBroadcast(
-                            context,
-                            requestCode,
-                            intent,
-                            PendingIntent.FLAG_UPDATE_CURRENT
-                                    | PendingIntent.FLAG_IMMUTABLE
-                    );
-
             AlarmManager alarmManager =
                     (AlarmManager)
                             context.getSystemService(
@@ -79,30 +60,74 @@ public class ReminderEngine {
                         "Alarm Manager غير متوفر.";
             }
 
-            alarmManager.set(
+            String cleanTitle =
+                    title.trim();
+
+            int requestCode =
+                    (int)
+                            (System.currentTimeMillis()
+                                    & 0x7fffffff);
+
+            Intent intent =
+                    new Intent(
+                            context,
+                            ReminderReceiver.class
+                    );
+
+            intent.putExtra(
+                    "reminder_title",
+                    cleanTitle
+            );
+
+            intent.putExtra(
+                    "reminder_id",
+                    requestCode
+            );
+
+            intent.putExtra(
+                    "reminder_time",
+                    triggerTime
+            );
+
+            PendingIntent pendingIntent =
+                    PendingIntent.getBroadcast(
+                            context,
+                            requestCode,
+                            intent,
+                            PendingIntent.FLAG_UPDATE_CURRENT
+                                    | PendingIntent.FLAG_IMMUTABLE
+                    );
+
+            /*
+             * نخلي Android يصحي الجهاز
+             * ملي يوصل وقت التذكير.
+             */
+            alarmManager.setAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
                     triggerTime,
                     pendingIntent
             );
 
             String formatted =
-                    new SimpleDateFormat(
-                            "yyyy-MM-dd HH:mm",
-                            Locale.getDefault()
-                    ).format(
-                            new Date(triggerTime)
-                    );
+                    formatTime(triggerTime);
 
             memoryManager.saveMemory(
-                    "__last_reminder__",
-                    title.trim()
+                    PREFIX + requestCode,
+                    cleanTitle
+                            + " | "
+                            + formatted
+            );
+
+            memoryManager.saveMemory(
+                    LAST_REMINDER,
+                    cleanTitle
                             + " | "
                             + formatted
             );
 
             return
                     "تم إنشاء التذكير ✓\n\n"
-                    + title.trim()
+                    + cleanTitle
                     + "\n"
                     + formatted;
 
@@ -118,7 +143,7 @@ public class ReminderEngine {
 
         String reminder =
                 memoryManager.getMemory(
-                        "__last_reminder__"
+                        LAST_REMINDER
                 );
 
         if (reminder == null ||
@@ -133,10 +158,85 @@ public class ReminderEngine {
                 + reminder;
     }
 
+    public String getReminder(
+            int reminderId
+    ) {
+
+        String reminder =
+                memoryManager.getMemory(
+                        PREFIX + reminderId
+                );
+
+        if (reminder == null ||
+                reminder.trim().isEmpty()) {
+
+            return
+                    "ما لقيتش هاد التذكير.";
+        }
+
+        return
+                "التذكير:\n"
+                + reminder;
+    }
+
+    public String cancelReminder(
+            int reminderId
+    ) {
+
+        try {
+
+            AlarmManager alarmManager =
+                    (AlarmManager)
+                            context.getSystemService(
+                                    Context.ALARM_SERVICE
+                            );
+
+            if (alarmManager == null) {
+
+                return
+                        "Alarm Manager غير متوفر.";
+            }
+
+            Intent intent =
+                    new Intent(
+                            context,
+                            ReminderReceiver.class
+                    );
+
+            PendingIntent pendingIntent =
+                    PendingIntent.getBroadcast(
+                            context,
+                            reminderId,
+                            intent,
+                            PendingIntent.FLAG_UPDATE_CURRENT
+                                    | PendingIntent.FLAG_IMMUTABLE
+                    );
+
+            alarmManager.cancel(
+                    pendingIntent
+            );
+
+            pendingIntent.cancel();
+
+            memoryManager.removeMemory(
+                    PREFIX + reminderId
+            );
+
+            return
+                    "تم إلغاء التذكير ✓";
+
+        } catch (Exception e) {
+
+            return
+                    "فشل إلغاء التذكير: "
+                    + safeError(e);
+        }
+    }
+
     public String clearLastReminder() {
 
         memoryManager.removeMemory(
-                "__last_reminder__"
+                LAST_REMINDER
         );
 
         return
@@ -172,6 +272,18 @@ public class ReminderEngine {
 
         return
                 "Reminder Engine: OFFLINE ⚠";
+    }
+
+    private String formatTime(
+            long time
+    ) {
+
+        return new SimpleDateFormat(
+                "yyyy-MM-dd HH:mm",
+                Locale.getDefault()
+        ).format(
+                new Date(time)
+        );
     }
 
     private String safeError(
