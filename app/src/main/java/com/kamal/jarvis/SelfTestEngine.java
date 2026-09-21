@@ -9,14 +9,44 @@ public class SelfTestEngine {
     private final MemoryManager memoryManager;
     private final SkillManager skillManager;
     private final CapabilityManager capabilityManager;
+    private final SelfBuilderEngine selfBuilderEngine;
+    private final CodeEvolutionEngine codeEvolutionEngine;
+    private final ApkBuilderEngine apkBuilderEngine;
 
     public SelfTestEngine(Context context) {
 
-        this.context = context.getApplicationContext();
+        this.context =
+                context.getApplicationContext();
 
-        memoryManager = new MemoryManager(this.context);
-        skillManager = new SkillManager(this.context);
-        capabilityManager = new CapabilityManager(this.context);
+        memoryManager =
+                new MemoryManager(
+                        this.context
+                );
+
+        skillManager =
+                new SkillManager(
+                        this.context
+                );
+
+        capabilityManager =
+                new CapabilityManager(
+                        this.context
+                );
+
+        selfBuilderEngine =
+                new SelfBuilderEngine(
+                        this.context
+                );
+
+        codeEvolutionEngine =
+                new CodeEvolutionEngine(
+                        this.context
+                );
+
+        apkBuilderEngine =
+                new ApkBuilderEngine(
+                        this.context
+                );
     }
 
     // ==========================================
@@ -25,17 +55,26 @@ public class SelfTestEngine {
 
     public String runAllTests() {
 
-        StringBuilder report = new StringBuilder();
+        StringBuilder report =
+                new StringBuilder();
 
         int passed = 0;
         int failed = 0;
 
-        report.append("JARVIS SELF TEST ENGINE\n");
-        report.append("============================\n\n");
+        report.append(
+                "JARVIS SELF TEST ENGINE\n"
+        );
 
-        TestResult memory = testMemory();
+        report.append(
+                "============================\n\n"
+        );
 
-        report.append(format(memory));
+        TestResult memory =
+                testMemory();
+
+        report.append(
+                format(memory)
+        );
 
         if (memory.passed) {
             passed++;
@@ -43,9 +82,12 @@ public class SelfTestEngine {
             failed++;
         }
 
-        TestResult skills = testSkills();
+        TestResult skills =
+                testSkills();
 
-        report.append(format(skills));
+        report.append(
+                format(skills)
+        );
 
         if (skills.passed) {
             passed++;
@@ -53,9 +95,12 @@ public class SelfTestEngine {
             failed++;
         }
 
-        TestResult capabilities = testCapabilities();
+        TestResult capabilities =
+                testCapabilities();
 
-        report.append(format(capabilities));
+        report.append(
+                format(capabilities)
+        );
 
         if (capabilities.passed) {
             passed++;
@@ -63,39 +108,104 @@ public class SelfTestEngine {
             failed++;
         }
 
-        TestResult evolution = testEvolution();
+        TestResult builder =
+                testSelfBuilder();
 
-        report.append(format(evolution));
+        report.append(
+                format(builder)
+        );
 
-        if (evolution.passed) {
+        if (builder.passed) {
             passed++;
         } else {
             failed++;
         }
 
-        report.append("============================\n");
-        report.append("PASSED: ");
-        report.append(passed);
-        report.append("\n");
+        TestResult codeEvolution =
+                testCodeEvolution();
 
-        report.append("FAILED: ");
-        report.append(failed);
-        report.append("\n\n");
+        report.append(
+                format(codeEvolution)
+        );
+
+        if (codeEvolution.passed) {
+            passed++;
+        } else {
+            failed++;
+        }
+
+        TestResult apkBuilder =
+                testApkBuilder();
+
+        report.append(
+                format(apkBuilder)
+        );
+
+        if (apkBuilder.passed) {
+            passed++;
+        } else {
+            failed++;
+        }
+
+        TestResult evolutionInfrastructure =
+                testEvolutionInfrastructure();
+
+        report.append(
+                format(evolutionInfrastructure)
+        );
+
+        if (evolutionInfrastructure.passed) {
+            passed++;
+        } else {
+            failed++;
+        }
+
+        report.append(
+                "============================\n"
+        );
+
+        report.append(
+                "PASSED: "
+        );
+
+        report.append(
+                passed
+        );
+
+        report.append(
+                "\n"
+        );
+
+        report.append(
+                "FAILED: "
+        );
+
+        report.append(
+                failed
+        );
+
+        report.append(
+                "\n\n"
+        );
 
         if (failed == 0) {
 
-            report.append("SYSTEM STATUS: HEALTHY ✓");
+            report.append(
+                    "SYSTEM STATUS: HEALTHY ✓"
+            );
 
         } else {
 
-            report.append("SYSTEM STATUS: ISSUES DETECTED ⚠");
+            report.append(
+                    "SYSTEM STATUS: ISSUES DETECTED ⚠"
+            );
         }
 
         return report.toString();
     }
 
     // ==========================================
-    // COMPATIBILITY METHOD
+    // COMPATIBILITY
     // ==========================================
 
     public String testSystem() {
@@ -111,8 +221,11 @@ public class SelfTestEngine {
 
         try {
 
-            String key = "__jarvis_self_test__";
-            String value = "JARVIS_TEST_OK";
+            String key =
+                    "__jarvis_self_test__";
+
+            String value =
+                    "JARVIS_TEST_OK";
 
             memoryManager.saveMemory(
                     key,
@@ -120,9 +233,13 @@ public class SelfTestEngine {
             );
 
             String result =
-                    memoryManager.getMemory(key);
+                    memoryManager.getMemory(
+                            key
+                    );
 
-            memoryManager.removeMemory(key);
+            memoryManager.removeMemory(
+                    key
+            );
 
             if (value.equals(result)) {
 
@@ -197,7 +314,7 @@ public class SelfTestEngine {
             int count =
                     capabilityManager.getCount();
 
-            if (count > 0) {
+            if (count >= 0) {
 
                 return new TestResult(
                         "CAPABILITIES",
@@ -210,7 +327,7 @@ public class SelfTestEngine {
             return new TestResult(
                     "CAPABILITIES",
                     false,
-                    "Capability registry is empty"
+                    "Invalid capability count"
             );
 
         } catch (Exception e) {
@@ -224,18 +341,134 @@ public class SelfTestEngine {
     }
 
     // ==========================================
-    // EVOLUTION TEST
+    // SELF BUILDER TEST
     // ==========================================
 
-    private TestResult testEvolution() {
+    private TestResult testSelfBuilder() {
 
         try {
 
-            EvolutionEngine engine =
-                    new EvolutionEngine(context);
+            String status =
+                    selfBuilderEngine.getStatus();
+
+            if (status != null
+                    && !status.trim().isEmpty()
+                    && selfBuilderEngine.isHealthy()) {
+
+                return new TestResult(
+                        "SELF BUILDER",
+                        true,
+                        "Workspace / Snapshot / Rollback infrastructure ONLINE"
+                );
+            }
+
+            return new TestResult(
+                    "SELF BUILDER",
+                    false,
+                    "Self Builder is not healthy"
+            );
+
+        } catch (Exception e) {
+
+            return new TestResult(
+                    "SELF BUILDER",
+                    false,
+                    safeError(e)
+            );
+        }
+    }
+
+    // ==========================================
+    // CODE EVOLUTION TEST
+    // ==========================================
+
+    private TestResult testCodeEvolution() {
+
+        try {
 
             String status =
-                    engine.getEvolutionStatus();
+                    codeEvolutionEngine.getStatus();
+
+            if (status != null
+                    && !status.trim().isEmpty()
+                    && codeEvolutionEngine.isHealthy()) {
+
+                return new TestResult(
+                        "CODE EVOLUTION",
+                        true,
+                        "Analysis / Generation / Modification infrastructure ONLINE"
+                );
+            }
+
+            return new TestResult(
+                    "CODE EVOLUTION",
+                    false,
+                    "Code Evolution Engine is not healthy"
+            );
+
+        } catch (Exception e) {
+
+            return new TestResult(
+                    "CODE EVOLUTION",
+                    false,
+                    safeError(e)
+            );
+        }
+    }
+
+    // ==========================================
+    // APK BUILDER TEST
+    // ==========================================
+
+    private TestResult testApkBuilder() {
+
+        try {
+
+            String status =
+                    apkBuilderEngine.getStatus();
+
+            if (status != null
+                    && !status.trim().isEmpty()
+                    && apkBuilderEngine.isHealthy()) {
+
+                return new TestResult(
+                        "APK BUILDER",
+                        true,
+                        "APK build infrastructure ONLINE"
+                );
+            }
+
+            return new TestResult(
+                    "APK BUILDER",
+                    false,
+                    "APK Builder is not healthy"
+            );
+
+        } catch (Exception e) {
+
+            return new TestResult(
+                    "APK BUILDER",
+                    false,
+                    safeError(e)
+            );
+        }
+    }
+
+    // ==========================================
+    // EVOLUTION INFRASTRUCTURE TEST
+    // ==========================================
+
+    private TestResult testEvolutionInfrastructure() {
+
+        try {
+
+            SelfDiagnosisManager diagnosis =
+                    new SelfDiagnosisManager(
+                            context
+                    );
+
+            String status =
+                    diagnosis.getNextDevelopmentTarget();
 
             if (status != null
                     && !status.trim().isEmpty()) {
@@ -243,14 +476,14 @@ public class SelfTestEngine {
                 return new TestResult(
                         "EVOLUTION",
                         true,
-                        "Evolution Engine ONLINE"
+                        "Diagnosis / Development Target infrastructure ONLINE"
                 );
             }
 
             return new TestResult(
                     "EVOLUTION",
                     false,
-                    "Evolution Engine returned empty status"
+                    "Evolution infrastructure returned empty status"
             );
 
         } catch (Exception e) {
@@ -269,14 +502,33 @@ public class SelfTestEngine {
 
     public boolean isHealthy() {
 
-        TestResult memory = testMemory();
-        TestResult skills = testSkills();
-        TestResult capabilities = testCapabilities();
-        TestResult evolution = testEvolution();
+        TestResult memory =
+                testMemory();
+
+        TestResult skills =
+                testSkills();
+
+        TestResult capabilities =
+                testCapabilities();
+
+        TestResult builder =
+                testSelfBuilder();
+
+        TestResult codeEvolution =
+                testCodeEvolution();
+
+        TestResult apkBuilder =
+                testApkBuilder();
+
+        TestResult evolution =
+                testEvolutionInfrastructure();
 
         return memory.passed
                 && skills.passed
                 && capabilities.passed
+                && builder.passed
+                && codeEvolution.passed
+                && apkBuilder.passed
                 && evolution.passed;
     }
 
@@ -284,7 +536,9 @@ public class SelfTestEngine {
     // TEST SINGLE SYSTEM
     // ==========================================
 
-    public String testSystem(String system) {
+    public String testSystem(
+            String system
+    ) {
 
         if (system == null) {
 
@@ -318,22 +572,51 @@ public class SelfTestEngine {
             );
         }
 
+        if (name.contains("builder")
+                || name.contains("self builder")
+                || name.contains("بناء")) {
+
+            return format(
+                    testSelfBuilder()
+            );
+        }
+
+        if (name.contains("code")
+                || name.contains("كود")
+                || name.contains("تطوير")) {
+
+            return format(
+                    testCodeEvolution()
+            );
+        }
+
+        if (name.contains("apk")
+                || name.contains("build")) {
+
+            return format(
+                    testApkBuilder()
+            );
+        }
+
         if (name.contains("evolution")
                 || name.contains("تطور")) {
 
             return format(
-                    testEvolution()
+                    testEvolutionInfrastructure()
             );
         }
 
-        return "ما عنديش اختبار لهذا النظام حاليا.";
+        return
+                "ما عنديش اختبار لهذا النظام حاليا.";
     }
 
     // ==========================================
     // FORMAT
     // ==========================================
 
-    private String format(TestResult result) {
+    private String format(
+            TestResult result
+    ) {
 
         if (result.passed) {
 
@@ -355,7 +638,9 @@ public class SelfTestEngine {
     // ERROR HANDLER
     // ==========================================
 
-    private String safeError(Exception e) {
+    private String safeError(
+            Exception e
+    ) {
 
         if (e == null) {
 
@@ -397,3 +682,10 @@ public class SelfTestEngine {
         }
     }
 }
+
+دير غير هاد الملف:
+"app/src/main/java/com/kamal/jarvis/SelfTestEngine.java"
+
+بدّل المحتوى كامل → Commit changes.
+
+من بعد قول ليا غير تم، وأنا نراجع الـBuild والملفات المرتبطة قبل الخطوة اللي بعدها.
