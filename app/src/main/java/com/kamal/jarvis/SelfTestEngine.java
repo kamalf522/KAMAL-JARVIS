@@ -49,10 +49,6 @@ public class SelfTestEngine {
                 );
     }
 
-    // ==========================================
-    // RUN ALL TESTS
-    // ==========================================
-
     public String runAllTests() {
 
         StringBuilder report =
@@ -72,9 +68,7 @@ public class SelfTestEngine {
         TestResult memory =
                 testMemory();
 
-        report.append(
-                format(memory)
-        );
+        report.append(format(memory));
 
         if (memory.passed) {
             passed++;
@@ -85,9 +79,7 @@ public class SelfTestEngine {
         TestResult skills =
                 testSkills();
 
-        report.append(
-                format(skills)
-        );
+        report.append(format(skills));
 
         if (skills.passed) {
             passed++;
@@ -98,9 +90,7 @@ public class SelfTestEngine {
         TestResult capabilities =
                 testCapabilities();
 
-        report.append(
-                format(capabilities)
-        );
+        report.append(format(capabilities));
 
         if (capabilities.passed) {
             passed++;
@@ -111,9 +101,7 @@ public class SelfTestEngine {
         TestResult builder =
                 testSelfBuilder();
 
-        report.append(
-                format(builder)
-        );
+        report.append(format(builder));
 
         if (builder.passed) {
             passed++;
@@ -124,9 +112,7 @@ public class SelfTestEngine {
         TestResult codeEvolution =
                 testCodeEvolution();
 
-        report.append(
-                format(codeEvolution)
-        );
+        report.append(format(codeEvolution));
 
         if (codeEvolution.passed) {
             passed++;
@@ -137,9 +123,7 @@ public class SelfTestEngine {
         TestResult apkBuilder =
                 testApkBuilder();
 
-        report.append(
-                format(apkBuilder)
-        );
+        report.append(format(apkBuilder));
 
         if (apkBuilder.passed) {
             passed++;
@@ -147,14 +131,12 @@ public class SelfTestEngine {
             failed++;
         }
 
-        TestResult evolutionInfrastructure =
+        TestResult evolution =
                 testEvolutionInfrastructure();
 
-        report.append(
-                format(evolutionInfrastructure)
-        );
+        report.append(format(evolution));
 
-        if (evolutionInfrastructure.passed) {
+        if (evolution.passed) {
             passed++;
         } else {
             failed++;
@@ -166,36 +148,19 @@ public class SelfTestEngine {
 
         report.append(
                 "PASSED: "
-        );
+        ).append(passed);
 
         report.append(
-                passed
-        );
+                "\nFAILED: "
+        ).append(failed);
 
-        report.append(
-                "\n"
-        );
-
-        report.append(
-                "FAILED: "
-        );
-
-        report.append(
-                failed
-        );
-
-        report.append(
-                "\n\n"
-        );
+        report.append("\n\n");
 
         if (failed == 0) {
-
             report.append(
                     "SYSTEM STATUS: HEALTHY ✓"
             );
-
         } else {
-
             report.append(
                     "SYSTEM STATUS: ISSUES DETECTED ⚠"
             );
@@ -204,18 +169,9 @@ public class SelfTestEngine {
         return report.toString();
     }
 
-    // ==========================================
-    // COMPATIBILITY
-    // ==========================================
-
     public String testSystem() {
-
         return runAllTests();
     }
-
-    // ==========================================
-    // MEMORY TEST
-    // ==========================================
 
     private TestResult testMemory() {
 
@@ -266,10 +222,6 @@ public class SelfTestEngine {
         }
     }
 
-    // ==========================================
-    // SKILLS TEST
-    // ==========================================
-
     private TestResult testSkills() {
 
         try {
@@ -303,10 +255,6 @@ public class SelfTestEngine {
         }
     }
 
-    // ==========================================
-    // CAPABILITIES TEST
-    // ==========================================
-
     private TestResult testCapabilities() {
 
         try {
@@ -339,10 +287,6 @@ public class SelfTestEngine {
             );
         }
     }
-
-    // ==========================================
-    // SELF BUILDER TEST
-    // ==========================================
 
     private TestResult testSelfBuilder() {
 
@@ -378,10 +322,6 @@ public class SelfTestEngine {
         }
     }
 
-    // ==========================================
-    // CODE EVOLUTION TEST
-    // ==========================================
-
     private TestResult testCodeEvolution() {
 
         try {
@@ -416,10 +356,6 @@ public class SelfTestEngine {
         }
     }
 
-    // ==========================================
-    // APK BUILDER TEST
-    // ==========================================
-
     private TestResult testApkBuilder() {
 
         try {
@@ -453,10 +389,6 @@ public class SelfTestEngine {
             );
         }
     }
-
-    // ==========================================
-    // EVOLUTION INFRASTRUCTURE TEST
-    // ==========================================
 
     private TestResult testEvolutionInfrastructure() {
 
@@ -496,10 +428,6 @@ public class SelfTestEngine {
         }
     }
 
-    // ==========================================
-    // QUICK HEALTH CHECK
-    // ==========================================
-
     public boolean isHealthy() {
 
         TestResult memory =
@@ -532,16 +460,11 @@ public class SelfTestEngine {
                 && evolution.passed;
     }
 
-    // ==========================================
-    // TEST SINGLE SYSTEM
-    // ==========================================
-
     public String testSystem(
             String system
     ) {
 
         if (system == null) {
-
             return "اسم النظام غير موجود.";
         }
 
@@ -551,68 +474,48 @@ public class SelfTestEngine {
         if (name.contains("memory")
                 || name.contains("ذاكرة")) {
 
-            return format(
-                    testMemory()
-            );
+            return format(testMemory());
         }
 
         if (name.contains("skill")
                 || name.contains("مهارة")) {
 
-            return format(
-                    testSkills()
-            );
+            return format(testSkills());
         }
 
         if (name.contains("capability")
                 || name.contains("قدرة")) {
 
-            return format(
-                    testCapabilities()
-            );
+            return format(testCapabilities());
         }
 
         if (name.contains("builder")
-                || name.contains("self builder")
                 || name.contains("بناء")) {
 
-            return format(
-                    testSelfBuilder()
-            );
+            return format(testSelfBuilder());
         }
 
         if (name.contains("code")
                 || name.contains("كود")
                 || name.contains("تطوير")) {
 
-            return format(
-                    testCodeEvolution()
-            );
+            return format(testCodeEvolution());
         }
 
         if (name.contains("apk")
                 || name.contains("build")) {
 
-            return format(
-                    testApkBuilder()
-            );
+            return format(testApkBuilder());
         }
 
         if (name.contains("evolution")
                 || name.contains("تطور")) {
 
-            return format(
-                    testEvolutionInfrastructure()
-            );
+            return format(testEvolutionInfrastructure());
         }
 
-        return
-                "ما عنديش اختبار لهذا النظام حاليا.";
+        return "ما عنديش اختبار لهذا النظام حاليا.";
     }
-
-    // ==========================================
-    // FORMAT
-    // ==========================================
 
     private String format(
             TestResult result
@@ -634,16 +537,11 @@ public class SelfTestEngine {
                 + "\n\n";
     }
 
-    // ==========================================
-    // ERROR HANDLER
-    // ==========================================
-
     private String safeError(
             Exception e
     ) {
 
         if (e == null) {
-
             return "Unknown error";
         }
 
@@ -659,10 +557,6 @@ public class SelfTestEngine {
 
         return message;
     }
-
-    // ==========================================
-    // TEST RESULT
-    // ==========================================
 
     private static class TestResult {
 
@@ -682,10 +576,3 @@ public class SelfTestEngine {
         }
     }
 }
-
-دير غير هاد الملف:
-"app/src/main/java/com/kamal/jarvis/SelfTestEngine.java"
-
-بدّل المحتوى كامل → Commit changes.
-
-من بعد قول ليا غير تم، وأنا نراجع الـBuild والملفات المرتبطة قبل الخطوة اللي بعدها.
