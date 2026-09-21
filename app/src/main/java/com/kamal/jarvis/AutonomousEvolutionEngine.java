@@ -11,21 +11,33 @@ import java.util.Locale;
 /**
  * JARVIS Autonomous Evolution Engine
  *
- * المسؤول عن دورة التطوير الآمنة:
+ * نظام التطور المستقل ديال JARVIS.
  *
- * Analyze
- * -> Baseline Test
- * -> Snapshot
- * -> Modify
- * -> Verify
- * -> Self Test
- * -> Rollback عند الفشل
- * -> Save Result
- * -> Prepare Build
+ * عندو جوج مسارات:
  *
- * ملاحظة:
- * هذا النظام يعدل Workspace الخاص بـ JARVIS.
- * لا يدعي أنه يعدل APK المثبت مباشرة.
+ * 1) INTERNAL EVOLUTION
+ *    تطوير مباشر بلا APK:
+ *    - Memory
+ *    - Learning
+ *    - Skills
+ *    - Capabilities
+ *    - Tasks
+ *    - Evolution Rules
+ *
+ * 2) CODE EVOLUTION
+ *    تغيير حقيقي في ملفات المصدر:
+ *    Analyze
+ *    -> Test
+ *    -> Snapshot
+ *    -> Modify
+ *    -> Verify
+ *    -> Test
+ *    -> Rollback عند الفشل
+ *    -> Build Request
+ *
+ * مهم:
+ * Internal Evolution كتغير المعرفة والسلوك المسجل داخل JARVIS
+ * مباشرة، أما تغيير Java/XML التنفيذي فيحتاج Build/Update للتطبيق.
  */
 public class AutonomousEvolutionEngine {
 
@@ -35,6 +47,9 @@ public class AutonomousEvolutionEngine {
     private static final String HISTORY_KEY =
             "history";
 
+    private static final String INTERNAL_HISTORY_KEY =
+            "internal_history";
+
     private final Context context;
 
     private final SelfBuilderEngine selfBuilderEngine;
@@ -43,6 +58,12 @@ public class AutonomousEvolutionEngine {
     private final SelfDiagnosisManager diagnosisManager;
     private final ApkBuilderEngine apkBuilderEngine;
     private final MemoryManager memoryManager;
+
+    private final SkillManager skillManager;
+    private final CapabilityManager capabilityManager;
+    private final LearningEngine learningEngine;
+    private final TaskManager taskManager;
+    private final ActionHistoryManager actionHistoryManager;
 
     private final SharedPreferences preferences;
 
@@ -88,6 +109,31 @@ public class AutonomousEvolutionEngine {
                 new MemoryManager(
                         this.context
                 );
+
+        skillManager =
+                new SkillManager(
+                        this.context
+                );
+
+        capabilityManager =
+                new CapabilityManager(
+                        this.context
+                );
+
+        learningEngine =
+                new LearningEngine(
+                        this.context
+                );
+
+        taskManager =
+                new TaskManager(
+                        this.context
+                );
+
+        actionHistoryManager =
+                new ActionHistoryManager(
+                        this.context
+                );
     }
 
     // =========================================================
@@ -106,6 +152,16 @@ public class AutonomousEvolutionEngine {
         result.append(
                 "Engine: READY\n"
         );
+
+        result.append(
+                "Internal Evolution: "
+        )
+                .append(
+                        isInternalEvolutionHealthy()
+                                ? "READY"
+                                : "NOT READY"
+                )
+                .append("\n");
 
         result.append(
                 "Self Builder: "
@@ -148,6 +204,38 @@ public class AutonomousEvolutionEngine {
                 .append("\n");
 
         result.append(
+                "\nSkills: "
+        )
+                .append(
+                        skillManager.getSkillCount()
+                )
+                .append("\n");
+
+        result.append(
+                "Capabilities: "
+        )
+                .append(
+                        capabilityManager.getCount()
+                )
+                .append("\n");
+
+        result.append(
+                "Memory: "
+        )
+                .append(
+                        memoryManager.getMemoryCount()
+                )
+                .append("\n");
+
+        result.append(
+                "Pending Tasks: "
+        )
+                .append(
+                        taskManager.getPendingTaskCount()
+                )
+                .append("\n");
+
+        result.append(
                 "\nWorkspace:\n"
         );
 
@@ -163,7 +251,55 @@ public class AutonomousEvolutionEngine {
         return selfBuilderEngine != null
                 && selfTestEngine != null
                 && codeEvolutionEngine != null
-                && diagnosisManager != null;
+                && diagnosisManager != null
+                && skillManager != null
+                && capabilityManager != null
+                && learningEngine != null
+                && taskManager != null
+                && memoryManager != null;
+    }
+
+    // =========================================================
+    // INTERNAL EVOLUTION STATUS
+    // =========================================================
+
+    public boolean isInternalEvolutionHealthy() {
+
+        try {
+
+            return skillManager.getSkillCount() >= 0
+                    && capabilityManager.getCount() >= 0
+                    && memoryManager.getMemoryCount() >= 0
+                    && learningEngine.isHealthy()
+                    && taskManager.isHealthy();
+
+        } catch (Exception e) {
+
+            return false;
+        }
+    }
+
+    public String getInternalEvolutionStatus() {
+
+        if (!isInternalEvolutionHealthy()) {
+
+            return
+                    "Internal Evolution: ERROR ⚠";
+        }
+
+        return
+                "INTERNAL EVOLUTION: ONLINE ✓\n"
+                        + "Skills: "
+                        + skillManager.getSkillCount()
+                        + "\n"
+                        + "Capabilities: "
+                        + capabilityManager.getCount()
+                        + "\n"
+                        + "Memory: "
+                        + memoryManager.getMemoryCount()
+                        + "\n"
+                        + "Pending Tasks: "
+                        + taskManager.getPendingTaskCount();
     }
 
     // =========================================================
@@ -305,6 +441,520 @@ public class AutonomousEvolutionEngine {
     }
 
     // =========================================================
+    // INTERNAL AUTONOMOUS EVOLUTION
+    // =========================================================
+
+    public String runInternalEvolution(
+            String goal
+    ) {
+
+        if (goal == null ||
+                goal.trim().isEmpty()) {
+
+            goal =
+                    "تحسين JARVIS";
+        }
+
+        String cleanGoal =
+                goal.trim();
+
+        try {
+
+            // -------------------------------------------------
+            // 1. System test before evolution
+            // -------------------------------------------------
+
+            String baseline =
+                    selfTestEngine.runAllTests();
+
+            if (!testPassed(baseline)) {
+
+                recordHistory(
+                        "INTERNAL_BASELINE_FAILED",
+                        cleanGoal
+                );
+
+                return
+                        "INTERNAL EVOLUTION توقف ⚠\n\n"
+                                + "النظام محتاج إصلاح أولا.\n\n"
+                                + baseline;
+            }
+
+            // -------------------------------------------------
+            // 2. Determine evolution domain
+            // -------------------------------------------------
+
+            String domain =
+                    detectInternalDomain(
+                            cleanGoal
+                    );
+
+            String skillName =
+                    buildSkillName(
+                            domain
+                    );
+
+            String capabilityName =
+                    buildCapabilityName(
+                            domain
+                    );
+
+            String description =
+                    buildEvolutionDescription(
+                            domain,
+                            cleanGoal
+                    );
+
+            // -------------------------------------------------
+            // 3. Register capability
+            // -------------------------------------------------
+
+            boolean capabilityAdded =
+                    capabilityManager.addCapability(
+                            capabilityName,
+                            description
+                    );
+
+            // -------------------------------------------------
+            // 4. Register skill
+            // -------------------------------------------------
+
+            boolean skillAdded =
+                    skillManager.addSkill(
+                            skillName,
+                            description
+                    );
+
+            // -------------------------------------------------
+            // 5. Teach JARVIS the evolution knowledge
+            // -------------------------------------------------
+
+            String learningSubject =
+                    "evolution_" + domain;
+
+            String learningInformation =
+                    "الهدف: "
+                            + cleanGoal
+                            + "\n"
+                            + "المجال: "
+                            + domain
+                            + "\n"
+                            + "القاعدة: "
+                            + description
+                            + "\n"
+                            + "تم تطوير هذا المجال داخليا بدون APK.";
+
+            String learningResult =
+                    learningEngine.learn(
+                            learningSubject,
+                            learningInformation
+                    );
+
+            // -------------------------------------------------
+            // 6. Save permanent evolution rule
+            // -------------------------------------------------
+
+            String ruleKey =
+                    "__evolution_rule__"
+                            + domain;
+
+            String oldRule =
+                    memoryManager.getMemory(
+                            ruleKey
+                    );
+
+            int evolutionCount =
+                    getEvolutionCount(
+                            domain
+                    ) + 1;
+
+            String rule =
+                    "domain="
+                            + domain
+                            + "\n"
+                            + "count="
+                            + evolutionCount
+                            + "\n"
+                            + "last_goal="
+                            + cleanGoal
+                            + "\n"
+                            + "last_update="
+                            + System.currentTimeMillis()
+                            + "\n"
+                            + "previous="
+                            + oldRule;
+
+            memoryManager.saveMemory(
+                    ruleKey,
+                    rule
+            );
+
+            // -------------------------------------------------
+            // 7. Create development task
+            // -------------------------------------------------
+
+            String taskTitle =
+                    "تطوير JARVIS: "
+                            + domain;
+
+            String taskResult =
+                    taskManager.addTask(
+                            taskTitle
+                    );
+
+            // -------------------------------------------------
+            // 8. Mark skill/capability as successful
+            // -------------------------------------------------
+
+            if (skillManager.hasSkill(
+                    skillName
+            )) {
+
+                skillManager.recordSuccess(
+                        skillName
+                );
+            }
+
+            if (capabilityManager.hasCapability(
+                    capabilityName
+            )) {
+
+                capabilityManager.recordSuccess(
+                        capabilityName
+                );
+            }
+
+            // -------------------------------------------------
+            // 9. Save evolution state
+            // -------------------------------------------------
+
+            saveMemory(
+                    "__last_internal_evolution_goal__",
+                    cleanGoal
+            );
+
+            saveMemory(
+                    "__last_internal_evolution_domain__",
+                    domain
+            );
+
+            saveMemory(
+                    "__last_internal_evolution_skill__",
+                    skillName
+            );
+
+            saveMemory(
+                    "__last_internal_evolution_capability__",
+                    capabilityName
+            );
+
+            saveMemory(
+                    "__last_internal_evolution_result__",
+                    "SUCCESS"
+            );
+
+            // -------------------------------------------------
+            // 10. History
+            // -------------------------------------------------
+
+            recordInternalHistory(
+                    domain,
+                    cleanGoal,
+                    skillAdded,
+                    capabilityAdded
+            );
+
+            actionHistoryManager.record(
+                    "INTERNAL EVOLUTION: "
+                            + cleanGoal,
+                    "SUCCESS | "
+                            + domain
+            );
+
+            // -------------------------------------------------
+            // 11. Final verification
+            // -------------------------------------------------
+
+            String finalTests =
+                    selfTestEngine.runAllTests();
+
+            if (!testPassed(finalTests)) {
+
+                return
+                        "INTERNAL EVOLUTION تمت ولكن الاختبار النهائي فيه مشكل ⚠\n\n"
+                                + finalTests;
+            }
+
+            return
+                    "INTERNAL EVOLUTION SUCCESS ✓\n\n"
+                            + "الهدف:\n"
+                            + cleanGoal
+                            + "\n\n"
+                            + "المجال:\n"
+                            + domain
+                            + "\n\n"
+                            + "Skill:\n"
+                            + skillName
+                            + (skillAdded
+                            ? " ← جديدة ✓"
+                            : " ← موجودة ومحدثة")
+                            + "\n\n"
+                            + "Capability:\n"
+                            + capabilityName
+                            + (capabilityAdded
+                            ? " ← جديدة ✓"
+                            : " ← موجودة")
+                            + "\n\n"
+                            + "Learning:\n"
+                            + "تم حفظ المعرفة ✓"
+                            + "\n\n"
+                            + "Evolution Rule:\n"
+                            + "تم تحديث القاعدة الداخلية ✓"
+                            + "\n\n"
+                            + "Task:\n"
+                            + taskResult
+                            + "\n\n"
+                            + "APK:\n"
+                            + "ما محتاجش APK جديد لهذا التطور ✓"
+                            + "\n\n"
+                            + "System Test:\n"
+                            + "PASSED ✓";
+
+        } catch (Exception e) {
+
+            recordHistory(
+                    "INTERNAL_FAILED",
+                    cleanGoal
+                            + " | "
+                            + safeError(e)
+            );
+
+            return
+                    "Internal Evolution Failed ⚠\n\n"
+                            + safeError(e);
+        }
+    }
+
+    // =========================================================
+    // DOMAIN DETECTION
+    // =========================================================
+
+    private String detectInternalDomain(
+            String goal
+    ) {
+
+        String value =
+                goal.toLowerCase(
+                        Locale.ROOT
+                );
+
+        if (containsAny(
+                value,
+                "تعلم",
+                "learning",
+                "learn",
+                "معرف",
+                "معلومة"
+        )) {
+
+            return "learning";
+        }
+
+        if (containsAny(
+                value,
+                "ذاكرة",
+                "memory",
+                "تذكر"
+        )) {
+
+            return "memory";
+        }
+
+        if (containsAny(
+                value,
+                "مهار",
+                "skill"
+        )) {
+
+            return "skills";
+        }
+
+        if (containsAny(
+                value,
+                "قدر",
+                "capabil",
+                "ability"
+        )) {
+
+            return "capabilities";
+        }
+
+        if (containsAny(
+                value,
+                "مهم",
+                "task",
+                "plan",
+                "خطة"
+        )) {
+
+            return "planning";
+        }
+
+        if (containsAny(
+                value,
+                "إشعار",
+                "اشعار",
+                "notification"
+        )) {
+
+            return "notifications";
+        }
+
+        if (containsAny(
+                value,
+                "شاشة",
+                "screen"
+        )) {
+
+            return "screen";
+        }
+
+        if (containsAny(
+                value,
+                "android",
+                "هاتف",
+                "تطبيق",
+                "settings"
+        )) {
+
+            return "android";
+        }
+
+        if (containsAny(
+                value,
+                "صوت",
+                "voice",
+                "كلام"
+        )) {
+
+            return "voice";
+        }
+
+        if (containsAny(
+                value,
+                "تذكير",
+                "reminder"
+        )) {
+
+            return "reminders";
+        }
+
+        if (containsAny(
+                value,
+                "ذكاء",
+                "intelligence",
+                "decision",
+                "قرار"
+        )) {
+
+            return "intelligence";
+        }
+
+        return "general";
+    }
+
+    private String buildSkillName(
+            String domain
+    ) {
+
+        return
+                "autonomous_"
+                        + domain
+                        + "_evolution";
+    }
+
+    private String buildCapabilityName(
+            String domain
+    ) {
+
+        return
+                "autonomous_"
+                        + domain
+                        + "_capability";
+    }
+
+    private String buildEvolutionDescription(
+            String domain,
+            String goal
+    ) {
+
+        return
+                "قدرة داخلية تطورت تلقائيا في مجال "
+                        + domain
+                        + ". الهدف الحالي: "
+                        + goal;
+    }
+
+    private int getEvolutionCount(
+            String domain
+    ) {
+
+        try {
+
+            String value =
+                    memoryManager.getMemory(
+                            "__evolution_rule__"
+                                    + domain
+                    );
+
+            if (value == null ||
+                    value.trim().isEmpty()) {
+
+                return 0;
+            }
+
+            String marker =
+                    "count=";
+
+            int index =
+                    value.indexOf(
+                            marker
+                    );
+
+            if (index < 0) {
+                return 0;
+            }
+
+            String number =
+                    value.substring(
+                            index + marker.length()
+                    );
+
+            int newline =
+                    number.indexOf(
+                            '\n'
+                    );
+
+            if (newline >= 0) {
+
+                number =
+                        number.substring(
+                                0,
+                                newline
+                        );
+            }
+
+            return Integer.parseInt(
+                    number.trim()
+            );
+
+        } catch (Exception e) {
+
+            return 0;
+        }
+    }
+
+    // =========================================================
     // SAFE SOURCE EVOLUTION
     // =========================================================
 
@@ -342,10 +992,6 @@ public class AutonomousEvolutionEngine {
 
         try {
 
-            // -------------------------------------------------
-            // 1. Verify file
-            // -------------------------------------------------
-
             if (!selfBuilderEngine.fileExists(
                     path
             )) {
@@ -355,10 +1001,6 @@ public class AutonomousEvolutionEngine {
                                 + "الملف غير موجود في Workspace:\n"
                                 + path;
             }
-
-            // -------------------------------------------------
-            // 2. Baseline test
-            // -------------------------------------------------
 
             String baseline =
                     selfTestEngine.runAllTests();
@@ -373,14 +1015,8 @@ public class AutonomousEvolutionEngine {
                 return
                         "Evolution توقف ⚠\n\n"
                                 + "Baseline tests فاشلين.\n\n"
-                                + baseline
-                                + "\n\n"
-                                + "ما غاديش نعدل الكود حتى يكون النظام مستقر.";
+                                + baseline;
             }
-
-            // -------------------------------------------------
-            // 3. Create snapshot
-            // -------------------------------------------------
 
             String snapshotResult =
                     selfBuilderEngine.createSnapshot(
@@ -400,10 +1036,6 @@ public class AutonomousEvolutionEngine {
                                 + "فشل إنشاء Snapshot.\n"
                                 + snapshotResult;
             }
-
-            // -------------------------------------------------
-            // 4. Apply real modification
-            // -------------------------------------------------
 
             String evolutionResult =
                     selfBuilderEngine.evolveSourceFile(
@@ -433,10 +1065,6 @@ public class AutonomousEvolutionEngine {
                                 + snapshotId;
             }
 
-            // -------------------------------------------------
-            // 5. Verify file changed
-            // -------------------------------------------------
-
             String after =
                     selfBuilderEngine.readSourceFile(
                             path
@@ -461,10 +1089,6 @@ public class AutonomousEvolutionEngine {
                                 + "ROLLBACK:\n"
                                 + rollback;
             }
-
-            // -------------------------------------------------
-            // 6. Run system tests
-            // -------------------------------------------------
 
             String afterTests =
                     selfTestEngine.runAllTests();
@@ -494,19 +1118,11 @@ public class AutonomousEvolutionEngine {
                                 + recoveryTests;
             }
 
-            // -------------------------------------------------
-            // 7. Prepare APK build
-            // -------------------------------------------------
-
             String buildRequest =
                     apkBuilderEngine.prepareBuildRequest(
                             "Successful autonomous evolution: "
                                     + reason
                     );
-
-            // -------------------------------------------------
-            // 8. Save learning memory
-            // -------------------------------------------------
 
             saveMemory(
                     "__last_autonomous_evolution_file__",
@@ -527,10 +1143,6 @@ public class AutonomousEvolutionEngine {
                     "__last_autonomous_evolution_result__",
                     "SUCCESS"
             );
-
-            // -------------------------------------------------
-            // 9. History
-            // -------------------------------------------------
 
             recordHistory(
                     "SUCCESS",
@@ -596,7 +1208,6 @@ public class AutonomousEvolutionEngine {
 
         try {
 
-            // Baseline
             String baseline =
                     selfTestEngine.runAllTests();
 
@@ -608,7 +1219,6 @@ public class AutonomousEvolutionEngine {
                                 + baseline;
             }
 
-            // Do not overwrite existing files
             if (selfBuilderEngine.fileExists(
                     path
             )) {
@@ -619,7 +1229,6 @@ public class AutonomousEvolutionEngine {
                                 + path;
             }
 
-            // Snapshot
             String snapshotResult =
                     selfBuilderEngine.createSnapshot(
                             "قبل إنشاء ملف جديد: "
@@ -638,7 +1247,6 @@ public class AutonomousEvolutionEngine {
                                 + snapshotResult;
             }
 
-            // Create
             String writeResult =
                     selfBuilderEngine.writeSourceFile(
                             path,
@@ -659,7 +1267,6 @@ public class AutonomousEvolutionEngine {
                                 + writeResult;
             }
 
-            // Test
             String tests =
                     selfTestEngine.runAllTests();
 
@@ -676,7 +1283,6 @@ public class AutonomousEvolutionEngine {
                                 + rollback;
             }
 
-            // Build request
             String buildRequest =
                     apkBuilderEngine.prepareBuildRequest(
                             "New source file: "
@@ -733,15 +1339,40 @@ public class AutonomousEvolutionEngine {
                                 .getNextDevelopmentTarget();
             }
 
+            String cleanGoal =
+                    goal.trim();
+
+            /*
+             * أولوية التطور الداخلي.
+             *
+             * ما دام الهدف يقدر يتحقق بالمعرفة،
+             * المهارات، القدرات، الذاكرة أو التخطيط،
+             * ما كاين حتى سبب نبنيو APK جديد.
+             */
+
+            if (canUseInternalEvolution(
+                    cleanGoal
+            )) {
+
+                return runInternalEvolution(
+                        cleanGoal
+                );
+            }
+
+            /*
+             * إلا كان الهدف كيتطلب تغيير حقيقي
+             * في كود التطبيق، كنرجعو للمسار الآمن.
+             */
+
             String analysis =
                     analyzeBeforeEvolution(
-                            goal
+                            cleanGoal
                     );
 
             String snapshot =
                     selfBuilderEngine.createSnapshot(
                             "Full autonomous cycle: "
-                                    + goal
+                                    + cleanGoal
                     );
 
             String snapshotId =
@@ -771,21 +1402,21 @@ public class AutonomousEvolutionEngine {
 
             String build =
                     apkBuilderEngine.prepareBuildRequest(
-                            "Autonomous cycle: "
-                                    + goal
+                            "Autonomous code cycle: "
+                                    + cleanGoal
                     );
 
             recordHistory(
-                    "CYCLE_PREPARED",
-                    goal
+                    "CODE_CYCLE_PREPARED",
+                    cleanGoal
                             + " | snapshot="
                             + snapshotId
             );
 
             return
-                    "AUTONOMOUS EVOLUTION CYCLE READY ✓\n\n"
+                    "AUTONOMOUS CODE EVOLUTION READY ✓\n\n"
                             + "GOAL:\n"
-                            + goal
+                            + cleanGoal
                             + "\n\n"
                             + "ANALYSIS:\n"
                             + analysis
@@ -800,8 +1431,8 @@ public class AutonomousEvolutionEngine {
                             + build
                             + "\n\n"
                             + "ملاحظة:\n"
-                            + "خاص الكود الجديد يتحدد قبل تطبيقه؛ "
-                            + "ما غاديش JARVIS يخترع patch عشوائي ويدخلو مباشرة.";
+                            + "هاد النوع محتاج تغيير حقيقي في كود التطبيق، "
+                            + "لذلك APK جديد غادي يكون مطلوب من بعد.";
 
         } catch (Exception e) {
 
@@ -809,6 +1440,239 @@ public class AutonomousEvolutionEngine {
                     "Evolution Cycle Failed:\n"
                             + safeError(e);
         }
+    }
+
+    // =========================================================
+    // DECIDE INTERNAL OR CODE EVOLUTION
+    // =========================================================
+
+    private boolean canUseInternalEvolution(
+            String goal
+    ) {
+
+        if (goal == null ||
+                goal.trim().isEmpty()) {
+
+            return true;
+        }
+
+        String value =
+                goal.toLowerCase(
+                        Locale.ROOT
+                );
+
+        /*
+         * هاد المجالات نقدروا نطوروها مباشرة
+         * بلا تغيير executable code.
+         */
+
+        if (containsAny(
+                value,
+                "تعلم",
+                "learn",
+                "learning",
+                "معرف",
+                "معلومة",
+                "ذاكرة",
+                "memory",
+                "تذكر",
+                "مهار",
+                "skill",
+                "قدر",
+                "capability",
+                "planning",
+                "plan",
+                "خطة",
+                "مهم",
+                "task",
+                "decision",
+                "قرار",
+                "ذكاء",
+                "intelligence",
+                "تطور داخلي",
+                "تعلم راسو",
+                "طور راسك",
+                "طور نفسك",
+                "طور جارفيس",
+                "طور جارڤيس",
+                "evolve yourself",
+                "self improve",
+                "self improvement"
+        )) {
+
+            return true;
+        }
+
+        /*
+         * هاد الكلمات غالبا كتدل على تغيير
+         * تنفيذي داخل التطبيق.
+         */
+
+        if (containsAny(
+                value,
+                "غير الكود",
+                "عدل الكود",
+                "عدّل الكود",
+                "source code",
+                "java",
+                "xml",
+                "gradle",
+                "apk",
+                "build apk",
+                "أنشئ ملف",
+                "انشئ ملف",
+                "create source",
+                "modify source",
+                "برمج",
+                "كود جديد"
+        )) {
+
+            return false;
+        }
+
+        /*
+         * الافتراضي:
+         * نبدأ بالتطور الداخلي لأنه أكثر أمانا
+         * وما كيحتاجش APK.
+         */
+
+        return true;
+    }
+
+    // =========================================================
+    // INTERNAL HISTORY
+    // =========================================================
+
+    private void recordInternalHistory(
+            String domain,
+            String goal,
+            boolean skillAdded,
+            boolean capabilityAdded
+    ) {
+
+        try {
+
+            JSONArray history =
+                    new JSONArray(
+                            preferences.getString(
+                                    INTERNAL_HISTORY_KEY,
+                                    "[]"
+                            )
+                    );
+
+            JSONObject item =
+                    new JSONObject();
+
+            item.put(
+                    "domain",
+                    domain
+            );
+
+            item.put(
+                    "goal",
+                    goal
+            );
+
+            item.put(
+                    "skill_added",
+                    skillAdded
+            );
+
+            item.put(
+                    "capability_added",
+                    capabilityAdded
+            );
+
+            item.put(
+                    "time",
+                    System.currentTimeMillis()
+            );
+
+            history.put(item);
+
+            while (
+                    history.length() > 100
+            ) {
+
+                JSONArray trimmed =
+                        new JSONArray();
+
+                for (
+                        int i = 1;
+                        i < history.length();
+                        i++
+                ) {
+
+                    trimmed.put(
+                            history.get(i)
+                    );
+                }
+
+                history =
+                        trimmed;
+            }
+
+            preferences.edit()
+                    .putString(
+                            INTERNAL_HISTORY_KEY,
+                            history.toString()
+                    )
+                    .apply();
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    public String getInternalHistory() {
+
+        return preferences.getString(
+                INTERNAL_HISTORY_KEY,
+                "لا توجد تطورات داخلية بعد."
+        );
+    }
+
+    public String getLastInternalEvolution() {
+
+        String goal =
+                memoryManager.getMemory(
+                        "__last_internal_evolution_goal__"
+                );
+
+        String domain =
+                memoryManager.getMemory(
+                        "__last_internal_evolution_domain__"
+                );
+
+        String skill =
+                memoryManager.getMemory(
+                        "__last_internal_evolution_skill__"
+                );
+
+        String capability =
+                memoryManager.getMemory(
+                        "__last_internal_evolution_capability__"
+                );
+
+        if (goal == null ||
+                goal.trim().isEmpty()) {
+
+            return
+                    "مازال ما دار JARVIS حتى Internal Evolution.";
+        }
+
+        return
+                "LAST INTERNAL EVOLUTION\n\n"
+                        + "Goal: "
+                        + goal
+                        + "\n"
+                        + "Domain: "
+                        + domain
+                        + "\n"
+                        + "Skill: "
+                        + skill
+                        + "\n"
+                        + "Capability: "
+                        + capability;
     }
 
     // =========================================================
@@ -921,7 +1785,7 @@ public class AutonomousEvolutionEngine {
 
             marker =
                     "ID: ";
-            
+
             index =
                     result.indexOf(
                             marker
@@ -988,6 +1852,40 @@ public class AutonomousEvolutionEngine {
     }
 
     // =========================================================
+    // TEXT MATCHING
+    // =========================================================
+
+    private boolean containsAny(
+            String value,
+            String... terms
+    ) {
+
+        if (value == null) {
+            return false;
+        }
+
+        for (String term : terms) {
+
+            if (term == null ||
+                    term.trim().isEmpty()) {
+
+                continue;
+            }
+
+            if (value.contains(
+                    term.toLowerCase(
+                            Locale.ROOT
+                    )
+            )) {
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // =========================================================
     // MEMORY
     // =========================================================
 
@@ -1049,7 +1947,6 @@ public class AutonomousEvolutionEngine {
 
             history.put(item);
 
-            // Keep last 100 operations
             while (
                     history.length() > 100
             ) {
