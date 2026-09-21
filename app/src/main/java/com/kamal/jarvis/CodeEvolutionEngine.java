@@ -1,6 +1,7 @@
 package com.kamal.jarvis;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -12,38 +13,58 @@ import java.util.Locale;
 /**
  * JARVIS CODE EVOLUTION ENGINE
  *
- * محرك فهم وتطوير الكود.
+ * محرك فهم وتطوير كود JARVIS.
  *
  * المسؤوليات:
- * 1. تحليل ملفات المشروع
- * 2. البحث عن الكود
- * 3. اكتشاف Java/XML/Gradle
- * 4. إنشاء ملفات جديدة
- * 5. تعديل الملفات عن طريق Patch آمن
- * 6. إنشاء Snapshot قبل التطوير
- * 7. حفظ سجل التطورات
- * 8. تحليل dependencies
- * 9. إنشاء خطة تطوير
- * 10. ربط التطوير مع SelfBuilderEngine
+ * - تحليل المشروع
+ * - البحث وقراءة الملفات
+ * - تحليل البنية والـ dependencies
+ * - إنشاء ملفات Java
+ * - تعديل الكود بطريقة آمنة
+ * - Snapshot / Rollback
+ * - خطط التطوير
+ * - حفظ تاريخ التطور
+ * - ربط التطوير مع SelfBuilderEngine
  *
- * مهم:
- * هذا المحرك يعمل داخل Workspace الخاص بـ JARVIS.
- * لا يدعي أنه يستطيع تعديل APK المثبت مباشرة.
+ * ملاحظة:
+ * هذا المحرك يطور Workspace الداخلي.
+ * بناء APK حقيقي يتم عبر ApkBuilderEngine عندما تتوفر بيئة Build.
  */
 public class CodeEvolutionEngine {
 
+    private static final String PREFS_NAME =
+            "jarvis_code_evolution";
+
+    private static final String KEY_HISTORY =
+            "history";
+
+    private static final String KEY_LAST_ACTION =
+            "last_action";
+
+    private static final String KEY_LAST_PLAN =
+            "last_plan";
+
     private final Context context;
+
     private final SelfBuilderEngine selfBuilder;
 
     private final MemoryManager memoryManager;
 
-    private final List<String> evolutionHistory =
+    private final SharedPreferences prefs;
+
+    private final List<String> sessionHistory =
             new ArrayList<>();
 
     public CodeEvolutionEngine(Context context) {
 
         this.context =
                 context.getApplicationContext();
+
+        prefs =
+                this.context.getSharedPreferences(
+                        PREFS_NAME,
+                        Context.MODE_PRIVATE
+                );
 
         memoryManager =
                 new MemoryManager(
@@ -62,26 +83,35 @@ public class CodeEvolutionEngine {
 
     public String getStatus() {
 
-        if (selfBuilder.isHealthy()) {
+        if (!isHealthy()) {
 
             return
-                    "CODE EVOLUTION ENGINE: ONLINE ✓\n"
-                    + "Code Analysis: READY ✓\n"
-                    + "Code Generation: READY ✓\n"
-                    + "Code Modification: READY ✓\n"
-                    + "Snapshot: READY ✓\n"
-                    + "Rollback: READY ✓\n"
-                    + "Dependency Analysis: READY ✓";
-
+                    "CODE EVOLUTION ENGINE: ATTENTION ⚠";
         }
 
         return
-                "CODE EVOLUTION ENGINE: ATTENTION ⚠";
+                "CODE EVOLUTION ENGINE: ONLINE ✓\n"
+                + "Project Analysis: READY ✓\n"
+                + "Code Search: READY ✓\n"
+                + "Code Generation: READY ✓\n"
+                + "Code Modification: READY ✓\n"
+                + "Snapshot: READY ✓\n"
+                + "Rollback: READY ✓\n"
+                + "Dependency Analysis: READY ✓\n"
+                + "History: READY ✓";
     }
 
     public boolean isHealthy() {
 
-        return selfBuilder.isHealthy();
+        try {
+
+            return selfBuilder != null
+                    && selfBuilder.isHealthy();
+
+        } catch (Exception e) {
+
+            return false;
+        }
     }
 
     // =========================================================
@@ -95,6 +125,12 @@ public class CodeEvolutionEngine {
             String files =
                     selfBuilder.listProjectFiles();
 
+            String architecture =
+                    detectArchitecture();
+
+            String dependencies =
+                    analyzeDependencies();
+
             StringBuilder result =
                     new StringBuilder();
 
@@ -107,7 +143,7 @@ public class CodeEvolutionEngine {
             );
 
             result.append(
-                    "FILES\n"
+                    "PROJECT FILES\n"
             );
 
             result.append(
@@ -119,7 +155,7 @@ public class CodeEvolutionEngine {
             );
 
             result.append(
-                    detectArchitecture()
+                    architecture
             );
 
             result.append(
@@ -127,12 +163,41 @@ public class CodeEvolutionEngine {
             );
 
             result.append(
-                    analyzeDependencies()
+                    dependencies
             );
+
+            result.append(
+                    "\n\nEVOLUTION STATUS\n"
+            );
+
+            result.append(
+                    "Workspace: "
+            )
+                    .append(
+                            selfBuilder.isHealthy()
+                                    ? "ONLINE"
+                                    : "ATTENTION"
+                    )
+                    .append("\n");
+
+            result.append(
+                    "Safe modification: READY\n"
+            );
+
+            result.append(
+                    "Snapshot/Rollback: READY\n"
+            );
+
+            result.append(
+                    "APK Build: delegated to ApkBuilderEngine"
+            );
+
+            String finalResult =
+                    result.toString();
 
             memoryManager.saveMemory(
                     "__last_code_analysis__",
-                    result.toString()
+                    finalResult
             );
 
             record(
@@ -140,7 +205,7 @@ public class CodeEvolutionEngine {
                     "تم تحليل Workspace"
             );
 
-            return result.toString();
+            return finalResult;
 
         } catch (Exception e) {
 
@@ -159,125 +224,160 @@ public class CodeEvolutionEngine {
         StringBuilder result =
                 new StringBuilder();
 
-        boolean java =
-                selfBuilder
-                        .searchSource(".java")
-                        .contains(".java");
+        try {
 
-        boolean xml =
-                selfBuilder
-                        .searchSource(".xml")
-                        .contains(".xml");
+            String javaSearch =
+                    selfBuilder.searchSource(
+                            ".java"
+                    );
 
-        boolean gradle =
-                selfBuilder
-                        .searchSource("gradle")
-                        .toLowerCase(
-                                Locale.getDefault()
-                        )
-                        .contains("gradle");
+            boolean java =
+                    containsIgnoreCase(
+                            javaSearch,
+                            ".java"
+                    );
 
-        if (java) {
+            String xmlSearch =
+                    selfBuilder.searchSource(
+                            ".xml"
+                    );
+
+            boolean xml =
+                    containsIgnoreCase(
+                            xmlSearch,
+                            ".xml"
+                    );
+
+            String gradleSearch =
+                    selfBuilder.searchSource(
+                            "gradle"
+                    );
+
+            boolean gradle =
+                    containsIgnoreCase(
+                            gradleSearch,
+                            "gradle"
+                    );
+
+            if (java) {
+
+                result.append(
+                        "✓ Java Android source\n"
+                );
+
+            } else {
+
+                result.append(
+                        "⚠ Java source غير مكتشف\n"
+                );
+            }
+
+            if (xml) {
+
+                result.append(
+                        "✓ Android XML resources\n"
+                );
+
+            } else {
+
+                result.append(
+                        "⚠ XML resources غير مكتشفة\n"
+                );
+            }
+
+            if (gradle) {
+
+                result.append(
+                        "✓ Gradle configuration\n"
+                );
+
+            } else {
+
+                result.append(
+                        "⚠ Gradle configuration غير مكتشفة\n"
+                );
+            }
 
             result.append(
-                    "✓ Java Android source\n"
+                    "✓ Workspace architecture scan complete"
             );
 
-        } else {
+            return result.toString();
 
-            result.append(
-                    "⚠ Java source غير مكتشف\n"
-            );
+        } catch (Exception e) {
+
+            return
+                    "Architecture scan failed:\n"
+                    + safeError(e);
         }
-
-        if (xml) {
-
-            result.append(
-                    "✓ Android XML resources\n"
-            );
-
-        } else {
-
-            result.append(
-                    "⚠ XML resources غير مكتشفة\n"
-            );
-        }
-
-        if (gradle) {
-
-            result.append(
-                    "✓ Gradle configuration\n"
-            );
-
-        } else {
-
-            result.append(
-                    "⚠ Gradle configuration غير مكتشفة\n"
-            );
-        }
-
-        result.append(
-                "✓ Workspace architecture scan complete"
-        );
-
-        return result.toString();
     }
 
     // =========================================================
-    // DEPENDENCY ANALYSIS
+    // DEPENDENCIES
     // =========================================================
 
     public String analyzeDependencies() {
 
-        StringBuilder result =
-                new StringBuilder();
+        try {
 
-        String gradleFiles =
-                selfBuilder.searchSource(
-                        "implementation"
-                );
+            String result =
+                    selfBuilder.searchSource(
+                            "implementation"
+                    );
 
-        result.append(
-                "Gradle dependency scan:\n\n"
-        );
+            StringBuilder output =
+                    new StringBuilder();
 
-        if (gradleFiles.contains(
-                "ما لقيتش"
-        )) {
-
-            result.append(
-                    "ما بان حتى dependency من نوع implementation.\n"
+            output.append(
+                    "Gradle dependency scan:\n\n"
             );
 
-        } else {
+            if (isSearchEmpty(result)) {
 
-            result.append(
-                    gradleFiles
-            )
-                    .append("\n");
+                output.append(
+                        "ما بان حتى dependency من نوع implementation.\n"
+                );
+
+            } else {
+
+                output.append(
+                        result
+                )
+                        .append("\n");
+            }
+
+            output.append(
+                    "\nJARVIS dependency policy:\n"
+            );
+
+            output.append(
+                    "• تجنب dependencies غير الضرورية\n"
+            );
+
+            output.append(
+                    "• فضل Android APIs الموجودة\n"
+            );
+
+            output.append(
+                    "• تحقق من compileSdk قبل إضافة مكتبة\n"
+            );
+
+            output.append(
+                    "• لا تضف خدمات مدفوعة تلقائيا\n"
+            );
+
+            output.append(
+                    "• أي dependency جديدة خاصها تحقق قبل اعتمادها"
+            );
+
+            return output.toString();
+
+        } catch (Exception e) {
+
+            return
+                    "Dependency analysis failed:\n"
+                    + safeError(e);
         }
-
-        result.append(
-                "\nJARVIS dependency policy:\n"
-        );
-
-        result.append(
-                "• تجنب dependency غير ضرورية\n"
-        );
-
-        result.append(
-                "• فضل Android APIs الموجودة\n"
-        );
-
-        result.append(
-                "• تحقق من compileSdk قبل إضافة مكتبة\n"
-        );
-
-        result.append(
-                "• لا تضف خدمة مدفوعة تلقائيا"
-        );
-
-        return result.toString();
     }
 
     // =========================================================
@@ -288,8 +388,14 @@ public class CodeEvolutionEngine {
             String query
     ) {
 
+        if (isBlank(query)) {
+
+            return
+                    "خاصني كلمة أو جملة للبحث.";
+        }
+
         return selfBuilder.searchSource(
-                query
+                query.trim()
         );
     }
 
@@ -301,13 +407,19 @@ public class CodeEvolutionEngine {
             String path
     ) {
 
+        if (isBlank(path)) {
+
+            return
+                    "حدد مسار الملف.";
+        }
+
         return selfBuilder.readSourceFile(
-                path
+                path.trim()
         );
     }
 
     // =========================================================
-    // CREATE FILE
+    // CREATE CODE FILE
     // =========================================================
 
     public String createCodeFile(
@@ -323,47 +435,69 @@ public class CodeEvolutionEngine {
                     + "المسار غير صالح.";
         }
 
-        String snapshot =
-                selfBuilder.createSnapshot(
-                        "قبل إنشاء ملف: "
-                                + safeText(reason)
-                );
+        if (content == null) {
 
-        String result =
-                selfBuilder.writeSourceFile(
-                        path,
-                        content
-                );
+            return
+                    "إنشاء الملف مرفوض:\n"
+                    + "المحتوى فارغ.";
+        }
 
-        boolean success =
-                isSuccess(result);
+        try {
 
-        if (success) {
+            String snapshot =
+                    selfBuilder.createSnapshot(
+                            "قبل إنشاء ملف: "
+                                    + safeText(reason)
+                    );
 
-            record(
-                    "CREATE_FILE",
-                    path
-            );
+            String result =
+                    selfBuilder.writeSourceFile(
+                            path.trim(),
+                            content
+                    );
+
+            if (!isOperationSuccessful(
+                    result
+            )) {
+
+                return
+                        "إنشاء الملف فشل ⚠\n\n"
+                        + result
+                        + "\n\nSnapshot:\n"
+                        + snapshot;
+            }
 
             memoryManager.saveMemory(
                     "__last_created_source__",
-                    path
+                    path.trim()
+            );
+
+            memoryManager.saveMemory(
+                    "__last_code_change__",
+                    path.trim()
+            );
+
+            record(
+                    "CREATE_FILE",
+                    path.trim()
             );
 
             return
                     "CODE FILE CREATED ✓\n\n"
-                    + "File: "
-                    + path
+                    + "File:\n"
+                    + path.trim()
                     + "\n\n"
                     + "Snapshot:\n"
                     + snapshot
                     + "\n\n"
                     + result;
-        }
 
-        return
-                "إنشاء الملف فشل ⚠\n\n"
-                + result;
+        } catch (Exception e) {
+
+            return
+                    "فشل إنشاء الملف:\n"
+                    + safeError(e);
+        }
     }
 
     // =========================================================
@@ -384,43 +518,69 @@ public class CodeEvolutionEngine {
                     + "المسار غير صالح.";
         }
 
-        if (oldCode == null ||
-                oldCode.isEmpty()) {
+        if (isBlank(oldCode)) {
 
             return
                     "التعديل مرفوض:\n"
                     + "oldCode فارغ.";
         }
 
-        String snapshot =
-                selfBuilder.createSnapshot(
-                        "قبل تعديل الكود: "
-                                + safeText(reason)
+        if (newCode == null) {
+
+            newCode = "";
+        }
+
+        try {
+
+            String snapshot =
+                    selfBuilder.createSnapshot(
+                            "قبل تعديل الكود: "
+                                    + safeText(reason)
+                    );
+
+            String result =
+                    selfBuilder.evolveSourceFile(
+                            path.trim(),
+                            oldCode,
+                            newCode,
+                            reason
+                    );
+
+            if (!isEvolutionSuccess(
+                    result
+            )) {
+
+                record(
+                        "MODIFY_FAILED",
+                        path.trim()
                 );
 
-        String result =
-                selfBuilder.evolveSourceFile(
-                        path,
-                        oldCode,
-                        newCode,
-                        reason
-                );
-
-        if (isSuccess(result)) {
-
-            record(
-                    "MODIFY_CODE",
-                    path
-            );
+                return
+                        "CODE EVOLUTION FAILED ⚠\n\n"
+                        + result
+                        + "\n\n"
+                        + "Snapshot محفوظ:\n"
+                        + snapshot;
+            }
 
             memoryManager.saveMemory(
                     "__last_code_change__",
-                    path
+                    path.trim()
             );
 
             memoryManager.saveMemory(
                     "__last_code_change_reason__",
                     safeText(reason)
+            );
+
+            memoryManager.saveMemory(
+                    "__last_successful_code_evolution__",
+                    result
+            );
+
+            record(
+                    "MODIFY_CODE",
+                    path.trim()
             );
 
             return
@@ -429,18 +589,17 @@ public class CodeEvolutionEngine {
                     + "\n\n"
                     + "Safety Snapshot:\n"
                     + snapshot;
-        }
 
-        return
-                "CODE EVOLUTION FAILED ⚠\n\n"
-                + result
-                + "\n\n"
-                + "Snapshot محفوظ:\n"
-                + snapshot;
+        } catch (Exception e) {
+
+            return
+                    "CODE EVOLUTION FAILED ⚠\n\n"
+                    + safeError(e);
+        }
     }
 
     // =========================================================
-    // GENERATE SIMPLE CLASS
+    // GENERATE JAVA CLASS
     // =========================================================
 
     public String generateJavaClass(
@@ -449,23 +608,20 @@ public class CodeEvolutionEngine {
             String description
     ) {
 
-        if (!validIdentifier(
-                className
-        )) {
+        if (!validIdentifier(className)) {
 
             return
                     "اسم Class غير صالح.";
         }
 
-        if (packageName == null ||
-                packageName.trim().isEmpty()) {
-
-            packageName =
-                    "com.kamal.jarvis";
-        }
-
         String cleanPackage =
-                packageName.trim();
+                normalizePackage(packageName);
+
+        String cleanClass =
+                className.trim();
+
+        String cleanDescription =
+                safeText(description);
 
         StringBuilder code =
                 new StringBuilder();
@@ -473,12 +629,8 @@ public class CodeEvolutionEngine {
         code.append(
                 "package "
         )
-                .append(
-                        cleanPackage
-                )
-                .append(
-                        ";\n\n"
-                );
+                .append(cleanPackage)
+                .append(";\n\n");
 
         code.append(
                 "/**\n"
@@ -492,7 +644,7 @@ public class CodeEvolutionEngine {
                 " * "
         )
                 .append(
-                        safeText(description)
+                        cleanDescription
                 )
                 .append(
                         "\n"
@@ -505,9 +657,7 @@ public class CodeEvolutionEngine {
         code.append(
                 "public class "
         )
-                .append(
-                        className.trim()
-                )
+                .append(cleanClass)
                 .append(
                         " {\n\n"
                 );
@@ -520,7 +670,9 @@ public class CodeEvolutionEngine {
                 "        return \""
         )
                 .append(
-                        className.trim()
+                        escapeJavaString(
+                                cleanClass
+                        )
                 )
                 .append(
                         "\";\n"
@@ -555,16 +707,12 @@ public class CodeEvolutionEngine {
                     "اسم Interface غير صالح.";
         }
 
-        if (packageName == null ||
-                packageName.trim().isEmpty()) {
-
-            packageName =
-                    "com.kamal.jarvis";
-        }
+        String cleanPackage =
+                normalizePackage(packageName);
 
         return
                 "package "
-                + packageName.trim()
+                + cleanPackage
                 + ";\n\n"
                 + "/**\n"
                 + " * "
@@ -595,12 +743,8 @@ public class CodeEvolutionEngine {
                     "اسم Enum غير صالح.";
         }
 
-        if (packageName == null ||
-                packageName.trim().isEmpty()) {
-
-            packageName =
-                    "com.kamal.jarvis";
-        }
+        String cleanPackage =
+                normalizePackage(packageName);
 
         StringBuilder code =
                 new StringBuilder();
@@ -608,9 +752,7 @@ public class CodeEvolutionEngine {
         code.append(
                 "package "
         )
-                .append(
-                        packageName.trim()
-                )
+                .append(cleanPackage)
                 .append(
                         ";\n\n"
                 );
@@ -625,34 +767,43 @@ public class CodeEvolutionEngine {
                         " {\n"
                 );
 
+        List<String> validValues =
+                new ArrayList<>();
+
         if (values != null) {
 
-            for (int i = 0;
-                 i < values.length;
-                 i++) {
+            for (String value :
+                    values) {
 
-                if (!validIdentifier(
-                        values[i]
+                if (validIdentifier(
+                        value
                 )) {
-                    continue;
+
+                    validValues.add(
+                            value.trim()
+                    );
                 }
-
-                code.append(
-                        "    "
-                )
-                        .append(
-                                values[i]
-                                        .trim()
-                        );
-
-                if (i <
-                        values.length - 1) {
-
-                    code.append(",");
-                }
-
-                code.append("\n");
             }
+        }
+
+        for (int i = 0;
+             i < validValues.size();
+             i++) {
+
+            code.append(
+                    "    "
+            )
+                    .append(
+                            validValues.get(i)
+                    );
+
+            if (i <
+                    validValues.size() - 1) {
+
+                code.append(",");
+            }
+
+            code.append("\n");
         }
 
         code.append(
@@ -663,7 +814,7 @@ public class CodeEvolutionEngine {
     }
 
     // =========================================================
-    // GENERATE DEVELOPMENT PLAN
+    // DEVELOPMENT PLAN
     // =========================================================
 
     public String generateDevelopmentPlan(
@@ -715,7 +866,7 @@ public class CodeEvolutionEngine {
                 steps,
                 6,
                 "Verify",
-                "التحقق من الملف والـ Hash"
+                "التحقق من المحتوى والـHash"
         );
 
         addPlanStep(
@@ -729,14 +880,14 @@ public class CodeEvolutionEngine {
                 steps,
                 8,
                 "Build",
-                "تجهيز APK جديد إذا كان Build Environment متاحا"
+                "طلب Build للـAPK إذا كانت البيئة متوفرة"
         );
 
         addPlanStep(
                 steps,
                 9,
                 "Learn",
-                "حفظ نتيجة التطوير"
+                "حفظ النتيجة والتعلم منها"
         );
 
         JSONObject plan =
@@ -762,9 +913,19 @@ public class CodeEvolutionEngine {
         } catch (Exception ignored) {
         }
 
+        String result =
+                plan.toString();
+
+        prefs.edit()
+                .putString(
+                        KEY_LAST_PLAN,
+                        result
+                )
+                .apply();
+
         memoryManager.saveMemory(
                 "__last_code_plan__",
-                plan.toString()
+                result
         );
 
         record(
@@ -772,8 +933,7 @@ public class CodeEvolutionEngine {
                 cleanGoal
         );
 
-        return
-                plan.toString();
+        return result;
     }
 
     // =========================================================
@@ -784,9 +944,17 @@ public class CodeEvolutionEngine {
             String reason
     ) {
 
-        return selfBuilder.createSnapshot(
-                reason
+        String result =
+                selfBuilder.createSnapshot(
+                        reason
+                );
+
+        record(
+                "SNAPSHOT",
+                safeText(reason)
         );
+
+        return result;
     }
 
     // =========================================================
@@ -797,27 +965,32 @@ public class CodeEvolutionEngine {
             String snapshotId
     ) {
 
+        if (isBlank(snapshotId)) {
+
+            return
+                    "خاصك تحدد Snapshot.";
+        }
+
         String result =
                 selfBuilder.rollback(
-                        snapshotId
+                        snapshotId.trim()
                 );
 
         record(
                 "ROLLBACK",
-                snapshotId
+                snapshotId.trim()
         );
 
         return result;
     }
 
     // =========================================================
-    // INVENTORY
+    // PROJECT INVENTORY
     // =========================================================
 
     public String getProjectInventory() {
 
-        return
-                selfBuilder.listProjectFiles();
+        return selfBuilder.listProjectFiles();
     }
 
     // =========================================================
@@ -827,12 +1000,22 @@ public class CodeEvolutionEngine {
     public String getLastPlan() {
 
         String plan =
+                prefs.getString(
+                        KEY_LAST_PLAN,
+                        ""
+                );
+
+        if (!isBlank(plan)) {
+
+            return plan;
+        }
+
+        plan =
                 memoryManager.getMemory(
                         "__last_code_plan__"
                 );
 
-        if (plan == null ||
-                plan.trim().isEmpty()) {
+        if (isBlank(plan)) {
 
             return
                     "ما كايناش خطة كود محفوظة.";
@@ -847,34 +1030,105 @@ public class CodeEvolutionEngine {
 
     public String getHistory() {
 
-        if (evolutionHistory.isEmpty()) {
+        try {
 
-            return
-                    "ما كاين حتى Evolution Engine history حاليا.";
-        }
+            JSONArray history =
+                    new JSONArray(
+                            prefs.getString(
+                                    KEY_HISTORY,
+                                    "[]"
+                            )
+                    );
 
-        StringBuilder result =
-                new StringBuilder();
+            if (history.length() == 0
+                    && sessionHistory.isEmpty()) {
 
-        result.append(
-                "CODE EVOLUTION HISTORY\n\n"
-        );
+                return
+                        "ما كاين حتى Evolution Engine history حاليا.";
+            }
 
-        for (String item :
-                evolutionHistory) {
+            StringBuilder result =
+                    new StringBuilder();
 
             result.append(
-                    "• "
-            )
-                    .append(
-                            item
-                    )
-                    .append(
-                            "\n"
+                    "CODE EVOLUTION HISTORY\n\n"
+            );
+
+            int start =
+                    Math.max(
+                            0,
+                            history.length() - 30
                     );
+
+            for (int i = start;
+                 i < history.length();
+                 i++) {
+
+                JSONObject item =
+                        history.getJSONObject(i);
+
+                result.append("[")
+                        .append(
+                                item.optString(
+                                        "time"
+                                )
+                        )
+                        .append("] ");
+
+                result.append(
+                        item.optString(
+                                "type"
+                        )
+                )
+                        .append(": ");
+
+                result.append(
+                        item.optString(
+                                "message"
+                        )
+                )
+                        .append("\n");
+            }
+
+            for (String item :
+                    sessionHistory) {
+
+                result.append(
+                        "• "
+                )
+                        .append(item)
+                        .append("\n");
+            }
+
+            return result.toString();
+
+        } catch (Exception e) {
+
+            return
+                    "تعذر قراءة Evolution History:\n"
+                    + safeError(e);
+        }
+    }
+
+    // =========================================================
+    // LAST ACTION
+    // =========================================================
+
+    public String getLastAction() {
+
+        String action =
+                prefs.getString(
+                        KEY_LAST_ACTION,
+                        ""
+                );
+
+        if (isBlank(action)) {
+
+            return
+                    "ما كاين حتى إجراء مسجل.";
         }
 
-        return result.toString();
+        return action;
     }
 
     // =========================================================
@@ -898,7 +1152,7 @@ public class CodeEvolutionEngine {
                                 '/'
                         )
                         .toLowerCase(
-                                Locale.getDefault()
+                                Locale.ROOT
                         );
 
         if (clean.startsWith("/")
@@ -920,7 +1174,7 @@ public class CodeEvolutionEngine {
     }
 
     // =========================================================
-    // IDENTIFIER VALIDATION
+    // JAVA IDENTIFIER
     // =========================================================
 
     private boolean validIdentifier(
@@ -956,6 +1210,56 @@ public class CodeEvolutionEngine {
         }
 
         return true;
+    }
+
+    // =========================================================
+    // PACKAGE
+    // =========================================================
+
+    private String normalizePackage(
+            String packageName
+    ) {
+
+        if (isBlank(packageName)) {
+
+            return
+                    "com.kamal.jarvis";
+        }
+
+        String clean =
+                packageName.trim()
+                        .replace(
+                                '/',
+                                '.'
+                        );
+
+        String[] parts =
+                clean.split("\\.");
+
+        StringBuilder result =
+                new StringBuilder();
+
+        for (String part :
+                parts) {
+
+            if (!validIdentifier(part)) {
+                continue;
+            }
+
+            if (result.length() > 0) {
+                result.append(".");
+            }
+
+            result.append(part);
+        }
+
+        if (result.length() == 0) {
+
+            return
+                    "com.kamal.jarvis";
+        }
+
+        return result.toString();
     }
 
     // =========================================================
@@ -996,10 +1300,95 @@ public class CodeEvolutionEngine {
     }
 
     // =========================================================
+    // HISTORY
+    // =========================================================
+
+    private synchronized void record(
+            String type,
+            String message
+    ) {
+
+        String value =
+                type
+                        + " | "
+                        + safeText(message);
+
+        sessionHistory.add(
+                value
+        );
+
+        while (
+                sessionHistory.size() > 50
+        ) {
+
+            sessionHistory.remove(0);
+        }
+
+        prefs.edit()
+                .putString(
+                        KEY_LAST_ACTION,
+                        value
+                )
+                .apply();
+
+        try {
+
+            JSONArray history =
+                    new JSONArray(
+                            prefs.getString(
+                                    KEY_HISTORY,
+                                    "[]"
+                            )
+                    );
+
+            JSONObject item =
+                    new JSONObject();
+
+            item.put(
+                    "type",
+                    type
+            );
+
+            item.put(
+                    "message",
+                    safeText(message)
+            );
+
+            item.put(
+                    "time",
+                    System.currentTimeMillis()
+            );
+
+            history.put(item);
+
+            while (
+                    history.length() > 100
+            ) {
+
+                history.remove(0);
+            }
+
+            prefs.edit()
+                    .putString(
+                            KEY_HISTORY,
+                            history.toString()
+                    )
+                    .apply();
+
+        } catch (Exception ignored) {
+        }
+
+        memoryManager.saveMemory(
+                "__code_evolution_last_action__",
+                value
+        );
+    }
+
+    // =========================================================
     // SUCCESS
     // =========================================================
 
-    private boolean isSuccess(
+    private boolean isOperationSuccessful(
             String result
     ) {
 
@@ -1011,45 +1400,122 @@ public class CodeEvolutionEngine {
 
         String lower =
                 result.toLowerCase(
-                        Locale.getDefault()
+                        Locale.ROOT
                 );
 
         return
                 !lower.contains("فشل")
                 && !lower.contains("failed")
-                && !lower.contains("error");
+                && !lower.contains("error")
+                && !lower.contains("مرفوض");
+    }
+
+    private boolean isEvolutionSuccess(
+            String result
+    ) {
+
+        if (result == null) {
+
+            return false;
+        }
+
+        String lower =
+                result.toLowerCase(
+                        Locale.ROOT
+                );
+
+        return
+                lower.contains(
+                        "evolution success"
+                )
+                || lower.contains(
+                        "تعديل الكود ناجح"
+                )
+                || lower.contains(
+                        "code evolution success"
+                );
     }
 
     // =========================================================
-    // HISTORY
+    // SEARCH HELPERS
     // =========================================================
 
-    private void record(
-            String type,
-            String message
+    private boolean containsIgnoreCase(
+            String source,
+            String query
     ) {
 
-        String value =
-                type
-                        + " | "
-                        + safeText(message);
+        if (source == null ||
+                query == null) {
 
-        evolutionHistory.add(
-                value
-        );
-
-        while (
-                evolutionHistory.size()
-                        > 100
-        ) {
-
-            evolutionHistory.remove(0);
+            return false;
         }
 
-        memoryManager.saveMemory(
-                "__code_evolution_last_action__",
-                value
+        return source.toLowerCase(
+                Locale.ROOT
+        ).contains(
+                query.toLowerCase(
+                        Locale.ROOT
+                )
         );
+    }
+
+    private boolean isSearchEmpty(
+            String value
+    ) {
+
+        if (isBlank(value)) {
+
+            return true;
+        }
+
+        String lower =
+                value.toLowerCase(
+                        Locale.ROOT
+                );
+
+        return
+                lower.contains(
+                        "ما لقيتش"
+                )
+                || lower.contains(
+                        "not found"
+                )
+                || lower.contains(
+                        "no results"
+                );
+    }
+
+    // =========================================================
+    // JAVA ESCAPE
+    // =========================================================
+
+    private String escapeJavaString(
+            String value
+    ) {
+
+        if (value == null) {
+
+            return "";
+        }
+
+        return value
+                .replace(
+                        "\\",
+                        "\\\\"
+                )
+                .replace(
+                        "\"",
+                        "\\\""
+                )
+                .replace(
+                        "\n",
+                        "\\n"
+                )
+                .replace(
+                        "\r",
+                        "\\r"
+                );
     }
 
     // =========================================================
@@ -1093,5 +1559,14 @@ public class CodeEvolutionEngine {
         }
 
         return message;
+    }
+
+    // =========================================================
+    // CONTEXT
+    // =========================================================
+
+    public Context getContext() {
+
+        return context;
     }
 }
