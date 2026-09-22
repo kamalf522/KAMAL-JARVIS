@@ -1,6 +1,7 @@
 package com.kamal.jarvis;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -8,10 +9,10 @@ import org.json.JSONObject;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.InputStreamReader;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
@@ -21,19 +22,18 @@ import java.util.Locale;
 /**
  * JARVIS APK BUILDER ENGINE
  *
- * مسؤول عن:
+ * مسؤول على:
+ * - فحص Workspace
  * - التحقق من Android Project
- * - تجهيز Build
- * - محاولة البناء المحلي إذا كان Gradle متاحا
- * - تتبع حالة Build
- * - اكتشاف APK الناتج
- * - حساب SHA-256
- * - حفظ تاريخ عمليات البناء
+ * - إنشاء Build Request
+ * - محاولة Build محلي إذا كان Gradle + Android SDK موجودين
+ * - اكتشاف APK
+ * - SHA-256
+ * - Build History
+ * - Build Status
  *
- * ملاحظة:
- * Android المثبت لا يضمن وجود Gradle/Android SDK داخله.
- * لذلك هذا المحرك لا يدعي نجاح Build إذا لم يكن
- * Build Toolchain موجودا.
+ * مهم:
+ * هذا المحرك ما كيقولش APK تبنى إلا إذا لقا APK فعلياً.
  */
 public class ApkBuilderEngine {
 
@@ -48,6 +48,9 @@ public class ApkBuilderEngine {
 
     private static final String KEY_STATUS =
             "build_status";
+
+    private static final String KEY_LAST_APK =
+            "last_apk";
 
     private final Context context;
 
@@ -80,9 +83,11 @@ public class ApkBuilderEngine {
 
             if (!workspace.exists()) {
 
+                saveStatus("NOT_READY");
+
                 return
-                        "BUILD ERROR\n"
-                        + "Workspace غير موجود.";
+                        "BUILD ERROR\n\n"
+                                + "Workspace غير موجود.";
             }
 
             File settings =
@@ -91,10 +96,10 @@ public class ApkBuilderEngine {
                             "settings.gradle"
                     );
 
-            File appGradle =
+            File settingsKts =
                     new File(
                             workspace,
-                            "app/build.gradle"
+                            "settings.gradle.kts"
                     );
 
             File rootGradle =
@@ -102,6 +107,36 @@ public class ApkBuilderEngine {
                             workspace,
                             "build.gradle"
                     );
+
+            File rootGradleKts =
+                    new File(
+                            workspace,
+                            "build.gradle.kts"
+                    );
+
+            File appGradle =
+                    new File(
+                            workspace,
+                            "app/build.gradle"
+                    );
+
+            File appGradleKts =
+                    new File(
+                            workspace,
+                            "app/build.gradle.kts"
+                    );
+
+            boolean hasSettings =
+                    settings.exists()
+                            || settingsKts.exists();
+
+            boolean hasRootBuild =
+                    rootGradle.exists()
+                            || rootGradleKts.exists();
+
+            boolean hasAppBuild =
+                    appGradle.exists()
+                            || appGradleKts.exists();
 
             StringBuilder result =
                     new StringBuilder();
@@ -119,7 +154,7 @@ public class ApkBuilderEngine {
             )
                     .append(
                             workspace.exists()
-                                    ? "OK"
+                                    ? "OK ✓"
                                     : "MISSING"
                     )
                     .append("\n");
@@ -128,70 +163,107 @@ public class ApkBuilderEngine {
                     "settings.gradle: "
             )
                     .append(
-                            settings.exists()
-                                    ? "OK"
+                            hasSettings
+                                    ? "OK ✓"
                                     : "MISSING"
                     )
                     .append("\n");
 
             result.append(
-                    "build.gradle: "
+                    "root build.gradle: "
             )
                     .append(
-                            rootGradle.exists()
-                                    ? "OK"
+                            hasRootBuild
+                                    ? "OK ✓"
                                     : "MISSING"
                     )
                     .append("\n");
 
             result.append(
-                    "app/build.gradle: "
+                    "app build.gradle: "
             )
                     .append(
-                            appGradle.exists()
-                                    ? "OK"
+                            hasAppBuild
+                                    ? "OK ✓"
                                     : "MISSING"
                     )
                     .append("\n\n");
 
-            if (!settings.exists() ||
-                    !appGradle.exists() ||
-                    !rootGradle.exists()) {
-
-                result.append(
-                        "STATUS: NOT READY"
-                );
+            if (!hasSettings
+                    || !hasRootBuild
+                    || !hasAppBuild) {
 
                 saveStatus(
-                        "NOT_READY"
+                        "PROJECT_NOT_READY"
+                );
+
+                result.append(
+                        "STATUS: PROJECT NOT READY\n\n"
+                );
+
+                result.append(
+                        "Workspace مازال ما فيهش Android Project كامل."
                 );
 
                 return result.toString();
             }
 
-            result.append(
-                    "STATUS: PROJECT READY\n"
-            );
+            File appDirectory =
+                    new File(
+                            workspace,
+                            "app"
+                    );
+
+            File manifest =
+                    new File(
+                            appDirectory,
+                            "src/main/AndroidManifest.xml"
+                    );
 
             result.append(
-                    "ولكن Build يحتاج Gradle/Android SDK."
-            );
+                    "AndroidManifest.xml: "
+            )
+                    .append(
+                            manifest.exists()
+                                    ? "OK ✓"
+                                    : "MISSING"
+                    )
+                    .append("\n");
+
+            if (!manifest.exists()) {
+
+                saveStatus(
+                        "PROJECT_INCOMPLETE"
+                );
+
+                result.append(
+                        "\nSTATUS: PROJECT INCOMPLETE"
+                );
+
+                return result.toString();
+            }
 
             saveStatus(
                     "PROJECT_READY"
+            );
+
+            result.append(
+                    "\nSTATUS: PROJECT READY ✓\n"
+            );
+
+            result.append(
+                    "يمكن طلب Build."
             );
 
             return result.toString();
 
         } catch (Exception e) {
 
-            saveStatus(
-                    "ERROR"
-            );
+            saveStatus("ERROR");
 
             return
                     "Project validation failed:\n"
-                    + safeError(e);
+                            + safeError(e);
         }
     }
 
@@ -199,7 +271,7 @@ public class ApkBuilderEngine {
     // BUILD
     // =========================================================
 
-    public String buildDebugApk() {
+    public synchronized String buildDebugApk() {
 
         String buildId =
                 createBuildId();
@@ -211,14 +283,14 @@ public class ApkBuilderEngine {
         recordBuild(
                 "START",
                 buildId,
-                "بدأ Build Debug APK"
+                "بدأ طلب Build Debug APK"
         );
 
         String validation =
                 validateProject();
 
-        if (validation.contains(
-                "NOT READY"
+        if (!validation.contains(
+                "PROJECT READY"
         )) {
 
             saveStatus(
@@ -228,12 +300,12 @@ public class ApkBuilderEngine {
             recordBuild(
                     "FAILED",
                     buildId,
-                    "Project غير جاهز"
+                    "Android Project غير جاهز"
             );
 
             return
                     "BUILD FAILED\n\n"
-                    + validation;
+                            + validation;
         }
 
         File workspace =
@@ -254,8 +326,8 @@ public class ApkBuilderEngine {
                         "gradlew.bat"
                 );
 
-        if (!gradlew.exists() &&
-                !gradlewBat.exists()) {
+        if (!gradlew.exists()
+                && !gradlewBat.exists()) {
 
             saveStatus(
                     "WAITING_FOR_BUILDER"
@@ -268,36 +340,32 @@ public class ApkBuilderEngine {
             );
 
             return
-                    "BUILD READY\n\n"
-                    + "Project صالح.\n"
-                    + "ولكن Gradle Wrapper غير موجود داخل Workspace.\n\n"
-                    + "JARVIS ما غاديش يكذب عليك ويقول APK تبنى.\n"
-                    + "الـAPK خاصو Build Environment خارجي "
-                    + "أو Gradle/Android SDK موجود.";
-        }
-
-        String command;
-
-        if (gradlew.exists()) {
-
-            command =
-                    "./gradlew assembleDebug";
-
-        } else {
-
-            command =
-                    "gradlew.bat assembleDebug";
+                    "BUILD WAITING ⚠\n\n"
+                            + "Android Project موجود وصالح ✓\n\n"
+                            + "ولكن Gradle Wrapper غير موجود داخل Workspace.\n\n"
+                            + "JARVIS ما غاديش يدعي أنه بنى APK وهو ما بناهش.";
         }
 
         String output;
 
         try {
 
-            output =
-                    executeCommand(
-                            command,
-                            workspace
-                    );
+            if (gradlew.exists()) {
+
+                output =
+                        executeUnixGradle(
+                                gradlew,
+                                workspace
+                        );
+
+            } else {
+
+                output =
+                        executeWindowsGradle(
+                                gradlewBat,
+                                workspace
+                        );
+            }
 
         } catch (Exception e) {
 
@@ -313,7 +381,7 @@ public class ApkBuilderEngine {
 
             return
                     "BUILD FAILED\n\n"
-                    + safeError(e);
+                            + safeError(e);
         }
 
         File apk =
@@ -321,8 +389,8 @@ public class ApkBuilderEngine {
                         workspace
                 );
 
-        if (apk == null ||
-                !apk.exists()) {
+        if (apk == null
+                || !apk.exists()) {
 
             saveStatus(
                     "FAILED"
@@ -331,14 +399,14 @@ public class ApkBuilderEngine {
             recordBuild(
                     "FAILED",
                     buildId,
-                    "Gradle انتهى بدون APK"
+                    "Gradle انتهى ولكن ما تلقاش APK"
             );
 
             return
                     "BUILD FAILED\n\n"
-                    + "Gradle ما خرجش APK.\n\n"
-                    + "OUTPUT:\n"
-                    + limitOutput(output);
+                            + "Gradle سالا ولكن ما تلقيناش APK.\n\n"
+                            + "OUTPUT:\n"
+                            + limitOutput(output);
         }
 
         String hash;
@@ -360,6 +428,10 @@ public class ApkBuilderEngine {
                 "SUCCESS"
         );
 
+        saveLastApk(
+                apk.getAbsolutePath()
+        );
+
         recordBuild(
                 "SUCCESS",
                 buildId,
@@ -370,14 +442,14 @@ public class ApkBuilderEngine {
 
         return
                 "BUILD SUCCESS ✓\n\n"
-                + "Build ID: "
-                + buildId
-                + "\n\n"
-                + "APK:\n"
-                + apk.getAbsolutePath()
-                + "\n\n"
-                + "SHA-256:\n"
-                + hash;
+                        + "Build ID:\n"
+                        + buildId
+                        + "\n\n"
+                        + "APK:\n"
+                        + apk.getAbsolutePath()
+                        + "\n\n"
+                        + "SHA-256:\n"
+                        + hash;
     }
 
     // =========================================================
@@ -398,6 +470,10 @@ public class ApkBuilderEngine {
                             selfBuilderEngine
                                     .getWorkspacePath()
                     );
+
+            if (!workspace.exists()) {
+                workspace.mkdirs();
+            }
 
             File request =
                     new File(
@@ -420,7 +496,7 @@ public class ApkBuilderEngine {
 
             json.put(
                     "command",
-                    "gradle assembleDebug"
+                    "assembleDebug"
             );
 
             json.put(
@@ -457,22 +533,22 @@ public class ApkBuilderEngine {
 
             return
                     "BUILD REQUEST CREATED ✓\n\n"
-                    + "Build ID: "
-                    + buildId
-                    + "\n"
-                    + "File:\n"
-                    + request.getAbsolutePath();
+                            + "Build ID:\n"
+                            + buildId
+                            + "\n\n"
+                            + "Request:\n"
+                            + request.getAbsolutePath();
 
         } catch (Exception e) {
 
             return
                     "فشل إنشاء Build Request:\n"
-                    + safeError(e);
+                            + safeError(e);
         }
     }
 
     // =========================================================
-    // APK DISCOVERY
+    // LATEST APK
     // =========================================================
 
     public String findLatestApk() {
@@ -511,22 +587,26 @@ public class ApkBuilderEngine {
                         "غير متوفر";
             }
 
+            saveLastApk(
+                    apk.getAbsolutePath()
+            );
+
             return
                     "LATEST APK\n\n"
-                    + "Path:\n"
-                    + apk.getAbsolutePath()
-                    + "\n\n"
-                    + "Size: "
-                    + apk.length()
-                    + " bytes\n\n"
-                    + "SHA-256:\n"
-                    + hash;
+                            + "Path:\n"
+                            + apk.getAbsolutePath()
+                            + "\n\n"
+                            + "Size: "
+                            + apk.length()
+                            + " bytes\n\n"
+                            + "SHA-256:\n"
+                            + hash;
 
         } catch (Exception e) {
 
             return
                     "فشل البحث عن APK:\n"
-                    + safeError(e);
+                            + safeError(e);
         }
     }
 
@@ -536,7 +616,7 @@ public class ApkBuilderEngine {
 
     public String getStatus() {
 
-        android.content.SharedPreferences prefs =
+        SharedPreferences prefs =
                 context.getSharedPreferences(
                         PREFS_NAME,
                         Context.MODE_PRIVATE
@@ -554,22 +634,31 @@ public class ApkBuilderEngine {
                         "لا يوجد"
                 );
 
+        String lastApk =
+                prefs.getString(
+                        KEY_LAST_APK,
+                        "لا يوجد"
+                );
+
         return
                 "JARVIS APK BUILDER\n"
-                + "============================\n"
-                + "Status: "
-                + status
-                + "\n"
-                + "Last Build:\n"
-                + lastBuild;
+                        + "============================\n"
+                        + "Status: "
+                        + status
+                        + "\n\n"
+                        + "Last APK:\n"
+                        + lastApk
+                        + "\n\n"
+                        + "Last Build:\n"
+                        + lastBuild;
     }
 
     public boolean isHealthy() {
 
         try {
 
-            return selfBuilderEngine
-                    .isHealthy();
+            return selfBuilderEngine != null
+                    && selfBuilderEngine.isHealthy();
 
         } catch (Exception e) {
 
@@ -583,7 +672,7 @@ public class ApkBuilderEngine {
 
     public String getBuildHistory() {
 
-        android.content.SharedPreferences prefs =
+        SharedPreferences prefs =
                 context.getSharedPreferences(
                         PREFS_NAME,
                         Context.MODE_PRIVATE
@@ -598,7 +687,9 @@ public class ApkBuilderEngine {
         try {
 
             JSONArray array =
-                    new JSONArray(history);
+                    new JSONArray(
+                            history
+                    );
 
             if (array.length() == 0) {
 
@@ -619,9 +710,11 @@ public class ApkBuilderEngine {
                             array.length() - 20
                     );
 
-            for (int i = start;
-                 i < array.length();
-                 i++) {
+            for (
+                    int i = start;
+                    i < array.length();
+                    i++
+            ) {
 
                 JSONObject item =
                         array.getJSONObject(i);
@@ -669,11 +762,57 @@ public class ApkBuilderEngine {
     }
 
     // =========================================================
-    // COMMAND EXECUTION
+    // GRADLE EXECUTION
     // =========================================================
 
+    private String executeUnixGradle(
+            File gradlew,
+            File directory
+    ) throws Exception {
+
+        if (!gradlew.canExecute()) {
+
+            try {
+                gradlew.setExecutable(
+                        true,
+                        false
+                );
+            } catch (Exception ignored) {
+            }
+        }
+
+        String[] command = {
+                "sh",
+                gradlew.getAbsolutePath(),
+                "assembleDebug"
+        };
+
+        return executeCommand(
+                command,
+                directory
+        );
+    }
+
+    private String executeWindowsGradle(
+            File gradlewBat,
+            File directory
+    ) throws Exception {
+
+        String[] command = {
+                "cmd",
+                "/c",
+                gradlewBat.getAbsolutePath(),
+                "assembleDebug"
+        };
+
+        return executeCommand(
+                command,
+                directory
+        );
+    }
+
     private String executeCommand(
-            String command,
+            String[] command,
             File directory
     ) throws Exception {
 
@@ -712,15 +851,21 @@ public class ApkBuilderEngine {
 
         String line;
 
-        while ((line =
-                reader.readLine()) != null) {
+        while (
+                (line =
+                        reader.readLine())
+                        != null
+        ) {
 
             output.append(line)
                     .append("\n");
         }
 
-        while ((line =
-                errorReader.readLine()) != null) {
+        while (
+                (line =
+                        errorReader.readLine())
+                        != null
+        ) {
 
             output.append(line)
                     .append("\n");
@@ -756,8 +901,8 @@ public class ApkBuilderEngine {
             File directory
     ) {
 
-        if (directory == null ||
-                !directory.exists()) {
+        if (directory == null
+                || !directory.exists()) {
 
             return null;
         }
@@ -777,28 +922,40 @@ public class ApkBuilderEngine {
 
             if (file.isDirectory()) {
 
+                if (isBuildNoiseDirectory(
+                        file
+                )) {
+                    continue;
+                }
+
                 File found =
                         findApk(file);
 
-                if (found != null &&
-                        (newest == null ||
-                                found.lastModified()
-                                        > newest.lastModified())) {
+                if (found != null
+                        && (
+                        newest == null
+                                || found.lastModified()
+                                > newest.lastModified()
+                )) {
 
                     newest = found;
                 }
 
             } else {
 
-                if (file.getName()
-                        .toLowerCase(
-                                Locale.US
-                        )
-                        .endsWith(".apk")) {
+                String name =
+                        file.getName()
+                                .toLowerCase(
+                                        Locale.ROOT
+                                );
 
-                    if (newest == null ||
-                            file.lastModified()
-                                    > newest.lastModified()) {
+                if (name.endsWith(
+                        ".apk"
+                )) {
+
+                    if (newest == null
+                            || file.lastModified()
+                            > newest.lastModified()) {
 
                         newest = file;
                     }
@@ -809,11 +966,27 @@ public class ApkBuilderEngine {
         return newest;
     }
 
+    private boolean isBuildNoiseDirectory(
+            File directory
+    ) {
+
+        String name =
+                directory.getName()
+                        .toLowerCase(
+                                Locale.ROOT
+                        );
+
+        return name.equals("backups")
+                || name.equals("snapshots")
+                || name.equals(".git")
+                || name.equals(".gradle");
+    }
+
     // =========================================================
     // HISTORY
     // =========================================================
 
-    private void recordBuild(
+    private synchronized void recordBuild(
             String status,
             String buildId,
             String message
@@ -821,7 +994,7 @@ public class ApkBuilderEngine {
 
         try {
 
-            android.content.SharedPreferences prefs =
+            SharedPreferences prefs =
                     context.getSharedPreferences(
                             PREFS_NAME,
                             Context.MODE_PRIVATE
@@ -862,7 +1035,9 @@ public class ApkBuilderEngine {
 
             history.put(item);
 
-            while (history.length() > 50) {
+            while (
+                    history.length() > 50
+            ) {
 
                 history.remove(0);
             }
@@ -894,6 +1069,24 @@ public class ApkBuilderEngine {
                 .putString(
                         KEY_STATUS,
                         status
+                )
+                .apply();
+    }
+
+    private void saveLastApk(
+            String path
+    ) {
+
+        context.getSharedPreferences(
+                PREFS_NAME,
+                Context.MODE_PRIVATE
+        )
+                .edit()
+                .putString(
+                        KEY_LAST_APK,
+                        path == null
+                                ? ""
+                                : path
                 )
                 .apply();
     }
@@ -936,27 +1129,31 @@ public class ApkBuilderEngine {
                         "SHA-256"
                 );
 
-        FileInputStream input =
-                new FileInputStream(
-                        file
+        try (
+                FileInputStream input =
+                        new FileInputStream(
+                                file
+                        )
+        ) {
+
+            byte[] buffer =
+                    new byte[8192];
+
+            int read;
+
+            while (
+                    (read =
+                            input.read(buffer))
+                            != -1
+            ) {
+
+                digest.update(
+                        buffer,
+                        0,
+                        read
                 );
-
-        byte[] buffer =
-                new byte[8192];
-
-        int read;
-
-        while ((read =
-                input.read(buffer)) != -1) {
-
-            digest.update(
-                    buffer,
-                    0,
-                    read
-            );
+            }
         }
-
-        input.close();
 
         byte[] hash =
                 digest.digest();
@@ -986,24 +1183,27 @@ public class ApkBuilderEngine {
         File parent =
                 file.getParentFile();
 
-        if (parent != null &&
-                !parent.exists()) {
+        if (parent != null
+                && !parent.exists()) {
 
             parent.mkdirs();
         }
 
-        FileOutputStream output =
-                new FileOutputStream(
-                        file
-                );
+        try (
+                FileOutputStream output =
+                        new FileOutputStream(
+                                file
+                        )
+        ) {
 
-        output.write(
-                content.getBytes(
-                        StandardCharsets.UTF_8
-                )
-        );
+            output.write(
+                    content.getBytes(
+                            StandardCharsets.UTF_8
+                    )
+            );
 
-        output.close();
+            output.flush();
+        }
     }
 
     private String safeError(
@@ -1011,15 +1211,14 @@ public class ApkBuilderEngine {
     ) {
 
         if (e == null) {
-
             return "Unknown error";
         }
 
         String message =
                 e.getMessage();
 
-        if (message == null ||
-                message.trim().isEmpty()) {
+        if (message == null
+                || message.trim().isEmpty()) {
 
             return e.getClass()
                     .getSimpleName();
@@ -1033,7 +1232,6 @@ public class ApkBuilderEngine {
     ) {
 
         if (output == null) {
-
             return "";
         }
 
@@ -1041,7 +1239,6 @@ public class ApkBuilderEngine {
                 6000;
 
         if (output.length() <= max) {
-
             return output;
         }
 
