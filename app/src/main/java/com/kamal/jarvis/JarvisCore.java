@@ -2,6 +2,8 @@ package com.kamal.jarvis;
 
 import android.content.Context;
 
+import java.util.Locale;
+
 public class JarvisCore {
 
     private final Context context;
@@ -9,6 +11,7 @@ public class JarvisCore {
     private final MemoryManager memoryManager;
     private final SkillManager skillManager;
     private final CapabilityManager capabilityManager;
+
     private final EvolutionEngine evolutionEngine;
     private final SelfDiagnosisManager selfDiagnosisManager;
     private final SelfTestEngine selfTestEngine;
@@ -36,13 +39,26 @@ public class JarvisCore {
 
     public JarvisCore(Context context) {
 
-        this.context = context.getApplicationContext();
+        if (context == null) {
+            throw new IllegalArgumentException(
+                    "JarvisCore context cannot be null"
+            );
+        }
 
-        memoryManager = new MemoryManager(this.context);
-        skillManager = new SkillManager(this.context);
-        capabilityManager = new CapabilityManager(this.context);
+        this.context =
+                context.getApplicationContext();
 
-        evolutionEngine = new EvolutionEngine(this.context);
+        memoryManager =
+                new MemoryManager(this.context);
+
+        skillManager =
+                new SkillManager(this.context);
+
+        capabilityManager =
+                new CapabilityManager(this.context);
+
+        evolutionEngine =
+                new EvolutionEngine(this.context);
 
         selfDiagnosisManager =
                 new SelfDiagnosisManager(this.context);
@@ -103,10 +119,12 @@ public class JarvisCore {
     }
 
     // =========================================================
-    // MAIN COMMAND PROCESSOR
+    // MAIN BRAIN
     // =========================================================
 
-    public String processCommand(String command) {
+    public synchronized String processCommand(
+            String command
+    ) {
 
         if (command == null ||
                 command.trim().isEmpty()) {
@@ -114,51 +132,86 @@ public class JarvisCore {
             return "ما عطيتيني حتى أمر.";
         }
 
-        String cleanCommand = command.trim();
+        String cleanCommand =
+                normalizeCommand(command);
+
+        if (cleanCommand.isEmpty()) {
+
+            return "الأمر غير صالح.";
+        }
 
         try {
 
+            /*
+             * المرحلة 1:
+             * تسجيل الأمر الخام.
+             */
             actionHistoryManager.recordAction(
                     cleanCommand
             );
 
+            /*
+             * المرحلة 2:
+             * اتخاذ القرار.
+             */
             String decision =
-                    decisionEngine.decide(cleanCommand);
+                    safeDecision(cleanCommand);
 
-            contextEngine.updateCommand(
+            /*
+             * المرحلة 3:
+             * تحديث السياق.
+             */
+            updateContext(
                     cleanCommand,
                     decision
             );
 
-            contextEngine.updateDecision(
-                    decision
-            );
-
+            /*
+             * المرحلة 4:
+             * البحث عن أمر سبق لـ JARVIS تعلمه.
+             */
             String learnedAction =
-                    commandLearningEngine.findLearnedCommand(
+                    findLearnedAction(
                             cleanCommand
                     );
 
             if (learnedAction != null &&
-                    !learnedAction.trim().isEmpty()) {
+                    !learnedAction.isEmpty() &&
+                    !learnedAction.equalsIgnoreCase(
+                            cleanCommand
+                    )) {
 
-                String cleanLearnedAction =
-                        learnedAction.trim();
+                String learnedResult =
+                        executeLearnedCommand(
+                                cleanCommand,
+                                learnedAction
+                        );
 
-                if (!cleanLearnedAction.equalsIgnoreCase(
-                        cleanCommand
-                )) {
-
-                    return executeLearnedCommand(
-                            cleanCommand,
-                            cleanLearnedAction
-                    );
-                }
+                return finalizeResult(
+                        cleanCommand,
+                        decision,
+                        learnedResult
+                );
             }
 
-            return routeCommand(
+            /*
+             * المرحلة 5:
+             * توجيه الأمر للنظام المناسب.
+             */
+            String result =
+                    routeCommand(
+                            cleanCommand,
+                            decision
+                    );
+
+            /*
+             * المرحلة 6:
+             * تسجيل النتيجة في السياق.
+             */
+            return finalizeResult(
                     cleanCommand,
-                    decision
+                    decision,
+                    result
             );
 
         } catch (Exception e) {
@@ -171,8 +224,83 @@ public class JarvisCore {
     }
 
     // =========================================================
+    // DECISION
+    // =========================================================
+
+    private String safeDecision(
+            String command
+    ) {
+
+        try {
+
+            String decision =
+                    decisionEngine.decide(command);
+
+            if (decision == null ||
+                    decision.trim().isEmpty()) {
+
+                return "UNKNOWN";
+            }
+
+            return decision.trim();
+
+        } catch (Exception e) {
+
+            return "UNKNOWN";
+        }
+    }
+
+    // =========================================================
+    // CONTEXT
+    // =========================================================
+
+    private void updateContext(
+            String command,
+            String decision
+    ) {
+
+        try {
+
+            contextEngine.updateCommand(
+                    command,
+                    decision
+            );
+
+            contextEngine.updateDecision(
+                    decision
+            );
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    // =========================================================
     // LEARNED COMMAND
     // =========================================================
+
+    private String findLearnedAction(
+            String command
+    ) {
+
+        try {
+
+            String learned =
+                    commandLearningEngine
+                            .findLearnedCommand(
+                                    command
+                            );
+
+            if (learned == null) {
+                return "";
+            }
+
+            return learned.trim();
+
+        } catch (Exception e) {
+
+            return "";
+        }
+    }
 
     private String executeLearnedCommand(
             String originalCommand,
@@ -182,7 +310,8 @@ public class JarvisCore {
         try {
 
             actionHistoryManager.recordAction(
-                    "LEARNED: " + originalCommand
+                    "LEARNED: "
+                            + originalCommand
             );
 
             String result =
@@ -194,8 +323,8 @@ public class JarvisCore {
                     result.trim().isEmpty()) {
 
                 return
-                        "JARVIS تعلم الأمر، ولكن ما قدرش ينفذ "
-                                + "الإجراء حالياً.";
+                        "JARVIS تعلم الأمر، ولكن ما قدرش "
+                                + "ينفذ الإجراء حالياً.";
             }
 
             return result;
@@ -209,7 +338,10 @@ public class JarvisCore {
                             + originalCommand
                             + "\n"
                             + "الإجراء: "
-                            + learnedAction;
+                            + learnedAction
+                            + "\n"
+                            + "الخطأ: "
+                            + safeError(e);
         }
     }
 
@@ -223,7 +355,13 @@ public class JarvisCore {
     ) {
 
         String cmd =
-                command.toLowerCase();
+                command.toLowerCase(
+                        Locale.ROOT
+                );
+
+        // -----------------------------------------------------
+        // SELF DIAGNOSIS
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -234,8 +372,13 @@ public class JarvisCore {
                 "diagnose"
         )) {
 
-            return selfDiagnosisManager.runDiagnosis();
+            return selfDiagnosisManager
+                    .runDiagnosis();
         }
+
+        // -----------------------------------------------------
+        // SELF TEST
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -246,8 +389,13 @@ public class JarvisCore {
                 "self-test"
         )) {
 
-            return selfTestEngine.runAllTests();
+            return selfTestEngine
+                    .runAllTests();
         }
+
+        // -----------------------------------------------------
+        // RECOVERY
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -257,8 +405,13 @@ public class JarvisCore {
                 "recovery"
         )) {
 
-            return recoverySystem.runRecovery();
+            return recoverySystem
+                    .runRecovery();
         }
+
+        // -----------------------------------------------------
+        // SYSTEM STATUS
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -272,6 +425,10 @@ public class JarvisCore {
             return getFullStatus();
         }
 
+        // -----------------------------------------------------
+        // EVOLUTION
+        // -----------------------------------------------------
+
         if (containsAny(
                 cmd,
                 "طور نفسك",
@@ -283,7 +440,8 @@ public class JarvisCore {
                 "evolve"
         )) {
 
-            return evolutionEngine.runEvolutionCycle();
+            return evolutionEngine
+                    .runEvolutionCycle();
         }
 
         if (containsAny(
@@ -293,7 +451,8 @@ public class JarvisCore {
                 "evolution status"
         )) {
 
-            return evolutionEngine.getEvolutionStatus();
+            return evolutionEngine
+                    .getEvolutionStatus();
         }
 
         if (containsAny(
@@ -303,7 +462,8 @@ public class JarvisCore {
                 "evolution history"
         )) {
 
-            return evolutionEngine.getEvolutionHistory();
+            return evolutionEngine
+                    .getEvolutionHistory();
         }
 
         if (containsAny(
@@ -314,8 +474,13 @@ public class JarvisCore {
                 "development target"
         )) {
 
-            return evolutionEngine.getActiveDevelopmentTarget();
+            return evolutionEngine
+                    .getActiveDevelopmentTarget();
         }
+
+        // -----------------------------------------------------
+        // SELF BUILDER
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -326,8 +491,13 @@ public class JarvisCore {
                 "حالة البناء الذاتي"
         )) {
 
-            return evolutionEngine.getSelfBuilderStatus();
+            return evolutionEngine
+                    .getSelfBuilderStatus();
         }
+
+        // -----------------------------------------------------
+        // APK PROJECT
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -338,7 +508,8 @@ public class JarvisCore {
                 "validate apk"
         )) {
 
-            return evolutionEngine.validateApkProject();
+            return evolutionEngine
+                    .validateApkProject();
         }
 
         if (containsAny(
@@ -351,9 +522,10 @@ public class JarvisCore {
                 "prepare build"
         )) {
 
-            return evolutionEngine.prepareApkBuild(
-                    "طلب المستخدم بناء APK"
-            );
+            return evolutionEngine
+                    .prepareApkBuild(
+                            "طلب المستخدم بناء APK"
+                    );
         }
 
         if (containsAny(
@@ -368,7 +540,8 @@ public class JarvisCore {
                 "assemble debug"
         )) {
 
-            return evolutionEngine.buildDebugApk();
+            return evolutionEngine
+                    .buildDebugApk();
         }
 
         if (containsAny(
@@ -380,7 +553,8 @@ public class JarvisCore {
                 "apk status"
         )) {
 
-            return evolutionEngine.getApkBuildStatus();
+            return evolutionEngine
+                    .getApkBuildStatus();
         }
 
         if (containsAny(
@@ -394,7 +568,8 @@ public class JarvisCore {
                 "latest apk"
         )) {
 
-            return evolutionEngine.getLatestApk();
+            return evolutionEngine
+                    .getLatestApk();
         }
 
         if (containsAny(
@@ -405,8 +580,13 @@ public class JarvisCore {
                 "build history"
         )) {
 
-            return evolutionEngine.getApkBuildHistory();
+            return evolutionEngine
+                    .getApkBuildHistory();
         }
+
+        // -----------------------------------------------------
+        // CAPABILITIES
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -416,8 +596,13 @@ public class JarvisCore {
                 "capabilities"
         )) {
 
-            return capabilityManager.getReport();
+            return capabilityManager
+                    .getReport();
         }
+
+        // -----------------------------------------------------
+        // SKILLS
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -426,8 +611,13 @@ public class JarvisCore {
                 "skills"
         )) {
 
-            return skillManager.getReport();
+            return skillManager
+                    .getReport();
         }
+
+        // -----------------------------------------------------
+        // MEMORY
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -438,8 +628,13 @@ public class JarvisCore {
                 "memory"
         )) {
 
-            return memoryManager.getAllMemories();
+            return memoryManager
+                    .getAllMemories();
         }
+
+        // -----------------------------------------------------
+        // TASKS
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -448,8 +643,13 @@ public class JarvisCore {
                 "tasks"
         )) {
 
-            return taskManager.getTasks();
+            return taskManager
+                    .getTasks();
         }
+
+        // -----------------------------------------------------
+        // PLANNING
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -459,8 +659,13 @@ public class JarvisCore {
                 "خطتي"
         )) {
 
-            return planningEngine.getActivePlan();
+            return planningEngine
+                    .getActivePlan();
         }
+
+        // -----------------------------------------------------
+        // KNOWLEDGE
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -469,8 +674,13 @@ public class JarvisCore {
                 "knowledge"
         )) {
 
-            return knowledgeEngine.getKnowledgeReport();
+            return knowledgeEngine
+                    .getKnowledgeReport();
         }
+
+        // -----------------------------------------------------
+        // NOTIFICATIONS
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -479,8 +689,13 @@ public class JarvisCore {
                 "notifications"
         )) {
 
-            return notificationIntelligence.getStatus();
+            return notificationIntelligence
+                    .getStatus();
         }
+
+        // -----------------------------------------------------
+        // SCREEN
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -488,8 +703,13 @@ public class JarvisCore {
                 "screen"
         )) {
 
-            return screenIntelligence.getStatus();
+            return screenIntelligence
+                    .getStatus();
         }
+
+        // -----------------------------------------------------
+        // AUTOMATION
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -498,8 +718,13 @@ public class JarvisCore {
                 "automation"
         )) {
 
-            return automationEngine.getAutomationStatus();
+            return automationEngine
+                    .getAutomationStatus();
         }
+
+        // -----------------------------------------------------
+        // MONITOR
+        // -----------------------------------------------------
 
         if (containsAny(
                 cmd,
@@ -509,10 +734,47 @@ public class JarvisCore {
                 "system monitor"
         )) {
 
-            return systemMonitor.getFullStatus();
+            return systemMonitor
+                    .getFullStatus();
         }
 
-        return automationEngine.execute(command);
+        /*
+         * إذا ما تطابق حتى نظام معروف،
+         * نخلي Automation Engine يحاول التنفيذ.
+         */
+        return automationEngine.execute(
+                command
+        );
+    }
+
+    // =========================================================
+    // FINAL RESULT
+    // =========================================================
+
+    private String finalizeResult(
+            String command,
+            String decision,
+            String result
+    ) {
+
+        String finalResult =
+                safe(result);
+
+        try {
+
+            contextEngine.updateCommand(
+                    command,
+                    decision
+            );
+
+            contextEngine.updateDecision(
+                    finalResult
+            );
+
+        } catch (Exception ignored) {
+        }
+
+        return finalResult;
     }
 
     // =========================================================
@@ -533,7 +795,8 @@ public class JarvisCore {
         if (value == null ||
                 value.trim().isEmpty()) {
 
-            return "خاصني المعلومة اللي بغيتي نحفظ.";
+            return
+                    "خاصني المعلومة اللي بغيتي نحفظ.";
         }
 
         memoryManager.saveMemory(
@@ -541,7 +804,8 @@ public class JarvisCore {
                 value.trim()
         );
 
-        return "تم حفظ المعلومة في ذاكرة JARVIS.";
+        return
+                "تم حفظ المعلومة في ذاكرة JARVIS.";
     }
 
     // =========================================================
@@ -553,10 +817,11 @@ public class JarvisCore {
             String action
     ) {
 
-        return commandLearningEngine.learnCommand(
-                command,
-                action
-        );
+        return commandLearningEngine
+                .learnCommand(
+                        command,
+                        action
+                );
     }
 
     // =========================================================
@@ -578,40 +843,54 @@ public class JarvisCore {
             String subject
     ) {
 
-        return knowledgeEngine.remember(subject);
+        return knowledgeEngine
+                .remember(subject);
     }
 
     // =========================================================
     // TASKS
     // =========================================================
 
-    public String addTask(String task) {
+    public String addTask(
+            String task
+    ) {
 
-        return taskManager.addTask(task);
+        return taskManager
+                .addTask(task);
     }
 
-    public String completeTask(int index) {
+    public String completeTask(
+            int index
+    ) {
 
-        return taskManager.completeTask(index);
+        return taskManager
+                .completeTask(index);
     }
 
-    public String removeTask(int index) {
+    public String removeTask(
+            int index
+    ) {
 
-        return taskManager.removeTask(index);
+        return taskManager
+                .removeTask(index);
     }
 
     // =========================================================
     // PLANNING
     // =========================================================
 
-    public String createPlan(String goal) {
+    public String createPlan(
+            String goal
+    ) {
 
-        return planningEngine.createPlan(goal);
+        return planningEngine
+                .createPlan(goal);
     }
 
     public String getPlan() {
 
-        return planningEngine.getActivePlan();
+        return planningEngine
+                .getActivePlan();
     }
 
     // =========================================================
@@ -623,10 +902,11 @@ public class JarvisCore {
             long triggerTime
     ) {
 
-        return reminderEngine.createReminder(
-                title,
-                triggerTime
-        );
+        return reminderEngine
+                .createReminder(
+                        title,
+                        triggerTime
+                );
     }
 
     // =========================================================
@@ -635,62 +915,76 @@ public class JarvisCore {
 
     public String openWifi() {
 
-        return androidControlEngine.openWifiSettings();
+        return androidControlEngine
+                .openWifiSettings();
     }
 
     public String openBluetooth() {
 
-        return androidControlEngine.openBluetoothSettings();
+        return androidControlEngine
+                .openBluetoothSettings();
     }
 
     public String openDeviceInfo() {
 
-        return androidControlEngine.openDeviceInfo();
+        return androidControlEngine
+                .openDeviceInfo();
     }
 
     public String openNotificationSettings() {
 
-        return androidControlEngine.openNotificationSettings();
+        return androidControlEngine
+                .openNotificationSettings();
     }
 
     public String openDisplaySettings() {
 
-        return androidControlEngine.openDisplaySettings();
+        return androidControlEngine
+                .openDisplaySettings();
     }
 
     public String openSoundSettings() {
 
-        return androidControlEngine.openSoundSettings();
+        return androidControlEngine
+                .openSoundSettings();
     }
 
     public String openBatterySettings() {
 
-        return androidControlEngine.openBatterySettings();
+        return androidControlEngine
+                .openBatterySettings();
     }
 
     // =========================================================
     // APPROVAL
     // =========================================================
 
-    public String requestApproval(String action) {
+    public String requestApproval(
+            String action
+    ) {
 
         if (action == null ||
                 action.trim().isEmpty()) {
 
-            return "خاصني الأمر اللي بغيتي نطلب عليه الموافقة.";
+            return
+                    "خاصني الأمر اللي بغيتي نطلب عليه الموافقة.";
         }
 
-        return approvalEngine.requestApproval(
-                action.trim()
-        );
+        return approvalEngine
+                .requestApproval(
+                        action.trim()
+                );
     }
 
-    public String approveAction(String action) {
+    public String approveAction(
+            String action
+    ) {
 
         if (action == null ||
                 action.trim().isEmpty()) {
 
-            return "خاصني الأمر اللي بغيتي توافق عليه.";
+            return
+                    "خاصني الأمر اللي بغيتي توافق عليه.";
         }
 
         boolean approved =
@@ -700,11 +994,13 @@ public class JarvisCore {
 
         if (approved) {
 
-            return "تمت الموافقة على الأمر: "
-                    + action.trim();
+            return
+                    "تمت الموافقة على الأمر: "
+                            + action.trim();
         }
 
-        return "ما تمت الموافقة على الأمر.";
+        return
+                "ما تمت الموافقة على الأمر.";
     }
 
     // =========================================================
@@ -713,16 +1009,18 @@ public class JarvisCore {
 
     public String getDevelopmentTarget() {
 
-        return evolutionEngine.getActiveDevelopmentTarget();
+        return evolutionEngine
+                .getActiveDevelopmentTarget();
     }
 
     public String createBuildPlan(
             String systemName
     ) {
 
-        return selfBuilderEngine.createBuildPlan(
-                systemName
-        );
+        return selfBuilderEngine
+                .createBuildPlan(
+                        systemName
+                );
     }
 
     // =========================================================
@@ -733,9 +1031,10 @@ public class JarvisCore {
             String description
     ) {
 
-        return screenIntelligence.analyzeScreen(
-                description
-        );
+        return screenIntelligence
+                .analyzeScreen(
+                        description
+                );
     }
 
     // =========================================================
@@ -748,11 +1047,12 @@ public class JarvisCore {
             String message
     ) {
 
-        return notificationIntelligence.processNotification(
-                appName,
-                title,
-                message
-        );
+        return notificationIntelligence
+                .processNotification(
+                        appName,
+                        title,
+                        message
+                );
     }
 
     // =========================================================
@@ -778,297 +1078,4 @@ public class JarvisCore {
 
         report.append(
                 safe(
-                        evolutionEngine.getEvolutionStatus()
-                )
-        );
-
-        report.append("\n\n");
-
-        report.append("APK Builder:\n");
-
-        report.append(
-                safe(
-                        evolutionEngine.getApkBuildStatus()
-                )
-        );
-
-        report.append("\n\n");
-
-        report.append("Self Diagnosis:\n");
-
-        report.append(
-                safe(
-                        selfDiagnosisManager.runDiagnosis()
-                )
-        );
-
-        report.append("\n\n");
-
-        report.append("Skills:\n");
-
-        report.append(
-                safe(
-                        skillManager.getReport()
-                )
-        );
-
-        report.append("\n\n");
-
-        report.append("Capabilities:\n");
-
-        report.append(
-                safe(
-                        capabilityManager.getReport()
-                )
-        );
-
-        report.append("\n\n");
-
-        report.append("Tasks:\n");
-
-        report.append(
-                safe(
-                        taskManager.getTasks()
-                )
-        );
-
-        report.append("\n\n");
-
-        report.append("Notifications:\n");
-
-        report.append(
-                safe(
-                        notificationIntelligence.getStatus()
-                )
-        );
-
-        report.append("\n\n");
-
-        report.append("Screen:\n");
-
-        report.append(
-                safe(
-                        screenIntelligence.getStatus()
-                )
-        );
-
-        report.append("\n\n");
-
-        report.append("Automation:\n");
-
-        report.append(
-                safe(
-                        automationEngine.getAutomationStatus()
-                )
-        );
-
-        report.append("\n\n");
-
-        report.append("System Monitor:\n");
-
-        report.append(
-                safe(
-                        systemMonitor.getFullStatus()
-                )
-        );
-
-        return report.toString();
-    }
-
-    // =========================================================
-    // HELPERS
-    // =========================================================
-
-    private boolean containsAny(
-            String text,
-            String... values
-    ) {
-
-        if (text == null ||
-                values == null) {
-
-            return false;
-        }
-
-        String clean =
-                text.toLowerCase();
-
-        for (String value : values) {
-
-            if (value != null &&
-                    clean.contains(
-                            value.toLowerCase()
-                    )) {
-
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private String safe(String value) {
-
-        if (value == null ||
-                value.trim().isEmpty()) {
-
-            return "غير متوفر حالياً.";
-        }
-
-        return value;
-    }
-
-    private String recoverFromError(
-            String source,
-            Exception error
-    ) {
-
-        String message =
-                error.getMessage();
-
-        if (message == null ||
-                message.trim().isEmpty()) {
-
-            message =
-                    error.getClass()
-                            .getSimpleName();
-        }
-
-        try {
-
-            recoverySystem.recordFailure(
-                    source,
-                    message
-            );
-
-        } catch (Exception ignored) {
-        }
-
-        return
-                "JARVIS واجه خطأ في "
-                        + source
-                        + ".\n"
-                        + "تم تسجيل الخطأ ومحاولة الاسترجاع.\n\n"
-                        + message;
-    }
-
-    public Context getContext() {
-
-        return context;
-    }
-
-    public MemoryManager getMemoryManager() {
-
-        return memoryManager;
-    }
-
-    public SkillManager getSkillManager() {
-
-        return skillManager;
-    }
-
-    public CapabilityManager getCapabilityManager() {
-
-        return capabilityManager;
-    }
-
-    public EvolutionEngine getEvolutionEngine() {
-
-        return evolutionEngine;
-    }
-
-    public SelfDiagnosisManager getSelfDiagnosisManager() {
-
-        return selfDiagnosisManager;
-    }
-
-    public SelfTestEngine getSelfTestEngine() {
-
-        return selfTestEngine;
-    }
-
-    public RecoverySystem getRecoverySystem() {
-
-        return recoverySystem;
-    }
-
-    public TaskManager getTaskManager() {
-
-        return taskManager;
-    }
-
-    public ReminderEngine getReminderEngine() {
-
-        return reminderEngine;
-    }
-
-    public LearningEngine getLearningEngine() {
-
-        return learningEngine;
-    }
-
-    public PlanningEngine getPlanningEngine() {
-
-        return planningEngine;
-    }
-
-    public DecisionEngine getDecisionEngine() {
-
-        return decisionEngine;
-    }
-
-    public ApprovalEngine getApprovalEngine() {
-
-        return approvalEngine;
-    }
-
-    public ActionHistoryManager getActionHistoryManager() {
-
-        return actionHistoryManager;
-    }
-
-    public ContextEngine getContextEngine() {
-
-        return contextEngine;
-    }
-
-    public AutomationEngine getAutomationEngine() {
-
-        return automationEngine;
-    }
-
-    public KnowledgeEngine getKnowledgeEngine() {
-
-        return knowledgeEngine;
-    }
-
-    public CommandLearningEngine getCommandLearningEngine() {
-
-        return commandLearningEngine;
-    }
-
-    public AndroidControlEngine getAndroidControlEngine() {
-
-        return androidControlEngine;
-    }
-
-    public ScreenIntelligence getScreenIntelligence() {
-
-        return screenIntelligence;
-    }
-
-    public NotificationIntelligence getNotificationIntelligence() {
-
-        return notificationIntelligence;
-    }
-
-    public SelfBuilderEngine getSelfBuilderEngine() {
-
-        return selfBuilderEngine;
-    }
-
-    public SystemMonitor getSystemMonitor() {
-
-        return systemMonitor;
-    }
-}
+                        evolutionEngine
