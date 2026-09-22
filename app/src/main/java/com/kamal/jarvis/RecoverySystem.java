@@ -4,229 +4,471 @@ import android.content.Context;
 
 public class RecoverySystem {
 
-    private final Context context;
-    private final MemoryManager memoryManager;
-    private final CapabilityManager capabilityManager;
+private final Context context;
 
-    public RecoverySystem(Context context) {
+private final MemoryManager memoryManager;
+private final CapabilityManager capabilityManager;
+private final SkillManager skillManager;
+private final TaskManager taskManager;
+private final SystemMonitor systemMonitor;
+private final ActionHistoryManager actionHistoryManager;
 
-        this.context = context.getApplicationContext();
+public RecoverySystem(Context context) {
 
-        memoryManager =
-                new MemoryManager(this.context);
+    this.context =
+            context.getApplicationContext();
 
-        capabilityManager =
-                new CapabilityManager(this.context);
+    memoryManager =
+            new MemoryManager(this.context);
+
+    capabilityManager =
+            new CapabilityManager(this.context);
+
+    skillManager =
+            new SkillManager(this.context);
+
+    taskManager =
+            new TaskManager(this.context);
+
+    systemMonitor =
+            new SystemMonitor(this.context);
+
+    actionHistoryManager =
+            new ActionHistoryManager(this.context);
+}
+
+public String runRecovery() {
+
+    StringBuilder report =
+            new StringBuilder();
+
+    int checked = 0;
+    int healthy = 0;
+    int repaired = 0;
+
+    report.append(
+            "JARVIS RECOVERY SYSTEM\n"
+    );
+
+    report.append(
+            "============================\n\n"
+    );
+
+    checked++;
+
+    try {
+
+        memoryManager.getMemoryCount();
+
+        report.append(
+                "✓ MEMORY SYSTEM: ONLINE\n"
+        );
+
+        healthy++;
+
+    } catch (Exception e) {
+
+        report.append(
+                "✗ MEMORY SYSTEM: ERROR\n"
+        );
+
+        recordFailure(
+                "MemoryManager",
+                safeError(e)
+        );
     }
 
-    public String runRecovery() {
+    checked++;
 
-        StringBuilder report =
-                new StringBuilder();
+    try {
 
-        int repaired = 0;
-        int checked = 0;
+        int count =
+                capabilityManager.getCount();
 
-        report.append("JARVIS RECOVERY SYSTEM\n");
-        report.append("============================\n\n");
-
-        checked++;
-
-        try {
-
-            memoryManager.getMemoryCount();
+        if (count >= 0) {
 
             report.append(
-                    "✓ MEMORY SYSTEM: ONLINE\n"
+                    "✓ CAPABILITY SYSTEM: ONLINE\n"
             );
 
-            repaired++;
-
-        } catch (Exception e) {
-
-            report.append(
-                    "✗ MEMORY SYSTEM: ERROR\n"
-            );
-        }
-
-        checked++;
-
-        try {
-
-            int count =
-                    capabilityManager.getCount();
-
-            if (count > 0) {
-
-                report.append(
-                        "✓ CAPABILITY SYSTEM: ONLINE\n"
-                );
-
-                repaired++;
-
-            } else {
-
-                report.append(
-                        "⚠ CAPABILITY SYSTEM: EMPTY\n"
-                );
-            }
-
-        } catch (Exception e) {
-
-            report.append(
-                    "✗ CAPABILITY SYSTEM: ERROR\n"
-            );
-        }
-
-        report.append("\n");
-        report.append("============================\n");
-
-        report.append(
-                "SYSTEMS CHECKED: "
-        );
-
-        report.append(checked);
-
-        report.append("\n");
-
-        report.append(
-                "SYSTEMS ONLINE: "
-        );
-
-        report.append(repaired);
-
-        report.append("\n\n");
-
-        if (repaired == checked) {
-
-            report.append(
-                    "RECOVERY STATUS: HEALTHY ✓"
-            );
+            healthy++;
 
         } else {
 
             report.append(
-                    "RECOVERY STATUS: PARTIAL ⚠"
+                    "⚠ CAPABILITY SYSTEM: INVALID\n"
             );
         }
 
-        return report.toString();
+    } catch (Exception e) {
+
+        report.append(
+                "✗ CAPABILITY SYSTEM: ERROR\n"
+        );
+
+        recordFailure(
+                "CapabilityManager",
+                safeError(e)
+        );
     }
 
-    /**
-     * تسجيل أي خطأ كيقدر JARVIS يرجع ليه
-     * من بعد أثناء التشخيص والتطور الذاتي.
-     */
-    public void recordFailure(
-            String source,
-            String message
-    ) {
+    checked++;
 
-        try {
+    try {
 
-            String cleanSource =
-                    source == null ||
-                            source.trim().isEmpty()
-                            ? "unknown"
-                            : source.trim();
+        int count =
+                skillManager.getSkillCount();
 
-            String cleanMessage =
-                    message == null ||
-                            message.trim().isEmpty()
-                            ? "unknown error"
-                            : message.trim();
+        if (count >= 0) {
 
-            String key =
-                    "__recovery_failure__"
-                            + System.currentTimeMillis();
-
-            String value =
-                    "SOURCE="
-                            + cleanSource
-                            + "\nERROR="
-                            + cleanMessage
-                            + "\nTIME="
-                            + System.currentTimeMillis();
-
-            memoryManager.saveMemory(
-                    key,
-                    value
+            report.append(
+                    "✓ SKILL SYSTEM: ONLINE\n"
             );
 
-        } catch (Exception ignored) {
-            // نظام الاسترجاع ما خاصوش يطيح بسبب تسجيل الخطأ
-        }
-    }
+            healthy++;
 
-    public boolean isHealthy() {
+        } else {
 
-        try {
-
-            memoryManager.getMemoryCount();
-
-            int capabilities =
-                    capabilityManager.getCount();
-
-            return capabilities > 0;
-
-        } catch (Exception e) {
-
-            return false;
-        }
-    }
-
-    public String getStatus() {
-
-        if (isHealthy()) {
-
-            return "Recovery System: ONLINE ✓";
-
+            report.append(
+                    "⚠ SKILL SYSTEM: INVALID\n"
+            );
         }
 
-        return "Recovery System: NEEDS ATTENTION ⚠";
+    } catch (Exception e) {
+
+        report.append(
+                "✗ SKILL SYSTEM: ERROR\n"
+        );
+
+        recordFailure(
+                "SkillManager",
+                safeError(e)
+        );
     }
 
-    public String repairMemory() {
+    checked++;
 
-        try {
+    try {
 
-            memoryManager.getMemoryCount();
+        if (taskManager.isHealthy()) {
+
+            report.append(
+                    "✓ TASK SYSTEM: ONLINE\n"
+            );
+
+            healthy++;
+
+        } else {
+
+            report.append(
+                    "⚠ TASK SYSTEM: ATTENTION\n"
+            );
+        }
+
+    } catch (Exception e) {
+
+        report.append(
+                "✗ TASK SYSTEM: ERROR\n"
+        );
+
+        recordFailure(
+                "TaskManager",
+                safeError(e)
+        );
+    }
+
+    checked++;
+
+    try {
+
+        if (systemMonitor.isHealthy()) {
+
+            report.append(
+                    "✓ SYSTEM MONITOR: ONLINE\n"
+            );
+
+            healthy++;
+
+        } else {
+
+            report.append(
+                    "⚠ SYSTEM MONITOR: ATTENTION\n"
+            );
+        }
+
+    } catch (Exception e) {
+
+        report.append(
+                "✗ SYSTEM MONITOR: ERROR\n"
+        );
+
+        recordFailure(
+                "SystemMonitor",
+                safeError(e)
+        );
+    }
+
+    report.append("\n");
+
+    report.append(
+            "SYSTEMS CHECKED: "
+    );
+
+    report.append(checked);
+
+    report.append("\n");
+
+    report.append(
+            "SYSTEMS HEALTHY: "
+    );
+
+    report.append(healthy);
+
+    report.append("\n");
+
+    report.append(
+            "RECOVERY ACTIONS: "
+    );
+
+    report.append(repaired);
+
+    report.append("\n\n");
+
+    if (healthy == checked) {
+
+        report.append(
+                "RECOVERY STATUS: HEALTHY ✓"
+        );
+
+    } else {
+
+        report.append(
+                "RECOVERY STATUS: PARTIAL ⚠"
+        );
+    }
+
+    return report.toString();
+}
+
+public void recordFailure(
+        String source,
+        String message
+) {
+
+    try {
+
+        String cleanSource =
+                source == null
+                        || source.trim().isEmpty()
+                        ? "unknown"
+                        : source.trim();
+
+        String cleanMessage =
+                message == null
+                        || message.trim().isEmpty()
+                        ? "unknown error"
+                        : message.trim();
+
+        String key =
+                "__recovery_failure__"
+                        + System.currentTimeMillis();
+
+        String value =
+                "SOURCE="
+                        + cleanSource
+                        + "\nERROR="
+                        + cleanMessage
+                        + "\nTIME="
+                        + System.currentTimeMillis();
+
+        memoryManager.saveMemory(
+                key,
+                value
+        );
+
+        actionHistoryManager.recordAction(
+                "RECOVERY_FAILURE",
+                cleanSource
+                        + ": "
+                        + cleanMessage
+        );
+
+    } catch (Exception ignored) {
+    }
+}
+
+public boolean isHealthy() {
+
+    try {
+
+        return
+                memoryManager.getMemoryCount() >= 0
+                && capabilityManager.getCount() >= 0
+                && skillManager.getSkillCount() >= 0
+                && taskManager.isHealthy();
+
+    } catch (Exception e) {
+
+        return false;
+    }
+}
+
+public String getStatus() {
+
+    if (isHealthy()) {
+
+        return
+                "Recovery System: ONLINE ✓";
+    }
+
+    return
+            "Recovery System: NEEDS ATTENTION ⚠";
+}
+
+public String repairMemory() {
+
+    try {
+
+        memoryManager.getMemoryCount();
+
+        return
+                "Memory system checked successfully ✓";
+
+    } catch (Exception e) {
+
+        recordFailure(
+                "MemoryRecovery",
+                safeError(e)
+        );
+
+        return
+                "Memory system recovery failed ✗";
+    }
+}
+
+public String repairCapabilities() {
+
+    try {
+
+        int count =
+                capabilityManager.getCount();
+
+        if (count >= 0) {
 
             return
-                    "Memory system checked successfully ✓";
-
-        } catch (Exception e) {
-
-            return
-                    "Memory system recovery failed ✗";
+                    "Capability system checked successfully ✓";
         }
+
+        return
+                "Capability system is invalid ⚠";
+
+    } catch (Exception e) {
+
+        recordFailure(
+                "CapabilityRecovery",
+                safeError(e)
+        );
+
+        return
+                "Capability system recovery failed ✗";
     }
+}
 
-    public String repairCapabilities() {
+public String repairSkills() {
 
-        try {
+    try {
 
-            int count =
-                    capabilityManager.getCount();
+        int count =
+                skillManager.getSkillCount();
 
-            if (count > 0) {
-
-                return
-                        "Capability system checked successfully ✓";
-            }
+        if (count >= 0) {
 
             return
-                    "Capability registry is empty ⚠";
-
-        } catch (Exception e) {
-
-            return
-                    "Capability system recovery failed ✗";
+                    "Skill system checked successfully ✓";
         }
+
+        return
+                "Skill system is invalid ⚠";
+
+    } catch (Exception e) {
+
+        recordFailure(
+                "SkillRecovery",
+                safeError(e)
+        );
+
+        return
+                "Skill system recovery failed ✗";
+    }
+}
+
+public String repairTasks() {
+
+    try {
+
+        if (taskManager.isHealthy()) {
+
+            return
+                    "Task system checked successfully ✓";
+        }
+
+        return
+                "Task system needs attention ⚠";
+
+    } catch (Exception e) {
+
+        recordFailure(
+                "TaskRecovery",
+                safeError(e)
+        );
+
+        return
+                "Task system recovery failed ✗";
+    }
+}
+
+public String getRecoveryReport() {
+
+    return runRecovery();
+}
+
+public String getFailureHistory() {
+
+    try {
+
+        return
+                memoryManager
+                        .searchMemory(
+                                "__recovery_failure__"
+                        );
+
+    } catch (Exception e) {
+
+        return
+                "Recovery failure history unavailable.";
+    }
+}
+
+private String safeError(
+        Exception e
+) {
+
+    if (e == null) {
+
+        return "Unknown error";
     }
 
-    public String getRecoveryReport() {
+    String message =
+            e.getMessage();
 
-        return runRecovery();
+    if (message == null
+            || message.trim().isEmpty()) {
+
+        return e.getClass()
+                .getSimpleName();
     }
+
+    return message;
+}
+
 }
