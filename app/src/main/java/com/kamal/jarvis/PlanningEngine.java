@@ -24,10 +24,24 @@ public class PlanningEngine {
     private static final String PLAN_PROGRESS_KEY =
             "__plan_progress__";
 
+    private static final String PLAN_CREATED_KEY =
+            "__plan_created__";
+
+    private static final String PLAN_UPDATED_KEY =
+            "__plan_updated__";
+
+    private static final String PLAN_HISTORY_KEY =
+            "__plan_history__";
+
+    private static final String PLAN_VERSION_KEY =
+            "__plan_version__";
+
     public PlanningEngine(Context context) {
 
         this.context =
-                context.getApplicationContext();
+                context == null
+                        ? null
+                        : context.getApplicationContext();
 
         memoryManager =
                 new MemoryManager(this.context);
@@ -40,7 +54,7 @@ public class PlanningEngine {
     // CREATE PLAN
     // =========================================================
 
-    public String createPlan(String goal) {
+    public synchronized String createPlan(String goal) {
 
         if (goal == null ||
                 goal.trim().isEmpty()) {
@@ -67,8 +81,23 @@ public class PlanningEngine {
                     "ما قدرتش نبني خطة صالحة لهاد الهدف.";
         }
 
-        String serialized =
-                serializeSteps(steps);
+        String oldPlan =
+                memoryManager.getMemory(
+                        ACTIVE_PLAN_KEY
+                );
+
+        if (oldPlan != null &&
+                !oldPlan.trim().isEmpty()) {
+
+            savePlanHistory(
+                    oldPlan
+            );
+        }
+
+        String now =
+                String.valueOf(
+                        System.currentTimeMillis()
+                );
 
         memoryManager.saveMemory(
                 ACTIVE_PLAN_KEY,
@@ -77,7 +106,7 @@ public class PlanningEngine {
 
         memoryManager.saveMemory(
                 PLAN_STEPS_KEY,
-                serialized
+                serializeSteps(steps)
         );
 
         memoryManager.saveMemory(
@@ -88,6 +117,21 @@ public class PlanningEngine {
         memoryManager.saveMemory(
                 PLAN_PROGRESS_KEY,
                 "0"
+        );
+
+        memoryManager.saveMemory(
+                PLAN_CREATED_KEY,
+                now
+        );
+
+        memoryManager.saveMemory(
+                PLAN_UPDATED_KEY,
+                now
+        );
+
+        memoryManager.saveMemory(
+                PLAN_VERSION_KEY,
+                "1"
         );
 
         return buildPlanReport(
@@ -114,12 +158,16 @@ public class PlanningEngine {
                 "تعلم",
                 "نتعلم",
                 "قرا",
+                "قراءة",
                 "دراسة",
                 "دراسه",
                 "learn",
                 "study",
                 "skill",
-                "مهارة"
+                "مهارة",
+                "مهاره",
+                "كورس",
+                "course"
         )) {
 
             return "LEARNING";
@@ -132,11 +180,14 @@ public class PlanningEngine {
                 "دخل",
                 "ربح",
                 "مشروع",
+                "خدمة",
+                "خدمه",
                 "business",
                 "money",
                 "income",
-                "business",
-                "client"
+                "profit",
+                "client",
+                "clients"
         )) {
 
             return "BUSINESS";
@@ -149,10 +200,13 @@ public class PlanningEngine {
                 "رياضة",
                 "رياضه",
                 "وزن",
+                "لياقة",
+                "لياقه",
                 "fitness",
                 "muscle",
                 "body",
-                "workout"
+                "workout",
+                "gym"
         )) {
 
             return "FITNESS";
@@ -164,10 +218,15 @@ public class PlanningEngine {
                 "برنامج",
                 "كود",
                 "جارفيس",
+                "جارڤيس",
                 "apk",
                 "app",
                 "code",
-                "software"
+                "software",
+                "برمجة",
+                "برمجه",
+                "تطوير",
+                "development"
         )) {
 
             return "DEVELOPMENT";
@@ -181,9 +240,12 @@ public class PlanningEngine {
                 "روتين",
                 "عادة",
                 "عاده",
+                "انضباط",
+                "انضباط",
                 "routine",
                 "organize",
-                "schedule"
+                "schedule",
+                "discipline"
         )) {
 
             return "PERSONAL";
@@ -204,17 +266,9 @@ public class PlanningEngine {
         List<String> steps =
                 new ArrayList<>();
 
-        // -----------------------------------------------------
-        // UNIVERSAL ANALYSIS
-        // -----------------------------------------------------
-
         steps.add(
                 "حلل الهدف وحدد النتيجة النهائية القابلة للقياس."
         );
-
-        // -----------------------------------------------------
-        // LEARNING
-        // -----------------------------------------------------
 
         if ("LEARNING".equals(type)) {
 
@@ -223,23 +277,27 @@ public class PlanningEngine {
             );
 
             steps.add(
-                    "قسم التعلم إلى وحدات صغيرة من السهل تنفيذها."
+                    "قسم التعلم إلى وحدات صغيرة وواضحة."
             );
 
             steps.add(
-                    "ابدأ بأول درس أو تمرين عملي."
+                    "حدد أول مصدر أو درس مناسب للبداية."
             );
 
             steps.add(
-                    "طبق ما تعلمته في تجربة حقيقية."
+                    "طبق ما تعلمته في تمرين عملي."
             );
 
             steps.add(
-                    "اختبر المستوى واكتشف نقاط الضعف."
+                    "اختبر مستواك واكتشف نقاط الضعف."
             );
 
             steps.add(
                     "راجع الأخطاء وحسن طريقة التعلم."
+            );
+
+            steps.add(
+                    "أنشئ اختباراً عملياً للتأكد من التقدم."
             );
 
             steps.add(
@@ -248,10 +306,6 @@ public class PlanningEngine {
 
             return steps;
         }
-
-        // -----------------------------------------------------
-        // BUSINESS
-        // -----------------------------------------------------
 
         if ("BUSINESS".equals(type)) {
 
@@ -280,15 +334,15 @@ public class PlanningEngine {
             );
 
             steps.add(
-                    "حسن العرض وكرر عملية الوصول للعملاء."
+                    "حسن العرض وطريقة الوصول للعملاء."
+            );
+
+            steps.add(
+                    "كرر الاختبار بناءً على النتائج."
             );
 
             return steps;
         }
-
-        // -----------------------------------------------------
-        // FITNESS
-        // -----------------------------------------------------
 
         if ("FITNESS".equals(type)) {
 
@@ -313,7 +367,11 @@ public class PlanningEngine {
             );
 
             steps.add(
-                    "راقب التقدم وعدل الخطة عند الحاجة."
+                    "راقب التقدم بشكل منتظم."
+            );
+
+            steps.add(
+                    "عدل الخطة حسب النتائج والقدرة على الالتزام."
             );
 
             steps.add(
@@ -323,10 +381,6 @@ public class PlanningEngine {
             return steps;
         }
 
-        // -----------------------------------------------------
-        // DEVELOPMENT
-        // -----------------------------------------------------
-
         if ("DEVELOPMENT".equals(type)) {
 
             steps.add(
@@ -335,6 +389,10 @@ public class PlanningEngine {
 
             steps.add(
                     "حلل البنية الحالية والملفات المرتبطة بالميزة."
+            );
+
+            steps.add(
+                    "حدد الاعتماديات والتأثيرات المحتملة قبل التعديل."
             );
 
             steps.add(
@@ -354,15 +412,15 @@ public class PlanningEngine {
             );
 
             steps.add(
-                    "إذا نجح الاختبار سجل التطور، وإذا فشل نفذ Rollback."
+                    "إذا نجح الاختبار اعتمد التغيير."
+            );
+
+            steps.add(
+                    "إذا فشل الاختبار نفذ Rollback وحلل سبب الفشل."
             );
 
             return steps;
         }
-
-        // -----------------------------------------------------
-        // PERSONAL
-        // -----------------------------------------------------
 
         if ("PERSONAL".equals(type)) {
 
@@ -391,15 +449,15 @@ public class PlanningEngine {
             );
 
             steps.add(
+                    "راجع النتائج بشكل دوري."
+            );
+
+            steps.add(
                     "كرر النظام حتى يصبح السلوك ثابتاً."
             );
 
             return steps;
         }
-
-        // -----------------------------------------------------
-        // GENERAL
-        // -----------------------------------------------------
 
         steps.add(
                 "حدد الموارد والمعلومات المطلوبة لتحقيق الهدف."
@@ -407,6 +465,10 @@ public class PlanningEngine {
 
         steps.add(
                 "قسم الهدف إلى مراحل صغيرة قابلة للتنفيذ."
+        );
+
+        steps.add(
+                "حدد الأولويات والقيود التي يمكن أن تؤثر على التنفيذ."
         );
 
         steps.add(
@@ -426,7 +488,7 @@ public class PlanningEngine {
         );
 
         steps.add(
-                "كرر الدورة حتى يتحقق الهدف."
+                "كرر دورة التنفيذ والتحسين حتى يتحقق الهدف."
         );
 
         return steps;
@@ -455,7 +517,7 @@ public class PlanningEngine {
     // ADD CURRENT PLAN STEP
     // =========================================================
 
-    public String addCurrentStepAsTask() {
+    public synchronized String addCurrentStepAsTask() {
 
         List<String> steps =
                 getStoredSteps();
@@ -481,10 +543,37 @@ public class PlanningEngine {
     }
 
     // =========================================================
+    // GET CURRENT STEP
+    // =========================================================
+
+    public String getCurrentStep() {
+
+        List<String> steps =
+                getStoredSteps();
+
+        if (steps.isEmpty()) {
+
+            return
+                    "ما كايناش خطة نشطة.";
+        }
+
+        int progress =
+                getProgress();
+
+        if (progress >= steps.size()) {
+
+            return
+                    "الخطة مكتملة ✓";
+        }
+
+        return steps.get(progress);
+    }
+
+    // =========================================================
     // COMPLETE CURRENT STEP
     // =========================================================
 
-    public String completeCurrentStep() {
+    public synchronized String completeCurrentStep() {
 
         List<String> steps =
                 getStoredSteps();
@@ -506,9 +595,8 @@ public class PlanningEngine {
 
         progress++;
 
-        memoryManager.saveMemory(
-                PLAN_PROGRESS_KEY,
-                String.valueOf(progress)
+        saveProgress(
+                progress
         );
 
         if (progress >= steps.size()) {
@@ -527,6 +615,38 @@ public class PlanningEngine {
                 + "\n\n"
                 + "الخطوة التالية:\n"
                 + steps.get(progress);
+    }
+
+    // =========================================================
+    // SET PROGRESS
+    // =========================================================
+
+    public synchronized String setProgress(
+            int progress
+    ) {
+
+        List<String> steps =
+                getStoredSteps();
+
+        if (steps.isEmpty()) {
+
+            return
+                    "ما كايناش خطة نشطة.";
+        }
+
+        if (progress < 0) {
+            progress = 0;
+        }
+
+        if (progress > steps.size()) {
+            progress = steps.size();
+        }
+
+        saveProgress(
+                progress
+        );
+
+        return getProgressReport();
     }
 
     // =========================================================
@@ -564,6 +684,26 @@ public class PlanningEngine {
                 steps,
                 progress
         );
+    }
+
+    // =========================================================
+    // GET PLAN GOAL
+    // =========================================================
+
+    public String getActiveGoal() {
+
+        String goal =
+                memoryManager.getMemory(
+                        ACTIVE_PLAN_KEY
+                );
+
+        if (goal == null ||
+                goal.trim().isEmpty()) {
+
+            return "";
+        }
+
+        return goal;
     }
 
     // =========================================================
@@ -668,7 +808,20 @@ public class PlanningEngine {
     // CLEAR PLAN
     // =========================================================
 
-    public String clearActivePlan() {
+    public synchronized String clearActivePlan() {
+
+        String oldPlan =
+                memoryManager.getMemory(
+                        ACTIVE_PLAN_KEY
+                );
+
+        if (oldPlan != null &&
+                !oldPlan.trim().isEmpty()) {
+
+            savePlanHistory(
+                    oldPlan
+            );
+        }
 
         memoryManager.removeMemory(
                 ACTIVE_PLAN_KEY
@@ -684,6 +837,18 @@ public class PlanningEngine {
 
         memoryManager.removeMemory(
                 PLAN_PROGRESS_KEY
+        );
+
+        memoryManager.removeMemory(
+                PLAN_CREATED_KEY
+        );
+
+        memoryManager.removeMemory(
+                PLAN_UPDATED_KEY
+        );
+
+        memoryManager.removeMemory(
+                PLAN_VERSION_KEY
         );
 
         return
@@ -729,7 +894,8 @@ public class PlanningEngine {
         );
 
         plan.append(
-                type == null || type.isEmpty()
+                type == null ||
+                        type.isEmpty()
                         ? "GENERAL"
                         : type
         );
@@ -767,6 +933,14 @@ public class PlanningEngine {
                     steps.get(i)
             );
 
+            if (i == progress &&
+                    progress < steps.size()) {
+
+                plan.append(
+                        "  ← NEXT"
+                );
+            }
+
             plan.append(
                     "\n"
             );
@@ -784,233 +958,4 @@ public class PlanningEngine {
 
         plan.append(
                 percentage
-        );
-
-        plan.append(
-                "% ("
-        );
-
-        plan.append(
-                progress
-        );
-
-        plan.append(
-                "/"
-        );
-
-        plan.append(
-                steps.size()
-        );
-
-        plan.append(
-                ")"
-        );
-
-        return plan.toString();
-    }
-
-    // =========================================================
-    // READ STORED STEPS
-    // =========================================================
-
-    private List<String> getStoredSteps() {
-
-        String serialized =
-                memoryManager.getMemory(
-                        PLAN_STEPS_KEY
-                );
-
-        List<String> steps =
-                new ArrayList<>();
-
-        if (serialized == null ||
-                serialized.trim().isEmpty()) {
-
-            return steps;
-        }
-
-        String[] parts =
-                serialized.split(
-                        "\\|\\|",
-                        -1
-                );
-
-        for (String part : parts) {
-
-            if (part != null &&
-                    !part.trim().isEmpty()) {
-
-                steps.add(
-                        part.trim()
-                );
-            }
-        }
-
-        return steps;
-    }
-
-    // =========================================================
-    // SERIALIZE STEPS
-    // =========================================================
-
-    private String serializeSteps(
-            List<String> steps
-    ) {
-
-        StringBuilder result =
-                new StringBuilder();
-
-        for (int i = 0;
-             i < steps.size();
-             i++) {
-
-            if (i > 0) {
-                result.append("||");
-            }
-
-            String step =
-                    steps.get(i);
-
-            if (step == null) {
-                step = "";
-            }
-
-            result.append(
-                    step.replace(
-                            "||",
-                            " "
-                    )
-            );
-        }
-
-        return result.toString();
-    }
-
-    // =========================================================
-    // GET PROGRESS
-    // =========================================================
-
-    private int getProgress() {
-
-        String value =
-                memoryManager.getMemory(
-                        PLAN_PROGRESS_KEY
-                );
-
-        if (value == null ||
-                value.trim().isEmpty()) {
-
-            return 0;
-        }
-
-        try {
-
-            int progress =
-                    Integer.parseInt(
-                            value.trim()
-                    );
-
-            if (progress < 0) {
-                return 0;
-            }
-
-            List<String> steps =
-                    getStoredSteps();
-
-            if (progress > steps.size()) {
-                return steps.size();
-            }
-
-            return progress;
-
-        } catch (Exception e) {
-
-            return 0;
-        }
-    }
-
-    // =========================================================
-    // STATUS
-    // =========================================================
-
-    public String getStatus() {
-
-        try {
-
-            taskManager.getTaskCount();
-
-            List<String> steps =
-                    getStoredSteps();
-
-            int progress =
-                    getProgress();
-
-            return
-                    "Planning Engine: ONLINE ✓\n"
-                    + "Active steps: "
-                    + steps.size()
-                    + "\n"
-                    + "Progress: "
-                    + progress
-                    + "/"
-                    + steps.size();
-
-        } catch (Exception e) {
-
-            return
-                    "Planning Engine: ERROR ⚠";
-        }
-    }
-
-    // =========================================================
-    // HEALTH
-    // =========================================================
-
-    public boolean isHealthy() {
-
-        try {
-
-            taskManager.getTaskCount();
-
-            memoryManager.getMemoryCount();
-
-            return true;
-
-        } catch (Exception e) {
-
-            return false;
-        }
-    }
-
-    // =========================================================
-    // MATCHING
-    // =========================================================
-
-    private boolean containsAny(
-            String text,
-            String... values
-    ) {
-
-        if (text == null) {
-            return false;
-        }
-
-        for (String value : values) {
-
-            if (value == null) {
-                continue;
-            }
-
-            if (text.contains(
-                    value.toLowerCase(
-                            Locale.ROOT
-                    )
-            )) {
-
-                return true;
-            }
-        }
-
-        return false;
-    }
-}
+       
