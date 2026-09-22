@@ -21,10 +21,6 @@ public class ActionHistoryManager {
                 new MemoryManager(this.context);
     }
 
-    // =========================================================
-    // RECORD ACTION
-    // =========================================================
-
     public synchronized void record(
             String command,
             String result
@@ -50,10 +46,6 @@ public class ActionHistoryManager {
         appendEntry(entry);
     }
 
-    // =========================================================
-    // COMPATIBILITY
-    // =========================================================
-
     public synchronized void recordAction(
             String action
     ) {
@@ -67,10 +59,6 @@ public class ActionHistoryManager {
                 ""
         );
     }
-
-    // =========================================================
-    // RECORD SUCCESS
-    // =========================================================
 
     public synchronized void recordSuccess(
             String command,
@@ -87,10 +75,6 @@ public class ActionHistoryManager {
         );
     }
 
-    // =========================================================
-    // RECORD FAILURE
-    // =========================================================
-
     public synchronized void recordFailure(
             String command,
             String error
@@ -105,10 +89,6 @@ public class ActionHistoryManager {
                 "FAILURE: " + clean(error)
         );
     }
-
-    // =========================================================
-    // HISTORY
-    // =========================================================
 
     public synchronized String getHistory() {
 
@@ -128,10 +108,6 @@ public class ActionHistoryManager {
                 + "============================\n\n"
                 + history;
     }
-
-    // =========================================================
-    // LAST ACTION
-    // =========================================================
 
     public synchronized String getLastAction() {
 
@@ -164,10 +140,6 @@ public class ActionHistoryManager {
         return
                 "ما كاين حتى عملية مسجلة.";
     }
-
-    // =========================================================
-    // RECENT ACTIONS
-    // =========================================================
 
     public synchronized String getRecentActions(
             int count
@@ -221,10 +193,6 @@ public class ActionHistoryManager {
 
         return result.toString();
     }
-
-    // =========================================================
-    // SEARCH HISTORY
-    // =========================================================
 
     public synchronized String search(
             String query
@@ -289,10 +257,6 @@ public class ActionHistoryManager {
                 + result;
     }
 
-    // =========================================================
-    // COUNT
-    // =========================================================
-
     public synchronized int getHistoryCount() {
 
         String history =
@@ -319,20 +283,12 @@ public class ActionHistoryManager {
         return count;
     }
 
-    // =========================================================
-    // CLEAR
-    // =========================================================
-
     public synchronized void clearHistory() {
 
         memoryManager.removeMemory(
                 HISTORY_KEY
         );
     }
-
-    // =========================================================
-    // HEALTH
-    // =========================================================
 
     public boolean isHealthy() {
 
@@ -354,11 +310,7 @@ public class ActionHistoryManager {
         }
     }
 
-    // =========================================================
-    // STATUS
-    // =========================================================
-
-    public synchronized String getStatus() {
+    public String getStatus() {
 
         if (!isHealthy()) {
 
@@ -371,10 +323,6 @@ public class ActionHistoryManager {
                 + "Records: "
                 + getHistoryCount();
     }
-
-    // =========================================================
-    // INTERNAL STORAGE
-    // =========================================================
 
     private void appendEntry(
             String entry
@@ -409,10 +357,6 @@ public class ActionHistoryManager {
                 newHistory
         );
     }
-
-    // =========================================================
-    // LIMIT HISTORY
-    // =========================================================
 
     private String limitHistory(
             String history
@@ -453,10 +397,6 @@ public class ActionHistoryManager {
 
         return result.toString();
     }
-
-    // =========================================================
-    // TEXT HELPERS
-    // =========================================================
 
     private boolean isBlank(
             String value
