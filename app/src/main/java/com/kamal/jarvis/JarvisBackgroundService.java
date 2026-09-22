@@ -4,6 +4,7 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.IBinder;
@@ -16,9 +17,17 @@ public class JarvisBackgroundService extends Service {
     private static final int NOTIFICATION_ID =
             1001;
 
+    private static final String ACTION_START =
+            "com.kamal.jarvis.action.START";
+
+    private static final String ACTION_STOP =
+            "com.kamal.jarvis.action.STOP";
+
     private static JarvisBackgroundService instance;
 
     private volatile boolean running = false;
+
+    private long startedAt = 0L;
 
     @Override
     public void onCreate() {
@@ -28,6 +37,8 @@ public class JarvisBackgroundService extends Service {
         instance = this;
 
         createNotificationChannel();
+
+        startedAt = System.currentTimeMillis();
 
         running = true;
     }
@@ -39,15 +50,39 @@ public class JarvisBackgroundService extends Service {
             int startId
     ) {
 
+        if (intent != null) {
+
+            String action =
+                    intent.getAction();
+
+            if (ACTION_STOP.equals(action)) {
+
+                stopServiceSafely();
+
+                return START_NOT_STICKY;
+            }
+        }
+
         try {
 
             Notification notification =
                     createNotification();
 
-            startForeground(
-                    NOTIFICATION_ID,
-                    notification
-            );
+            if (Build.VERSION.SDK_INT >=
+                    Build.VERSION_CODES.Q) {
+
+                startForeground(
+                        NOTIFICATION_ID,
+                        notification
+                );
+
+            } else {
+
+                startForeground(
+                        NOTIFICATION_ID,
+                        notification
+                );
+            }
 
             running = true;
 
@@ -58,6 +93,102 @@ public class JarvisBackgroundService extends Service {
 
         return START_STICKY;
     }
+
+    // =========================================================
+    // START
+    // =========================================================
+
+    public static void start(
+            Context context
+    ) {
+
+        if (context == null) {
+            return;
+        }
+
+        try {
+
+            Context appContext =
+                    context.getApplicationContext();
+
+            Intent intent =
+                    new Intent(
+                            appContext,
+                            JarvisBackgroundService.class
+                    );
+
+            intent.setAction(
+                    ACTION_START
+            );
+
+            if (Build.VERSION.SDK_INT >=
+                    Build.VERSION_CODES.O) {
+
+                appContext.startForegroundService(
+                        intent
+                );
+
+            } else {
+
+                appContext.startService(
+                        intent
+                );
+            }
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    // =========================================================
+    // STOP
+    // =========================================================
+
+    public static void stop(
+            Context context
+    ) {
+
+        if (context == null) {
+            return;
+        }
+
+        try {
+
+            Context appContext =
+                    context.getApplicationContext();
+
+            Intent intent =
+                    new Intent(
+                            appContext,
+                            JarvisBackgroundService.class
+                    );
+
+            intent.setAction(
+                    ACTION_STOP
+            );
+
+            appContext.startService(
+                    intent
+            );
+
+        } catch (Exception ignored) {
+
+            try {
+
+                context.stopService(
+                        new Intent(
+                                context,
+                                JarvisBackgroundService.class
+                        )
+                );
+
+            } catch (Exception ignoredAgain) {
+            }
+        }
+    }
+
+    // =========================================================
+    // NOTIFICATION
+    // =========================================================
 
     private Notification createNotification() {
 
@@ -75,7 +206,9 @@ public class JarvisBackgroundService extends Service {
         } else {
 
             builder =
-                    new Notification.Builder(this);
+                    new Notification.Builder(
+                            this
+                    );
         }
 
         return builder
@@ -90,14 +223,20 @@ public class JarvisBackgroundService extends Service {
                                 .ic_dialog_info
                 )
                 .setOngoing(true)
+                .setAutoCancel(false)
                 .setCategory(
                         Notification.CATEGORY_SERVICE
                 )
                 .setPriority(
                         Notification.PRIORITY_LOW
                 )
+                .setShowWhen(false)
                 .build();
     }
+
+    // =========================================================
+    // CHANNEL
+    // =========================================================
 
     private void createNotificationChannel() {
 
@@ -107,51 +246,112 @@ public class JarvisBackgroundService extends Service {
             return;
         }
 
-        NotificationManager manager =
-                getSystemService(
-                        NotificationManager.class
-                );
+        try {
 
-        if (manager == null) {
-            return;
+            NotificationManager manager =
+                    getSystemService(
+                            NotificationManager.class
+                    );
+
+            if (manager == null) {
+                return;
+            }
+
+            NotificationChannel channel =
+                    new NotificationChannel(
+                            CHANNEL_ID,
+                            "JARVIS Background Service",
+                            NotificationManager
+                                    .IMPORTANCE_LOW
+                    );
+
+            channel.setDescription(
+                    "خدمة JARVIS الأساسية في الخلفية"
+            );
+
+            channel.setShowBadge(false);
+
+            channel.setSound(
+                    null,
+                    null
+            );
+
+            manager.createNotificationChannel(
+                    channel
+            );
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    // =========================================================
+    // STOP INTERNAL
+    // =========================================================
+
+    private void stopServiceSafely() {
+
+        running = false;
+
+        try {
+
+            stopForeground(
+                    true
+            );
+
+        } catch (Exception ignored) {
         }
 
-        NotificationChannel channel =
-                new NotificationChannel(
-                        CHANNEL_ID,
-                        "JARVIS Background Service",
-                        NotificationManager
-                                .IMPORTANCE_LOW
-                );
+        try {
 
-        channel.setDescription(
-                "خدمة JARVIS الأساسية في الخلفية"
-        );
+            stopSelf();
 
-        channel.setShowBadge(false);
-
-        manager.createNotificationChannel(
-                channel
-        );
+        } catch (Exception ignored) {
+        }
     }
+
+    // =========================================================
+    // DESTROY
+    // =========================================================
 
     @Override
     public void onDestroy() {
 
         running = false;
 
+        startedAt = 0L;
+
         if (instance == this) {
+
             instance = null;
+        }
+
+        try {
+
+            stopForeground(
+                    true
+            );
+
+        } catch (Exception ignored) {
         }
 
         super.onDestroy();
     }
 
+    // =========================================================
+    // BIND
+    // =========================================================
+
     @Override
-    public IBinder onBind(Intent intent) {
+    public IBinder onBind(
+            Intent intent
+    ) {
 
         return null;
     }
+
+    // =========================================================
+    // STATUS
+    // =========================================================
 
     public boolean isRunning() {
 
@@ -170,16 +370,79 @@ public class JarvisBackgroundService extends Service {
         return instance;
     }
 
+    public long getStartedAt() {
+
+        return startedAt;
+    }
+
+    public long getUptimeMillis() {
+
+        if (!running ||
+                startedAt <= 0L) {
+
+            return 0L;
+        }
+
+        return
+                Math.max(
+                        0L,
+                        System.currentTimeMillis()
+                                - startedAt
+                );
+    }
+
     public String getStatus() {
+
+        if (!running) {
+
+            return
+                    "JARVIS BACKGROUND SERVICE\n"
+                    + "========================\n\n"
+                    + "الحالة: OFFLINE";
+        }
+
+        long uptime =
+                getUptimeMillis();
+
+        long seconds =
+                uptime / 1000L;
+
+        long minutes =
+                seconds / 60L;
+
+        long hours =
+                minutes / 60L;
+
+        minutes =
+                minutes % 60L;
+
+        seconds =
+                seconds % 60L;
 
         return
                 "JARVIS BACKGROUND SERVICE\n"
                 + "========================\n\n"
-                + "الحالة: "
-                + (
-                        running
-                                ? "ONLINE ✓"
-                                : "OFFLINE"
-                );
+                + "الحالة: ONLINE ✓\n"
+                + "مدة التشغيل: "
+                + hours
+                + "h "
+                + minutes
+                + "m "
+                + seconds
+                + "s";
+    }
+
+    public static String
+    getServiceStatus() {
+
+        if (instance == null) {
+
+            return
+                    "JARVIS BACKGROUND SERVICE\n"
+                    + "========================\n\n"
+                    + "الحالة: OFFLINE";
+        }
+
+        return instance.getStatus();
     }
 }
