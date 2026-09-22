@@ -18,34 +18,78 @@ public class CapabilityManager {
     private static final String KEY_CAPABILITIES =
             "capabilities";
 
+    private static final String KEY_VERSION =
+            "version";
+
     private final SharedPreferences preferences;
 
     public CapabilityManager(Context context) {
 
-        preferences =
-                context.getApplicationContext()
-                        .getSharedPreferences(
-                                PREFS,
-                                Context.MODE_PRIVATE
-                        );
+        Context safeContext =
+                context != null
+                        ? context.getApplicationContext()
+                        : null;
 
-        initialize();
+        if (safeContext == null) {
+
+            preferences = null;
+
+        } else {
+
+            preferences =
+                    safeContext.getSharedPreferences(
+                            PREFS,
+                            Context.MODE_PRIVATE
+                    );
+
+            initialize();
+        }
     }
+
+    // =========================================================
+    // INITIALIZE
+    // =========================================================
 
     private void initialize() {
 
-        if (!preferences.contains(KEY_CAPABILITIES)) {
+        if (preferences == null) {
+            return;
+        }
 
-            preferences.edit()
-                    .putString(
-                            KEY_CAPABILITIES,
-                            "[]"
-                    )
-                    .apply();
+        try {
 
-            registerDefaultCapabilities();
+            if (!preferences.contains(KEY_CAPABILITIES)) {
+
+                preferences.edit()
+                        .putString(
+                                KEY_CAPABILITIES,
+                                "[]"
+                        )
+                        .putString(
+                                KEY_VERSION,
+                                "2.0"
+                        )
+                        .commit();
+
+                registerDefaultCapabilities();
+
+            } else if (!preferences.contains(KEY_VERSION)) {
+
+                preferences.edit()
+                        .putString(
+                                KEY_VERSION,
+                                "2.0"
+                        )
+                        .commit();
+            }
+
+        } catch (Exception ignored) {
         }
     }
+
+    // =========================================================
+    // DEFAULT CAPABILITIES
+    // =========================================================
 
     private void registerDefaultCapabilities() {
 
@@ -113,15 +157,63 @@ public class CapabilityManager {
                 "history",
                 "تسجيل العمليات"
         );
+
+        addCapability(
+                "tasks",
+                "إدارة المهام"
+        );
+
+        addCapability(
+                "reminders",
+                "إنشاء وإدارة التذكيرات"
+        );
+
+        addCapability(
+                "notifications",
+                "قراءة وتحليل الإشعارات"
+        );
+
+        addCapability(
+                "screen_intelligence",
+                "تحليل محتوى الشاشة"
+        );
+
+        addCapability(
+                "android_control",
+                "التحكم في وظائف Android"
+        );
+
+        addCapability(
+                "automation",
+                "تنفيذ سلاسل أوامر متعددة الخطوات"
+        );
+
+        addCapability(
+                "learning",
+                "تعلم معلومات وأوامر جديدة"
+        );
     }
 
-    public boolean addCapability(
+    // =========================================================
+    // ADD CAPABILITY
+    // =========================================================
+
+    public synchronized boolean addCapability(
             String name,
             String description
     ) {
 
-        if (name == null ||
+        if (preferences == null ||
+                name == null ||
                 name.trim().isEmpty()) {
+
+            return false;
+        }
+
+        String cleanName =
+                normalizeName(name);
+
+        if (cleanName.isEmpty()) {
 
             return false;
         }
@@ -131,10 +223,13 @@ public class CapabilityManager {
             JSONArray capabilities =
                     getCapabilities();
 
-            if (hasCapability(
-                    capabilities,
-                    name
-            )) {
+            int existingIndex =
+                    findCapabilityIndex(
+                            capabilities,
+                            cleanName
+                    );
+
+            if (existingIndex >= 0) {
 
                 return false;
             }
@@ -142,9 +237,12 @@ public class CapabilityManager {
             JSONObject capability =
                     new JSONObject();
 
+            String now =
+                    now();
+
             capability.put(
                     "name",
-                    name.trim()
+                    cleanName
             );
 
             capability.put(
@@ -170,24 +268,37 @@ public class CapabilityManager {
             );
 
             capability.put(
+                    "usage",
+                    0
+            );
+
+            capability.put(
                     "created_at",
-                    now()
+                    now
             );
 
             capability.put(
                     "updated_at",
-                    now()
+                    now
+            );
+
+            capability.put(
+                    "last_success",
+                    ""
+            );
+
+            capability.put(
+                    "last_failure",
+                    ""
             );
 
             capabilities.put(
                     capability
             );
 
-            saveCapabilities(
+            return saveCapabilities(
                     capabilities
             );
-
-            return true;
 
         } catch (Exception e) {
 
@@ -195,11 +306,17 @@ public class CapabilityManager {
         }
     }
 
-    public boolean removeCapability(
+    // =========================================================
+    // REMOVE CAPABILITY
+    // =========================================================
+
+    public synchronized boolean removeCapability(
             String name
     ) {
 
-        if (name == null) {
+        if (preferences == null ||
+                name == null) {
+
             return false;
         }
 
@@ -211,20 +328,32 @@ public class CapabilityManager {
             JSONArray updated =
                     new JSONArray();
 
-            boolean removed = false;
+            boolean removed =
+                    false;
+
+            String cleanName =
+                    normalizeName(name);
 
             for (int i = 0;
                     i < capabilities.length();
                     i++) {
 
                 JSONObject capability =
-                        capabilities.getJSONObject(i);
+                        capabilities.optJSONObject(i);
 
-                if (capability
-                        .getString("name")
-                        .equalsIgnoreCase(
-                                name.trim()
-                        )) {
+                if (capability == null) {
+                    continue;
+                }
+
+                String currentName =
+                        normalizeName(
+                                capability.optString(
+                                        "name",
+                                        ""
+                                )
+                        );
+
+                if (currentName.equals(cleanName)) {
 
                     removed = true;
                     continue;
@@ -237,12 +366,12 @@ public class CapabilityManager {
 
             if (removed) {
 
-                saveCapabilities(
+                return saveCapabilities(
                         updated
                 );
             }
 
-            return removed;
+            return false;
 
         } catch (Exception e) {
 
@@ -250,7 +379,11 @@ public class CapabilityManager {
         }
     }
 
-    public boolean hasCapability(
+    // =========================================================
+    // HAS CAPABILITY
+    // =========================================================
+
+    public synchronized boolean hasCapability(
             String name
     ) {
 
@@ -258,17 +391,28 @@ public class CapabilityManager {
             return false;
         }
 
-        return hasCapability(
+        return findCapabilityIndex(
                 getCapabilities(),
-                name
-        );
+                normalizeName(name)
+        ) >= 0;
     }
 
-    private boolean hasCapability(
+    // =========================================================
+    // FIND CAPABILITY
+    // =========================================================
+
+    private int findCapabilityIndex(
             JSONArray capabilities,
             String name
     ) {
 
+        if (capabilities == null ||
+                name == null ||
+                name.trim().isEmpty()) {
+
+            return -1;
+        }
+
         try {
 
             for (int i = 0;
@@ -276,158 +420,37 @@ public class CapabilityManager {
                     i++) {
 
                 JSONObject capability =
-                        capabilities.getJSONObject(i);
+                        capabilities.optJSONObject(i);
 
-                if (capability
-                        .getString("name")
-                        .equalsIgnoreCase(
-                                name.trim()
-                        )) {
+                if (capability == null) {
+                    continue;
+                }
 
-                    return true;
+                String currentName =
+                        normalizeName(
+                                capability.optString(
+                                        "name",
+                                        ""
+                                )
+                        );
+
+                if (currentName.equals(name)) {
+
+                    return i;
                 }
             }
 
         } catch (Exception ignored) {
         }
 
-        return false;
+        return -1;
     }
 
-    public boolean setStatus(
-            String name,
-            String status
-    ) {
+    // =========================================================
+    // GET CAPABILITY
+    // =========================================================
 
-        if (name == null ||
-                status == null) {
-
-            return false;
-        }
-
-        try {
-
-            JSONArray capabilities =
-                    getCapabilities();
-
-            for (int i = 0;
-                    i < capabilities.length();
-                    i++) {
-
-                JSONObject capability =
-                        capabilities.getJSONObject(i);
-
-                if (capability
-                        .getString("name")
-                        .equalsIgnoreCase(
-                                name.trim()
-                        )) {
-
-                    capability.put(
-                            "status",
-                            status
-                    );
-
-                    capability.put(
-                            "updated_at",
-                            now()
-                    );
-
-                    saveCapabilities(
-                            capabilities
-                    );
-
-                    return true;
-                }
-            }
-
-        } catch (Exception ignored) {
-        }
-
-        return false;
-    }
-
-    public void recordSuccess(
-            String name
-    ) {
-
-        updateResult(
-                name,
-                true
-        );
-    }
-
-    public void recordFailure(
-            String name
-    ) {
-
-        updateResult(
-                name,
-                false
-        );
-    }
-
-    private void updateResult(
-            String name,
-            boolean success
-    ) {
-
-        if (name == null) {
-            return;
-        }
-
-        try {
-
-            JSONArray capabilities =
-                    getCapabilities();
-
-            for (int i = 0;
-                    i < capabilities.length();
-                    i++) {
-
-                JSONObject capability =
-                        capabilities.getJSONObject(i);
-
-                if (capability
-                        .getString("name")
-                        .equalsIgnoreCase(
-                                name.trim()
-                        )) {
-
-                    String key =
-                            success
-                                    ? "success"
-                                    : "failure";
-
-                    int value =
-                            capability.optInt(
-                                    key,
-                                    0
-                            );
-
-                    capability.put(
-                            key,
-                            value + 1
-                    );
-
-                    capability.put(
-                            "updated_at",
-                            now()
-                    );
-
-                    saveCapabilities(
-                            capabilities
-                    );
-
-                    return;
-                }
-            }
-
-        } catch (Exception ignored) {
-        }
-    }
-
-    public JSONObject getCapability(
+    public synchronized JSONObject getCapability(
             String name
     ) {
 
@@ -440,21 +463,17 @@ public class CapabilityManager {
             JSONArray capabilities =
                     getCapabilities();
 
-            for (int i = 0;
-                    i < capabilities.length();
-                    i++) {
+            int index =
+                    findCapabilityIndex(
+                            capabilities,
+                            normalizeName(name)
+                    );
 
-                JSONObject capability =
-                        capabilities.getJSONObject(i);
+            if (index >= 0) {
 
-                if (capability
-                        .getString("name")
-                        .equalsIgnoreCase(
-                                name.trim()
-                        )) {
-
-                    return capability;
-                }
+                return capabilities.optJSONObject(
+                        index
+                );
             }
 
         } catch (Exception ignored) {
@@ -463,14 +482,493 @@ public class CapabilityManager {
         return null;
     }
 
-    public String getReport() {
+    // =========================================================
+    // SET STATUS
+    // =========================================================
+
+    public synchronized boolean setStatus(
+            String name,
+            String status
+    ) {
+
+        if (preferences == null ||
+                name == null ||
+                status == null) {
+
+            return false;
+        }
+
+        String cleanStatus =
+                status.trim();
+
+        if (cleanStatus.isEmpty()) {
+            return false;
+        }
+
+        try {
+
+            JSONArray capabilities =
+                    getCapabilities();
+
+            int index =
+                    findCapabilityIndex(
+                            capabilities,
+                            normalizeName(name)
+                    );
+
+            if (index < 0) {
+                return false;
+            }
+
+            JSONObject capability =
+                    capabilities.optJSONObject(
+                            index
+                    );
+
+            if (capability == null) {
+                return false;
+            }
+
+            capability.put(
+                    "status",
+                    cleanStatus
+            );
+
+            capability.put(
+                    "updated_at",
+                    now()
+            );
+
+            return saveCapabilities(
+                    capabilities
+            );
+
+        } catch (Exception e) {
+
+            return false;
+        }
+    }
+
+    // =========================================================
+    // ENABLE
+    // =========================================================
+
+    public boolean enableCapability(
+            String name
+    ) {
+
+        return setStatus(
+                name,
+                "available"
+        );
+    }
+
+    // =========================================================
+    // DISABLE
+    // =========================================================
+
+    public boolean disableCapability(
+            String name
+    ) {
+
+        return setStatus(
+                name,
+                "disabled"
+        );
+    }
+
+    // =========================================================
+    // RECORD SUCCESS
+    // =========================================================
+
+    public void recordSuccess(
+            String name
+    ) {
+
+        updateResult(
+                name,
+                true
+        );
+    }
+
+    // =========================================================
+    // RECORD FAILURE
+    // =========================================================
+
+    public void recordFailure(
+            String name
+    ) {
+
+        updateResult(
+                name,
+                false
+        );
+    }
+
+    // =========================================================
+    // RECORD USAGE
+    // =========================================================
+
+    public synchronized void recordUsage(
+            String name
+    ) {
+
+        if (preferences == null ||
+                name == null) {
+
+            return;
+        }
+
+        try {
+
+            JSONArray capabilities =
+                    getCapabilities();
+
+            int index =
+                    findCapabilityIndex(
+                            capabilities,
+                            normalizeName(name)
+                    );
+
+            if (index < 0) {
+                return;
+            }
+
+            JSONObject capability =
+                    capabilities.optJSONObject(
+                            index
+                    );
+
+            if (capability == null) {
+                return;
+            }
+
+            int usage =
+                    capability.optInt(
+                            "usage",
+                            0
+                    );
+
+            capability.put(
+                    "usage",
+                    usage + 1
+            );
+
+            capability.put(
+                    "updated_at",
+                    now()
+            );
+
+            saveCapabilities(
+                    capabilities
+            );
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    // =========================================================
+    // UPDATE RESULT
+    // =========================================================
+
+    private synchronized void updateResult(
+            String name,
+            boolean success
+    ) {
+
+        if (preferences == null ||
+                name == null) {
+
+            return;
+        }
+
+        try {
+
+            JSONArray capabilities =
+                    getCapabilities();
+
+            int index =
+                    findCapabilityIndex(
+                            capabilities,
+                            normalizeName(name)
+                    );
+
+            if (index < 0) {
+                return;
+            }
+
+            JSONObject capability =
+                    capabilities.optJSONObject(
+                            index
+                    );
+
+            if (capability == null) {
+                return;
+            }
+
+            String currentTime =
+                    now();
+
+            int usage =
+                    capability.optInt(
+                            "usage",
+                            0
+                    );
+
+            int successCount =
+                    capability.optInt(
+                            "success",
+                            0
+                    );
+
+            int failureCount =
+                    capability.optInt(
+                            "failure",
+                            0
+                    );
+
+            capability.put(
+                    "usage",
+                    usage + 1
+            );
+
+            if (success) {
+
+                capability.put(
+                        "success",
+                        successCount + 1
+                );
+
+                capability.put(
+                        "last_success",
+                        currentTime
+                );
+
+            } else {
+
+                capability.put(
+                        "failure",
+                        failureCount + 1
+                );
+
+                capability.put(
+                        "last_failure",
+                        currentTime
+                );
+            }
+
+            capability.put(
+                    "updated_at",
+                    currentTime
+            );
+
+            saveCapabilities(
+                    capabilities
+            );
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    // =========================================================
+    // SUCCESS COUNT
+    // =========================================================
+
+    public synchronized int getSuccessCount(
+            String name
+    ) {
+
+        JSONObject capability =
+                getCapability(name);
+
+        if (capability == null) {
+            return 0;
+        }
+
+        return capability.optInt(
+                "success",
+                0
+        );
+    }
+
+    // =========================================================
+    // FAILURE COUNT
+    // =========================================================
+
+    public synchronized int getFailureCount(
+            String name
+    ) {
+
+        JSONObject capability =
+                getCapability(name);
+
+        if (capability == null) {
+            return 0;
+        }
+
+        return capability.optInt(
+                "failure",
+                0
+        );
+    }
+
+    // =========================================================
+    // USAGE COUNT
+    // =========================================================
+
+    public synchronized int getUsageCount(
+            String name
+    ) {
+
+        JSONObject capability =
+                getCapability(name);
+
+        if (capability == null) {
+            return 0;
+        }
+
+        return capability.optInt(
+                "usage",
+                0
+        );
+    }
+
+    // =========================================================
+    // SUCCESS RATE
+    // =========================================================
+
+    public synchronized double getSuccessRate(
+            String name
+    ) {
+
+        int success =
+                getSuccessCount(name);
+
+        int failure =
+                getFailureCount(name);
+
+        int total =
+                success + failure;
+
+        if (total <= 0) {
+            return 0.0;
+        }
+
+        return
+                ((double) success / total)
+                        * 100.0;
+    }
+
+    // =========================================================
+    // CAPABILITY COUNT
+    // =========================================================
+
+    public synchronized int getCapabilityCount() {
+
+        return getCapabilities().length();
+    }
+
+    // =========================================================
+    // COMPATIBILITY
+    // =========================================================
+
+    public int getCount() {
+
+        return getCapabilityCount();
+    }
+
+    // =========================================================
+    // GET ALL CAPABILITIES
+    // =========================================================
+
+    public synchronized String getCapabilityNames() {
+
+        JSONArray capabilities =
+                getCapabilities();
+
+        if (capabilities.length() == 0) {
+
+            return "لا توجد قدرات مسجلة.";
+        }
+
+        StringBuilder result =
+                new StringBuilder();
+
+        for (int i = 0;
+                i < capabilities.length();
+                i++) {
+
+            JSONObject capability =
+                    capabilities.optJSONObject(i);
+
+            if (capability == null) {
+                continue;
+            }
+
+            result.append(
+                    i + 1
+            );
+
+            result.append(". ");
+
+            result.append(
+                    capability.optString(
+                            "name",
+                            "Unknown"
+                    )
+            );
+
+            result.append(" — ");
+
+            result.append(
+                    capability.optString(
+                            "status",
+                            "unknown"
+                    )
+            );
+
+            result.append("\n");
+        }
+
+        return result.toString();
+    }
+
+    // =========================================================
+    // REPORT
+    // =========================================================
+
+    public synchronized String getReport() {
 
         StringBuilder report =
                 new StringBuilder();
 
         report.append(
-                "JARVIS CAPABILITY REGISTRY\n\n"
+                "JARVIS CAPABILITY REGISTRY\n"
         );
+
+        report.append(
+                "============================\n\n"
+        );
+
+        report.append(
+                "Version: "
+        );
+
+        report.append(
+                getVersion()
+        );
+
+        report.append("\n");
+
+        report.append(
+                "Total: "
+        );
+
+        report.append(
+                getCapabilityCount()
+        );
+
+        report.append("\n\n");
 
         try {
 
@@ -491,7 +989,11 @@ public class CapabilityManager {
                     i++) {
 
                 JSONObject capability =
-                        capabilities.getJSONObject(i);
+                        capabilities.optJSONObject(i);
+
+                if (capability == null) {
+                    continue;
+                }
 
                 report.append(
                         "━━━━━━━━━━━━━━\n"
@@ -537,6 +1039,19 @@ public class CapabilityManager {
                 report.append("\n");
 
                 report.append(
+                        "الاستخدام: "
+                );
+
+                report.append(
+                        capability.optInt(
+                                "usage",
+                                0
+                        )
+                );
+
+                report.append("\n");
+
+                report.append(
                         "النجاح: "
                 );
 
@@ -561,35 +1076,281 @@ public class CapabilityManager {
                 );
 
                 report.append("\n");
+
+                report.append(
+                        "معدل النجاح: "
+                );
+
+                report.append(
+                        formatRate(
+                                getSuccessRate(
+                                        capability.optString(
+                                                "name",
+                                                ""
+                                        )
+                                )
+                        )
+                );
+
+                report.append("\n");
             }
 
         } catch (Exception e) {
 
             report.append(
-                    "تعذر قراءة سجل القدرات."
+                    "\nتعذر قراءة سجل القدرات."
             );
         }
 
         return report.toString();
     }
 
-    public int getCapabilityCount() {
+    // =========================================================
+    // EXPORT
+    // =========================================================
 
-        return getCapabilities().length();
-    }
-
-    // دالة توافق مع باقي النظام
-    public int getCount() {
-
-        return getCapabilityCount();
-    }
-
-    public String exportCapabilities() {
+    public synchronized String exportCapabilities() {
 
         return getCapabilities().toString();
     }
 
+    // =========================================================
+    // IMPORT
+    // =========================================================
+
+    public synchronized boolean importCapabilities(
+            String data
+    ) {
+
+        if (preferences == null ||
+                data == null ||
+                data.trim().isEmpty()) {
+
+            return false;
+        }
+
+        try {
+
+            JSONArray imported =
+                    new JSONArray(data);
+
+            JSONArray validated =
+                    new JSONArray();
+
+            for (int i = 0;
+                    i < imported.length();
+                    i++) {
+
+                JSONObject source =
+                        imported.optJSONObject(i);
+
+                if (source == null) {
+                    continue;
+                }
+
+                String name =
+                        normalizeName(
+                                source.optString(
+                                        "name",
+                                        ""
+                                )
+                        );
+
+                if (name.isEmpty()) {
+                    continue;
+                }
+
+                JSONObject capability =
+                        new JSONObject();
+
+                capability.put(
+                        "name",
+                        name
+                );
+
+                capability.put(
+                        "description",
+                        source.optString(
+                                "description",
+                                ""
+                        )
+                );
+
+                capability.put(
+                        "status",
+                        source.optString(
+                                "status",
+                                "available"
+                        )
+                );
+
+                capability.put(
+                        "success",
+                        Math.max(
+                                0,
+                                source.optInt(
+                                        "success",
+                                        0
+                                )
+                        )
+                );
+
+                capability.put(
+                        "failure",
+                        Math.max(
+                                0,
+                                source.optInt(
+                                        "failure",
+                                        0
+                                )
+                        )
+                );
+
+                capability.put(
+                        "usage",
+                        Math.max(
+                                0,
+                                source.optInt(
+                                        "usage",
+                                        0
+                                )
+                        )
+                );
+
+                capability.put(
+                        "created_at",
+                        source.optString(
+                                "created_at",
+                                now()
+                        )
+                );
+
+                capability.put(
+                        "updated_at",
+                        now()
+                );
+
+                capability.put(
+                        "last_success",
+                        source.optString(
+                                "last_success",
+                                ""
+                        )
+                );
+
+                capability.put(
+                        "last_failure",
+                        source.optString(
+                                "last_failure",
+                                ""
+                        )
+                );
+
+                if (findCapabilityIndex(
+                        validated,
+                        name
+                ) < 0) {
+
+                    validated.put(
+                            capability
+                    );
+                }
+            }
+
+            return saveCapabilities(
+                    validated
+            );
+
+        } catch (Exception e) {
+
+            return false;
+        }
+    }
+
+    // =========================================================
+    // VERSION
+    // =========================================================
+
+    public synchronized String getVersion() {
+
+        if (preferences == null) {
+            return "0.0";
+        }
+
+        return preferences.getString(
+                KEY_VERSION,
+                "2.0"
+        );
+    }
+
+    // =========================================================
+    // HEALTH
+    // =========================================================
+
+    public synchronized boolean isHealthy() {
+
+        try {
+
+            if (preferences == null) {
+                return false;
+            }
+
+            JSONArray capabilities =
+                    getCapabilities();
+
+            if (capabilities == null) {
+                return false;
+            }
+
+            for (int i = 0;
+                    i < capabilities.length();
+                    i++) {
+
+                if (capabilities.optJSONObject(i)
+                        == null) {
+
+                    return false;
+                }
+            }
+
+            return true;
+
+        } catch (Exception e) {
+
+            return false;
+        }
+    }
+
+    // =========================================================
+    // STATUS
+    // =========================================================
+
+    public synchronized String getStatus() {
+
+        if (!isHealthy()) {
+
+            return
+                    "Capability Manager: ERROR ⚠";
+        }
+
+        return
+                "Capability Manager: ONLINE ✓\n"
+                + "Version: "
+                + getVersion()
+                + "\nCapabilities: "
+                + getCapabilityCount();
+    }
+
+    // =========================================================
+    // INTERNAL GET
+    // =========================================================
+
     private JSONArray getCapabilities() {
+
+        if (preferences == null) {
+
+            return new JSONArray();
+        }
 
         try {
 
@@ -599,6 +1360,12 @@ public class CapabilityManager {
                             "[]"
                     );
 
+            if (data == null ||
+                    data.trim().isEmpty()) {
+
+                return new JSONArray();
+            }
+
             return new JSONArray(data);
 
         } catch (Exception e) {
@@ -607,25 +1374,65 @@ public class CapabilityManager {
         }
     }
 
-    private void saveCapabilities(
+    // =========================================================
+    // INTERNAL SAVE
+    // =========================================================
+
+    private boolean saveCapabilities(
             JSONArray capabilities
     ) {
 
-        preferences.edit()
-                .putString(
-                        KEY_CAPABILITIES,
-                        capabilities.toString()
+        if (preferences == null ||
+                capabilities == null) {
+
+            return false;
+        }
+
+        try {
+
+            return preferences.edit()
+                    .putString(
+                            KEY_CAPABILITIES,
+                            capabilities.toString()
+                    )
+                    .commit();
+
+        } catch (Exception e) {
+
+            return false;
+        }
+    }
+
+    // =========================================================
+    // NORMALIZE NAME
+    // =========================================================
+
+    private String normalizeName(
+            String value
+    ) {
+
+        if (value == null) {
+            return "";
+        }
+
+        return value
+                .trim()
+                .toLowerCase(Locale.ROOT)
+                .replace(
+                        "أ",
+                        "ا"
                 )
-                .apply();
-    }
-
-    private String now() {
-
-        return new SimpleDateFormat(
-                "yyyy-MM-dd HH:mm:ss",
-                Locale.getDefault()
-        ).format(
-                new Date()
-        );
-    }
-}
+                .replace(
+                        "إ",
+                        "ا"
+                )
+                .replace(
+                        "آ",
+                        "ا"
+                )
+                .replace(
+                        "ة",
+                        "ه"
+                )
+                .replace(
+                        "ى
