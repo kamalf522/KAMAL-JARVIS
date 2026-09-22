@@ -16,6 +16,21 @@ public class JarvisNotificationListenerService
 
     private String lastNotificationKey = "";
 
+    private long lastNotificationTime = 0L;
+
+    private int receivedCount = 0;
+    private int processedCount = 0;
+    private int ignoredCount = 0;
+
+    private static final long DUPLICATE_WINDOW_MS =
+            3000L;
+
+    private long lastProcessedTime = 0L;
+
+    // =========================================================
+    // CONNECTION
+    // =========================================================
+
     @Override
     public void onListenerConnected() {
 
@@ -28,11 +43,33 @@ public class JarvisNotificationListenerService
     }
 
     @Override
+    public void onListenerDisconnected() {
+
+        NotificationIntelligence
+                .setServiceConnected(false);
+
+        if (instance == this) {
+            instance = null;
+        }
+
+        super.onListenerDisconnected();
+    }
+
+    // =========================================================
+    // NOTIFICATION POSTED
+    // =========================================================
+
+    @Override
     public void onNotificationPosted(
             StatusBarNotification statusBarNotification
     ) {
 
+        receivedCount++;
+
         if (statusBarNotification == null) {
+
+            ignoredCount++;
+
             return;
         }
 
@@ -51,46 +88,29 @@ public class JarvisNotificationListenerService
                             .getNotification();
 
             if (notification == null) {
+
+                ignoredCount++;
+
                 return;
             }
-
-            String title = "";
-            String message = "";
 
             Bundle extras =
                     notification.extras;
 
-            if (extras != null) {
+            String title =
+                    extractTitle(extras);
 
-                CharSequence titleValue =
-                        extras.getCharSequence(
-                                Notification.EXTRA_TITLE
-                        );
+            String message =
+                    extractMessage(extras);
 
-                CharSequence textValue =
-                        extras.getCharSequence(
-                                Notification.EXTRA_TEXT
-                        );
-
-                if (titleValue != null) {
-
-                    title =
-                            titleValue
-                                    .toString()
-                                    .trim();
-                }
-
-                if (textValue != null) {
-
-                    message =
-                            textValue
-                                    .toString()
-                                    .trim();
-                }
-            }
-
+            /*
+             * بعض الإشعارات كتكون عندها فقط
+             * text أو title.
+             */
             if (title.isEmpty() &&
                     message.isEmpty()) {
+
+                ignoredCount++;
 
                 return;
             }
@@ -102,15 +122,29 @@ public class JarvisNotificationListenerService
                     + "|"
                     + message;
 
+            long now =
+                    System.currentTimeMillis();
+
+            /*
+             * منع نفس الإشعار من التكرار
+             * في مدة قصيرة.
+             */
             if (notificationKey.equals(
                     lastNotificationKey
-            )) {
+            )
+                    && now - lastProcessedTime
+                    < DUPLICATE_WINDOW_MS) {
+
+                ignoredCount++;
 
                 return;
             }
 
             lastNotificationKey =
                     notificationKey;
+
+            lastProcessedTime =
+                    now;
 
             lastPackageName =
                     packageName;
@@ -121,6 +155,11 @@ public class JarvisNotificationListenerService
             lastMessage =
                     message;
 
+            lastNotificationTime =
+                    now;
+
+            processedCount++;
+
             NotificationIntelligence
                     .receiveNotification(
                             lastPackageName,
@@ -130,32 +169,158 @@ public class JarvisNotificationListenerService
 
         } catch (Exception e) {
 
-            // JARVIS لا يتوقف بسبب إشعار غير صالح.
+            ignoredCount++;
+
+            /*
+             * JARVIS ما يطيحش بسبب إشعار
+             * فيه بيانات غير متوقعة.
+             */
         }
     }
+
+    // =========================================================
+    // TITLE EXTRACTION
+    // =========================================================
+
+    private String extractTitle(
+            Bundle extras
+    ) {
+
+        if (extras == null) {
+            return "";
+        }
+
+        try {
+
+            CharSequence value =
+                    extras.getCharSequence(
+                            Notification.EXTRA_TITLE
+                    );
+
+            if (value != null) {
+
+                String result =
+                        value.toString().trim();
+
+                if (!result.isEmpty()) {
+                    return result;
+                }
+            }
+
+            /*
+             * بعض التطبيقات كتستعمل title text
+             * بدل EXTRA_TITLE.
+             */
+            CharSequence fallback =
+                    extras.getCharSequence(
+                            Notification.EXTRA_TITLE_BIG
+                    );
+
+            if (fallback != null) {
+
+                return fallback
+                        .toString()
+                        .trim();
+            }
+
+        } catch (Exception e) {
+
+            return "";
+        }
+
+        return "";
+    }
+
+    // =========================================================
+    // MESSAGE EXTRACTION
+    // =========================================================
+
+    private String extractMessage(
+            Bundle extras
+    ) {
+
+        if (extras == null) {
+            return "";
+        }
+
+        try {
+
+            CharSequence value =
+                    extras.getCharSequence(
+                            Notification.EXTRA_TEXT
+                    );
+
+            if (value != null) {
+
+                String result =
+                        value.toString().trim();
+
+                if (!result.isEmpty()) {
+                    return result;
+                }
+            }
+
+            /*
+             * fallback للإشعارات اللي كتستعمل
+             * BIG_TEXT.
+             */
+            CharSequence bigText =
+                    extras.getCharSequence(
+                            Notification.EXTRA_BIG_TEXT
+                    );
+
+            if (bigText != null) {
+
+                String result =
+                        bigText.toString().trim();
+
+                if (!result.isEmpty()) {
+                    return result;
+                }
+            }
+
+            /*
+             * بعض التطبيقات كتستعمل
+             * summary text.
+             */
+            CharSequence summary =
+                    extras.getCharSequence(
+                            Notification.EXTRA_SUMMARY_TEXT
+                    );
+
+            if (summary != null) {
+
+                return summary
+                        .toString()
+                        .trim();
+            }
+
+        } catch (Exception e) {
+
+            return "";
+        }
+
+        return "";
+    }
+
+    // =========================================================
+    // NOTIFICATION REMOVED
+    // =========================================================
 
     @Override
     public void onNotificationRemoved(
             StatusBarNotification statusBarNotification
     ) {
 
-        // JARVIS يحتفظ بآخر إشعار مهم
-        // حتى يتمكن نظام الذكاء من تحليله.
+        /*
+         * JARVIS يحتفظ بآخر إشعار مهم
+         * حتى بعد اختفائه من شريط الإشعارات.
+         */
     }
 
-    @Override
-    public void onListenerDisconnected() {
-
-        NotificationIntelligence
-                .setServiceConnected(false);
-
-        if (instance == this) {
-
-            instance = null;
-        }
-
-        super.onListenerDisconnected();
-    }
+    // =========================================================
+    // ACTIVE INSTANCE
+    // =========================================================
 
     public static
     JarvisNotificationListenerService
@@ -166,8 +331,12 @@ public class JarvisNotificationListenerService
 
     public boolean isConnected() {
 
-        return instance != null;
+        return instance == this;
     }
+
+    // =========================================================
+    // LAST NOTIFICATION
+    // =========================================================
 
     public String getLastPackageName() {
 
@@ -184,13 +353,19 @@ public class JarvisNotificationListenerService
         return lastMessage;
     }
 
+    public long getLastNotificationTime() {
+
+        return lastNotificationTime;
+    }
+
     public String getLastNotificationSummary() {
 
         if (lastPackageName.isEmpty() &&
                 lastTitle.isEmpty() &&
                 lastMessage.isEmpty()) {
 
-            return "لا توجد إشعارات محفوظة.";
+            return
+                    "لا توجد إشعارات محفوظة.";
         }
 
         return
@@ -202,5 +377,46 @@ public class JarvisNotificationListenerService
                 + "\n"
                 + "الرسالة: "
                 + lastMessage;
+    }
+
+    // =========================================================
+    // STATISTICS
+    // =========================================================
+
+    public int getReceivedCount() {
+
+        return receivedCount;
+    }
+
+    public int getProcessedCount() {
+
+        return processedCount;
+    }
+
+    public int getIgnoredCount() {
+
+        return ignoredCount;
+    }
+
+    public String getServiceStatus() {
+
+        return
+                "JARVIS NOTIFICATION LISTENER\n"
+                + "============================\n"
+                + "الحالة: "
+                + (
+                isConnected()
+                        ? "CONNECTED ✓"
+                        : "DISCONNECTED"
+        )
+                + "\n"
+                + "المستقبلة: "
+                + receivedCount
+                + "\n"
+                + "المعالجة: "
+                + processedCount
+                + "\n"
+                + "المتجاهلة: "
+                + ignoredCount;
     }
 }
