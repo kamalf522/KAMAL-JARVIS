@@ -1,308 +1,275 @@
 package com.kamal.jarvis;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 
-public class ActionHistoryManager {
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.Locale;
+
+/**
+ * JARVIS Autonomous Evolution Engine
+ *
+ * المحرك المركزي للتطور الذاتي ديال JARVIS.
+ *
+ * عندو جوج مسارات:
+ *
+ * 1. INTERNAL EVOLUTION
+ *    - Memory
+ *    - Learning
+ *    - Skills
+ *    - Capabilities
+ *    - Tasks
+ *
+ * 2. CODE EVOLUTION
+ *    - Analysis
+ *    - Snapshot
+ *    - Source modification
+ *    - Verification
+ *    - Tests
+ *    - Rollback
+ *    - APK build request
+ *
+ * ملاحظة:
+ * التطوير الداخلي يقدر يوقع بلا APK.
+ * أما تغيير Java/XML التنفيذي فيحتاج Build وتحديث التطبيق.
+ */
+public class AutonomousEvolutionEngine {
+
+    private static final String PREFS =
+            "JARVIS_AUTONOMOUS_EVOLUTION";
 
     private static final String HISTORY_KEY =
-            "__jarvis_action_history__";
+            "history";
 
-    private static final int MAX_ENTRIES = 200;
+    private static final String INTERNAL_HISTORY_KEY =
+            "internal_history";
 
     private final Context context;
-    private final MemoryManager memoryManager;
 
-    public ActionHistoryManager(Context context) {
+    private final SelfBuilderEngine selfBuilderEngine;
+    private final SelfTestEngine selfTestEngine;
+    private final CodeEvolutionEngine codeEvolutionEngine;
+    private final SelfDiagnosisManager diagnosisManager;
+    private final ApkBuilderEngine apkBuilderEngine;
+
+    private final MemoryManager memoryManager;
+    private final SkillManager skillManager;
+    private final CapabilityManager capabilityManager;
+    private final LearningEngine learningEngine;
+    private final TaskManager taskManager;
+    private final ActionHistoryManager actionHistoryManager;
+
+    private final SharedPreferences preferences;
+
+    public AutonomousEvolutionEngine(
+            Context context
+    ) {
 
         this.context =
                 context.getApplicationContext();
 
+        preferences =
+                this.context.getSharedPreferences(
+                        PREFS,
+                        Context.MODE_PRIVATE
+                );
+
+        selfBuilderEngine =
+                new SelfBuilderEngine(
+                        this.context
+                );
+
+        selfTestEngine =
+                new SelfTestEngine(
+                        this.context
+                );
+
+        codeEvolutionEngine =
+                new CodeEvolutionEngine(
+                        this.context
+                );
+
+        diagnosisManager =
+                new SelfDiagnosisManager(
+                        this.context
+                );
+
+        apkBuilderEngine =
+                new ApkBuilderEngine(
+                        this.context
+                );
+
         memoryManager =
-                new MemoryManager(this.context);
-    }
-
-    public synchronized void record(
-            String command,
-            String result
-    ) {
-
-        if (isBlank(command)) {
-            return;
-        }
-
-        String cleanCommand =
-                clean(command);
-
-        String cleanResult =
-                clean(result);
-
-        String entry =
-                System.currentTimeMillis()
-                        + " | COMMAND: "
-                        + cleanCommand
-                        + " | RESULT: "
-                        + cleanResult;
-
-        appendEntry(entry);
-    }
-
-    public synchronized void recordAction(
-            String action
-    ) {
-
-        if (isBlank(action)) {
-            return;
-        }
-
-        record(
-                action,
-                ""
-        );
-    }
-
-    public synchronized void recordSuccess(
-            String command,
-            String result
-    ) {
-
-        if (isBlank(command)) {
-            return;
-        }
-
-        record(
-                command,
-                "SUCCESS: " + clean(result)
-        );
-    }
-
-    public synchronized void recordFailure(
-            String command,
-            String error
-    ) {
-
-        if (isBlank(command)) {
-            return;
-        }
-
-        record(
-                command,
-                "FAILURE: " + clean(error)
-        );
-    }
-
-    public synchronized String getHistory() {
-
-        String history =
-                memoryManager.getMemory(
-                        HISTORY_KEY
+                new MemoryManager(
+                        this.context
                 );
 
-        if (isBlank(history)) {
-
-            return
-                    "مازال ما كاين حتى سجل للعمليات.";
-        }
-
-        return
-                "JARVIS ACTION HISTORY\n"
-                + "============================\n\n"
-                + history;
-    }
-
-    public synchronized String getLastAction() {
-
-        String history =
-                memoryManager.getMemory(
-                        HISTORY_KEY
+        skillManager =
+                new SkillManager(
+                        this.context
                 );
 
-        if (isBlank(history)) {
-
-            return
-                    "ما كاين حتى عملية مسجلة.";
-        }
-
-        String[] entries =
-                history.split("\n");
-
-        for (int i = entries.length - 1;
-             i >= 0;
-             i--) {
-
-            if (!isBlank(entries[i])) {
-
-                return
-                        "آخر عملية:\n\n"
-                        + entries[i];
-            }
-        }
-
-        return
-                "ما كاين حتى عملية مسجلة.";
-    }
-
-    public synchronized String getRecentActions(
-            int count
-    ) {
-
-        if (count <= 0) {
-            count = 1;
-        }
-
-        if (count > MAX_ENTRIES) {
-            count = MAX_ENTRIES;
-        }
-
-        String history =
-                memoryManager.getMemory(
-                        HISTORY_KEY
+        capabilityManager =
+                new CapabilityManager(
+                        this.context
                 );
 
-        if (isBlank(history)) {
+        learningEngine =
+                new LearningEngine(
+                        this.context
+                );
 
-            return
-                    "ما كاين حتى سجل للعمليات.";
-        }
+        taskManager =
+                new TaskManager(
+                        this.context
+                );
 
-        String[] entries =
-                history.split("\n");
+        actionHistoryManager =
+                new ActionHistoryManager(
+                        this.context
+                );
+    }
+
+    // =========================================================
+    // STATUS
+    // =========================================================
+
+    public String getStatus() {
 
         StringBuilder result =
                 new StringBuilder();
 
-        int start =
-                Math.max(
-                        0,
-                        entries.length - count
-                );
+        result.append(
+                "JARVIS AUTONOMOUS EVOLUTION\n\n"
+        );
 
-        for (int i = start;
-             i < entries.length;
-             i++) {
+        result.append(
+                "Engine: "
+        )
+                .append(
+                        isHealthy()
+                                ? "ONLINE ✓"
+                                : "ATTENTION ⚠"
+                )
+                .append("\n");
 
-            if (isBlank(entries[i])) {
-                continue;
-            }
+        result.append(
+                "Internal Evolution: "
+        )
+                .append(
+                        isInternalEvolutionHealthy()
+                                ? "READY ✓"
+                                : "ERROR ⚠"
+                )
+                .append("\n");
 
-            if (result.length() > 0) {
-                result.append("\n");
-            }
+        result.append(
+                "Self Builder: "
+        )
+                .append(
+                        safeHealth(
+                                selfBuilderEngine
+                        )
+                                ? "READY ✓"
+                                : "ERROR ⚠"
+                )
+                .append("\n");
 
-            result.append(entries[i]);
-        }
+        result.append(
+                "Code Evolution: "
+        )
+                .append(
+                        safeHealth(
+                                codeEvolutionEngine
+                        )
+                                ? "READY ✓"
+                                : "ERROR ⚠"
+                )
+                .append("\n");
+
+        result.append(
+                "Self Test: "
+        )
+                .append(
+                        safeHealth(
+                                selfTestEngine
+                        )
+                                ? "READY ✓"
+                                : "ERROR ⚠"
+                )
+                .append("\n");
+
+        result.append(
+                "APK Builder: "
+        )
+                .append(
+                        safeHealth(
+                                apkBuilderEngine
+                        )
+                                ? "READY ✓"
+                                : "BUILD ENVIRONMENT NEEDED"
+                )
+                .append("\n");
+
+        result.append(
+                "\nSkills: "
+        )
+                .append(
+                        safeSkillCount()
+                )
+                .append("\n");
+
+        result.append(
+                "Capabilities: "
+        )
+                .append(
+                        safeCapabilityCount()
+                )
+                .append("\n");
+
+        result.append(
+                "Memory: "
+        )
+                .append(
+                        safeMemoryCount()
+                )
+                .append("\n");
+
+        result.append(
+                "Pending Tasks: "
+        )
+                .append(
+                        safePendingTasks()
+                )
+                .append("\n");
+
+        result.append(
+                "\nWorkspace:\n"
+        );
+
+        result.append(
+                selfBuilderEngine.getWorkspacePath()
+        );
 
         return result.toString();
-    }
-
-    public synchronized String search(
-            String query
-    ) {
-
-        if (isBlank(query)) {
-
-            return
-                    "خاصني كلمة أو أمر للبحث.";
-        }
-
-        String history =
-                memoryManager.getMemory(
-                        HISTORY_KEY
-                );
-
-        if (isBlank(history)) {
-
-            return
-                    "ما كاين حتى سجل للبحث فيه.";
-        }
-
-        String normalizedQuery =
-                normalize(query);
-
-        String[] entries =
-                history.split("\n");
-
-        StringBuilder result =
-                new StringBuilder();
-
-        int matches = 0;
-
-        for (String entry : entries) {
-
-            if (isBlank(entry)) {
-                continue;
-            }
-
-            if (normalize(entry)
-                    .contains(normalizedQuery)) {
-
-                if (result.length() > 0) {
-                    result.append("\n");
-                }
-
-                result.append(entry);
-                matches++;
-            }
-        }
-
-        if (matches == 0) {
-
-            return
-                    "ما لقيت حتى عملية مطابقة.";
-        }
-
-        return
-                "نتائج البحث: "
-                + matches
-                + "\n\n"
-                + result;
-    }
-
-    public synchronized int getHistoryCount() {
-
-        String history =
-                memoryManager.getMemory(
-                        HISTORY_KEY
-                );
-
-        if (isBlank(history)) {
-            return 0;
-        }
-
-        int count = 0;
-
-        String[] entries =
-                history.split("\n");
-
-        for (String entry : entries) {
-
-            if (!isBlank(entry)) {
-                count++;
-            }
-        }
-
-        return count;
-    }
-
-    public synchronized void clearHistory() {
-
-        memoryManager.removeMemory(
-                HISTORY_KEY
-        );
     }
 
     public boolean isHealthy() {
 
         try {
 
-            if (context == null ||
-                    memoryManager == null) {
-
-                return false;
-            }
-
-            memoryManager.getMemoryCount();
-
-            return true;
+            return selfBuilderEngine != null
+                    && selfTestEngine != null
+                    && codeEvolutionEngine != null
+                    && diagnosisManager != null
+                    && apkBuilderEngine != null
+                    && memoryManager != null
+                    && skillManager != null
+                    && capabilityManager != null
+                    && learningEngine != null
+                    && taskManager != null;
 
         } catch (Exception e) {
 
@@ -310,132 +277,299 @@ public class ActionHistoryManager {
         }
     }
 
-    public String getStatus() {
+    // =========================================================
+    // INTERNAL EVOLUTION
+    // =========================================================
 
-        if (!isHealthy()) {
+    public boolean isInternalEvolutionHealthy() {
+
+        try {
+
+            return skillManager.getSkillCount() >= 0
+                    && capabilityManager.getCount() >= 0
+                    && memoryManager.getMemoryCount() >= 0
+                    && learningEngine.isHealthy()
+                    && taskManager.isHealthy();
+
+        } catch (Exception e) {
+
+            return false;
+        }
+    }
+
+    public String getInternalEvolutionStatus() {
+
+        if (!isInternalEvolutionHealthy()) {
 
             return
-                    "Action History Manager: ERROR ⚠";
+                    "INTERNAL EVOLUTION: ERROR ⚠";
         }
 
         return
-                "Action History Manager: ONLINE ✓\n"
-                + "Records: "
-                + getHistoryCount();
+                "INTERNAL EVOLUTION: ONLINE ✓\n"
+                        + "Skills: "
+                        + safeSkillCount()
+                        + "\n"
+                        + "Capabilities: "
+                        + safeCapabilityCount()
+                        + "\n"
+                        + "Memory: "
+                        + safeMemoryCount()
+                        + "\n"
+                        + "Pending Tasks: "
+                        + safePendingTasks();
     }
 
-    private void appendEntry(
-            String entry
+    // =========================================================
+    // ANALYZE
+    // =========================================================
+
+    public String analyzeBeforeEvolution(
+            String goal
     ) {
 
-        String oldHistory =
-                memoryManager.getMemory(
-                        HISTORY_KEY
+        String cleanGoal =
+                normalizeGoal(goal);
+
+        try {
+
+            String diagnosis =
+                    diagnosisManager.runDiagnosis();
+
+            String project =
+                    codeEvolutionEngine.analyzeProject();
+
+            String plan =
+                    codeEvolutionEngine
+                            .generateDevelopmentPlan(
+                                    cleanGoal
+                            );
+
+            saveMemory(
+                    "__autonomous_last_goal__",
+                    cleanGoal
+            );
+
+            saveMemory(
+                    "__autonomous_last_analysis__",
+                    project
+            );
+
+            recordHistory(
+                    "ANALYZE",
+                    cleanGoal
+            );
+
+            StringBuilder result =
+                    new StringBuilder();
+
+            result.append(
+                    "JARVIS EVOLUTION ANALYSIS\n\n"
+            );
+
+            result.append(
+                    "GOAL:\n"
+            );
+
+            result.append(
+                    cleanGoal
+            );
+
+            result.append(
+                    "\n\nDIAGNOSIS:\n"
+            );
+
+            result.append(
+                    diagnosis
+            );
+
+            result.append(
+                    "\n\nPROJECT:\n"
+            );
+
+            result.append(
+                    project
+            );
+
+            result.append(
+                    "\n\nPLAN:\n"
+            );
+
+            result.append(
+                    plan
+            );
+
+            return result.toString();
+
+        } catch (Exception e) {
+
+            recordHistory(
+                    "ANALYZE_FAILED",
+                    safeError(e)
+            );
+
+            return
+                    "Evolution Analysis Failed:\n"
+                            + safeError(e);
+        }
+    }
+
+    // =========================================================
+    // PREPARE
+    // =========================================================
+
+    public String prepareEvolution(
+            String goal
+    ) {
+
+        String cleanGoal =
+                normalizeGoal(goal);
+
+        try {
+
+            String analysis =
+                    analyzeBeforeEvolution(
+                            cleanGoal
+                    );
+
+            String snapshot =
+                    selfBuilderEngine.createSnapshot(
+                            "قبل التطوير المستقل: "
+                                    + cleanGoal
+                    );
+
+            saveMemory(
+                    "__autonomous_last_snapshot__",
+                    snapshot
+            );
+
+            recordHistory(
+                    "PREPARE",
+                    cleanGoal
+                            + " | "
+                            + snapshot
+            );
+
+            return
+                    "EVOLUTION PREPARED ✓\n\n"
+                            + analysis
+                            + "\n\nSNAPSHOT:\n"
+                            + snapshot;
+
+        } catch (Exception e) {
+
+            recordHistory(
+                    "PREPARE_FAILED",
+                    cleanGoal
+                            + " | "
+                            + safeError(e)
+            );
+
+            return
+                    "Evolution Preparation Failed:\n"
+                            + safeError(e);
+        }
+    }
+
+    // =========================================================
+    // INTERNAL EVOLUTION
+    // =========================================================
+
+    public String runInternalEvolution(
+            String goal
+    ) {
+
+        String cleanGoal =
+                normalizeGoal(goal);
+
+        try {
+
+            String baseline =
+                    selfTestEngine.runAllTests();
+
+            if (!testPassed(baseline)) {
+
+                recordHistory(
+                        "INTERNAL_BASELINE_FAILED",
+                        cleanGoal
                 );
 
-        String newHistory;
-
-        if (isBlank(oldHistory)) {
-
-            newHistory = entry;
-
-        } else {
-
-            newHistory =
-                    oldHistory
-                            + "\n"
-                            + entry;
-        }
-
-        newHistory =
-                limitHistory(
-                        newHistory
-                );
-
-        memoryManager.saveMemory(
-                HISTORY_KEY,
-                newHistory
-        );
-    }
-
-    private String limitHistory(
-            String history
-    ) {
-
-        if (isBlank(history)) {
-            return "";
-        }
-
-        String[] entries =
-                history.split("\n");
-
-        if (entries.length <= MAX_ENTRIES) {
-            return history;
-        }
-
-        StringBuilder result =
-                new StringBuilder();
-
-        int start =
-                entries.length
-                        - MAX_ENTRIES;
-
-        for (int i = start;
-             i < entries.length;
-             i++) {
-
-            if (isBlank(entries[i])) {
-                continue;
+                return
+                        "INTERNAL EVOLUTION توقف ⚠\n\n"
+                                + "النظام محتاج إصلاح أولا.\n\n"
+                                + baseline;
             }
 
-            if (result.length() > 0) {
-                result.append("\n");
-            }
+            String domain =
+                    detectInternalDomain(
+                            cleanGoal
+                    );
 
-            result.append(entries[i]);
-        }
+            String skillName =
+                    buildSkillName(
+                            domain
+                    );
 
-        return result.toString();
-    }
+            String capabilityName =
+                    buildCapabilityName(
+                            domain
+                    );
 
-    private boolean isBlank(
-            String value
-    ) {
+            String description =
+                    buildEvolutionDescription(
+                            domain,
+                            cleanGoal
+                    );
 
-        return value == null
-                || value.trim().isEmpty();
-    }
+            boolean capabilityAdded =
+                    capabilityManager.addCapability(
+                            capabilityName,
+                            description
+                    );
 
-    private String clean(
-            String value
-    ) {
+            boolean skillAdded =
+                    skillManager.addSkill(
+                            skillName,
+                            description
+                    );
 
-        if (value == null) {
-            return "";
-        }
+            String learningSubject =
+                    "evolution_" + domain;
 
-        return value
-                .replace("\n", " ")
-                .replace("\r", " ")
-                .replace("|", "/")
-                .trim();
-    }
+            String learningInformation =
+                    "الهدف: "
+                            + cleanGoal
+                            + "\nالمجال: "
+                            + domain
+                            + "\nالقاعدة: "
+                            + description
+                            + "\nالتطور: داخلي بدون APK.";
 
-    private String normalize(
-            String value
-    ) {
+            String learningResult =
+                    learningEngine.learn(
+                            learningSubject,
+                            learningInformation
+                    );
 
-        if (value == null) {
-            return "";
-        }
+            String ruleKey =
+                    "__evolution_rule__"
+                            + domain;
 
-        return value
-                .trim()
-                .toLowerCase()
-                .replace("أ", "ا")
-                .replace("إ", "ا")
-                .replace("آ", "ا")
-                .replace("ة", "ه")
-                .replace("ى", "ي");
-    }
-}
+            String oldRule =
+                    memoryManager.getMemory(
+                            ruleKey
+                    );
+
+            int count =
+                    getEvolutionCount(
+                            domain
+                    ) + 1;
+
+            String rule =
+                    "domain="
+                            + domain
+                            + "\ncount="
+                            + count
+                            + "\nlast_goal="
+                            + cleanGoal
+                            + "\
