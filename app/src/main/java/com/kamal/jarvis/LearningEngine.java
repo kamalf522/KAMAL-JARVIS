@@ -16,11 +16,20 @@ public class LearningEngine {
     private static final String LEARNING_INDEX =
             "__learning_index__";
 
+    private static final String LEARNING_COUNT =
+            "__learning_count__";
+
     private final Context context;
     private final MemoryManager memoryManager;
     private final SkillManager skillManager;
 
     public LearningEngine(Context context) {
+
+        if (context == null) {
+            throw new IllegalArgumentException(
+                    "LearningEngine context cannot be null"
+            );
+        }
 
         this.context =
                 context.getApplicationContext();
@@ -36,7 +45,7 @@ public class LearningEngine {
     // LEARN
     // =========================================================
 
-    public String learn(
+    public synchronized String learn(
             String subject,
             String information
     ) {
@@ -63,6 +72,10 @@ public class LearningEngine {
             return "الموضوع غير صالح.";
         }
 
+        if (cleanInformation.isEmpty()) {
+            return "المعلومة غير صالحة.";
+        }
+
         String timestamp =
                 new SimpleDateFormat(
                         "yyyy-MM-dd HH:mm:ss",
@@ -82,8 +95,9 @@ public class LearningEngine {
         if (previous != null &&
                 !previous.trim().isEmpty()) {
 
-            stored.append(previous.trim())
-                    .append("\n");
+            stored.append(
+                    previous.trim()
+            ).append("\n");
         }
 
         stored.append("[")
@@ -100,6 +114,18 @@ public class LearningEngine {
                 cleanSubject
         );
 
+        int count =
+                countFacts(
+                        stored.toString()
+                );
+
+        memoryManager.saveMemory(
+                LEARNING_COUNT,
+                String.valueOf(
+                        countAllFacts()
+                )
+        );
+
         return
                 "تم التعلم ✓\n\n"
                 + "الموضوع: "
@@ -107,15 +133,15 @@ public class LearningEngine {
                 + "\n"
                 + "المعلومة تسجلات فذاكرة JARVIS."
                 + "\n"
-                + "عدد المعلومات المحفوظة: "
-                + countFacts(stored.toString());
+                + "عدد المعلومات فهاد الموضوع: "
+                + count;
     }
 
     // =========================================================
     // REMEMBER LEARNING
     // =========================================================
 
-    public String rememberLearning(
+    public synchronized String rememberLearning(
             String subject
     ) {
 
@@ -153,14 +179,15 @@ public class LearningEngine {
     // SEARCH LEARNING
     // =========================================================
 
-    public String searchLearning(
+    public synchronized String searchLearning(
             String query
     ) {
 
         if (query == null ||
                 query.trim().isEmpty()) {
 
-            return "حدد شنو بغيتي نقلب عليه فالتعلم.";
+            return
+                    "حدد شنو بغيتي نقلب عليه فالتعلم.";
         }
 
         String cleanQuery =
@@ -182,34 +209,47 @@ public class LearningEngine {
 
         for (String subject : subjects) {
 
-            if (subject.contains(cleanQuery) ||
-                    cleanQuery.contains(subject)) {
-
-                String information =
-                        memoryManager.getMemory(
-                                LEARNING_PREFIX + subject
-                        );
-
-                if (information == null ||
-                        information.trim().isEmpty()) {
-                    continue;
-                }
-
-                if (matches == 0) {
-
-                    result.append(
-                            "لقيت هاد المعلومات:\n\n"
+            String information =
+                    memoryManager.getMemory(
+                            LEARNING_PREFIX
+                                    + subject
                     );
-                }
 
-                result.append("• ")
-                        .append(subject)
-                        .append("\n")
-                        .append(information)
-                        .append("\n\n");
-
-                matches++;
+            if (information == null ||
+                    information.trim().isEmpty()) {
+                continue;
             }
+
+            String searchable =
+                    (
+                            subject
+                                    + " "
+                                    + information
+                    )
+                    .toLowerCase(
+                            Locale.ROOT
+                    );
+
+            if (!searchable.contains(
+                    cleanQuery
+            )) {
+                continue;
+            }
+
+            if (matches == 0) {
+
+                result.append(
+                        "لقيت هاد المعلومات:\n\n"
+                );
+            }
+
+            result.append("• ")
+                    .append(subject)
+                    .append("\n")
+                    .append(information)
+                    .append("\n\n");
+
+            matches++;
         }
 
         if (matches == 0) {
@@ -219,16 +259,18 @@ public class LearningEngine {
                     + query;
         }
 
-        return result
-                .toString()
-                .trim();
+        result.append(
+                "عدد النتائج: "
+        ).append(matches);
+
+        return result.toString().trim();
     }
 
     // =========================================================
     // CREATE SKILL
     // =========================================================
 
-    public String createSkill(
+    public synchronized String createSkill(
             String name,
             String description
     ) {
@@ -250,14 +292,34 @@ public class LearningEngine {
 
         try {
 
-            skillManager.addSkill(
-                    cleanName,
-                    cleanDescription
-            );
+            boolean created =
+                    skillManager.addSkill(
+                            cleanName,
+                            cleanDescription
+                    );
+
+            if (!created) {
+
+                if (skillManager.hasSkill(
+                        cleanName
+                )) {
+
+                    return
+                            "هاد المهارة موجودة من قبل ✓\n\n"
+                            + cleanName;
+                }
+
+                return
+                        "ما قدرتش نسجل المهارة.";
+            }
 
             return
                     "تم تسجيل المهارة ✓\n\n"
-                    + cleanName;
+                    + "الاسم: "
+                    + cleanName
+                    + "\n"
+                    + "الوصف: "
+                    + cleanDescription;
 
         } catch (Exception e) {
 
@@ -271,7 +333,7 @@ public class LearningEngine {
     // LEARNING SUBJECTS
     // =========================================================
 
-    public String getLearningSubjectsText() {
+    public synchronized String getLearningSubjectsText() {
 
         List<String> subjects =
                 getLearningSubjects();
@@ -293,9 +355,23 @@ public class LearningEngine {
              i < subjects.size();
              i++) {
 
+            String subject =
+                    subjects.get(i);
+
+            int facts =
+                    countFacts(
+                            memoryManager.getMemory(
+                                    LEARNING_PREFIX
+                                            + subject
+                            )
+                    );
+
             result.append(i + 1)
                     .append(". ")
-                    .append(subjects.get(i))
+                    .append(subject)
+                    .append(" — ")
+                    .append(facts)
+                    .append(" معلومات")
                     .append("\n");
         }
 
@@ -308,7 +384,7 @@ public class LearningEngine {
     // LEARNING STATUS
     // =========================================================
 
-    public String getLearningStatus() {
+    public synchronized String getLearningStatus() {
 
         try {
 
@@ -353,7 +429,7 @@ public class LearningEngine {
     // HEALTH
     // =========================================================
 
-    public boolean isHealthy() {
+    public synchronized boolean isHealthy() {
 
         try {
 
@@ -363,6 +439,8 @@ public class LearningEngine {
 
             getLearningSubjects();
 
+            countAllFacts();
+
             return true;
 
         } catch (Exception e) {
@@ -371,7 +449,7 @@ public class LearningEngine {
         }
     }
 
-    public String getStatus() {
+    public synchronized String getStatus() {
 
         if (isHealthy()) {
 
@@ -387,7 +465,7 @@ public class LearningEngine {
     // INDEX MANAGEMENT
     // =========================================================
 
-    private void addToLearningIndex(
+    private synchronized void addToLearningIndex(
             String subject
     ) {
 
@@ -410,7 +488,8 @@ public class LearningEngine {
         );
     }
 
-    private List<String> getLearningSubjects() {
+    private synchronized List<String>
+    getLearningSubjects() {
 
         String raw =
                 memoryManager.getMemory(
@@ -465,7 +544,10 @@ public class LearningEngine {
             }
 
             result.append(
-                    subject.replace("|", " ")
+                    subject.replace(
+                            "|",
+                            " "
+                    )
             );
         }
 
@@ -487,7 +569,9 @@ public class LearningEngine {
         }
 
         String[] lines =
-                information.split("\\n");
+                information.split(
+                        "\\n"
+                );
 
         int count = 0;
 
@@ -501,7 +585,7 @@ public class LearningEngine {
         return count;
     }
 
-    private int countAllFacts() {
+    private synchronized int countAllFacts() {
 
         int total = 0;
 
@@ -512,10 +596,14 @@ public class LearningEngine {
 
             String information =
                     memoryManager.getMemory(
-                            LEARNING_PREFIX + subject
+                            LEARNING_PREFIX
+                                    + subject
                     );
 
-            total += countFacts(information);
+            total +=
+                    countFacts(
+                            information
+                    );
         }
 
         return total;
@@ -535,13 +623,18 @@ public class LearningEngine {
 
         return value
                 .trim()
-                .toLowerCase(Locale.ROOT)
+                .toLowerCase(
+                        Locale.ROOT
+                )
                 .replace("أ", "ا")
                 .replace("إ", "ا")
                 .replace("آ", "ا")
                 .replace("ة", "ه")
                 .replace("ى", "ي")
-                .replaceAll("\\s+", " ");
+                .replaceAll(
+                        "\\s+",
+                        " "
+                );
     }
 
     // =========================================================
