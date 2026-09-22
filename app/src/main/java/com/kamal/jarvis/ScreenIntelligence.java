@@ -2,7 +2,11 @@ package com.kamal.jarvis;
 
 import android.content.Context;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 public class ScreenIntelligence {
 
@@ -16,17 +20,35 @@ public class ScreenIntelligence {
 
     private long lastAnalysisTime = 0L;
 
+    private int analysisCount = 0;
+
+    private int detectedElementCount = 0;
+
+    private boolean hasClickableElements = false;
+
+    private boolean hasEditableElements = false;
+
+    private boolean hasScrollableElements = false;
+
+    private boolean hasTextElements = false;
+
     public ScreenIntelligence(Context context) {
+
+        if (context == null) {
+            throw new IllegalArgumentException(
+                    "ScreenIntelligence requires a valid Context"
+            );
+        }
 
         this.context =
                 context.getApplicationContext();
     }
 
     // =========================================================
-    // ANALYZE CURRENT SCREEN
+    // MAIN SCREEN ANALYSIS
     // =========================================================
 
-    public String analyzeCurrentScreen() {
+    public synchronized String analyzeCurrentScreen() {
 
         JarvisAccessibilityService service =
                 JarvisAccessibilityService.getInstance();
@@ -35,35 +57,38 @@ public class ScreenIntelligence {
 
             enabled = false;
 
-            return
+            lastAnalysis =
                     "JARVIS SCREEN INTELLIGENCE\n\n"
                     + "الحالة: OFFLINE ⚠\n\n"
                     + "خاصك تفعل Accessibility Service "
                     + "باش JARVIS يقدر يشوف ويتحكم فالشاشة.";
+
+            return lastAnalysis;
         }
 
         enabled = true;
 
         String screenText =
-                safe(
-                        service.getScreenText()
-                );
+                safe(service.getScreenText());
 
         String packageName =
-                safe(
-                        service.getCurrentPackage()
-                );
+                safe(service.getCurrentPackage());
 
         String tree =
-                safe(
-                        service.getScreenTree()
-                );
+                safe(service.getScreenTree());
 
-        lastPackage =
-                packageName;
+        lastPackage = packageName;
 
         lastAnalysisTime =
                 System.currentTimeMillis();
+
+        analysisCount++;
+
+        detectedElementCount = 0;
+        hasClickableElements = false;
+        hasEditableElements = false;
+        hasScrollableElements = false;
+        hasTextElements = !screenText.isEmpty();
 
         StringBuilder result =
                 new StringBuilder();
@@ -90,9 +115,7 @@ public class ScreenIntelligence {
                         : packageName
         );
 
-        result.append(
-                "\n\n"
-        );
+        result.append("\n\n");
 
         result.append(
                 "SCREEN TEXT:\n"
@@ -101,27 +124,38 @@ public class ScreenIntelligence {
         result.append(
                 screenText.isEmpty()
                         ? "لا يوجد نص واضح."
-                        : screenText
+                        : limit(
+                                screenText,
+                                12000
+                        )
         );
 
-        result.append(
-                "\n\n"
-        );
+        result.append("\n\n");
 
         result.append(
                 "SCREEN STRUCTURE:\n"
         );
 
         result.append(
-                tree
+                tree.isEmpty()
+                        ? "لا توجد بنية شاشة متاحة."
+                        : limit(
+                                tree,
+                                16000
+                        )
         );
 
-        result.append(
-                "\n\n"
-        );
+        result.append("\n\n");
 
         result.append(
-                analyzeCapabilities(
+                analyzeCapabilities(tree)
+        );
+
+        result.append("\n");
+
+        result.append(
+                buildActionHints(
+                        screenText,
                         tree
                 )
         );
@@ -133,16 +167,14 @@ public class ScreenIntelligence {
     }
 
     // =========================================================
-    // ANALYZE PROVIDED SCREEN DATA
+    // ANALYZE PROVIDED DATA
     // =========================================================
 
-    public String analyzeScreen(
+    public synchronized String analyzeScreen(
             String screenDescription
     ) {
 
-        if (screenDescription == null ||
-                screenDescription.trim().isEmpty()) {
-
+        if (isEmpty(screenDescription)) {
             return analyzeCurrentScreen();
         }
 
@@ -153,6 +185,14 @@ public class ScreenIntelligence {
 
         lastAnalysisTime =
                 System.currentTimeMillis();
+
+        analysisCount++;
+
+        detectedElementCount = 0;
+        hasClickableElements = false;
+        hasEditableElements = false;
+        hasScrollableElements = false;
+        hasTextElements = !description.isEmpty();
 
         StringBuilder result =
                 new StringBuilder();
@@ -174,15 +214,23 @@ public class ScreenIntelligence {
         );
 
         result.append(
-                description
+                limit(
+                        description,
+                        16000
+                )
         );
 
-        result.append(
-                "\n\n"
-        );
+        result.append("\n\n");
 
         result.append(
-                detectElements(
+                detectElements(description)
+        );
+
+        result.append("\n");
+
+        result.append(
+                buildActionHints(
+                        description,
                         description
                 )
         );
@@ -194,7 +242,7 @@ public class ScreenIntelligence {
     }
 
     // =========================================================
-    // DETECT SCREEN ELEMENTS
+    // ELEMENT DETECTION
     // =========================================================
 
     private String detectElements(
@@ -202,9 +250,7 @@ public class ScreenIntelligence {
     ) {
 
         String lower =
-                description.toLowerCase(
-                        Locale.ROOT
-                );
+                normalize(description);
 
         StringBuilder result =
                 new StringBuilder();
@@ -213,8 +259,7 @@ public class ScreenIntelligence {
                 "العناصر المكتشفة:\n"
         );
 
-        boolean detected =
-                false;
+        boolean detected = false;
 
         if (containsAny(
                 lower,
@@ -222,13 +267,16 @@ public class ScreenIntelligence {
                 "زر",
                 "click",
                 "اضغط",
-                "كليك"
+                "كليك",
+                "tap"
         )) {
 
             result.append(
                     "• عنصر قابل للضغط ✓\n"
             );
 
+            hasClickableElements = true;
+            detectedElementCount++;
             detected = true;
         }
 
@@ -238,13 +286,16 @@ public class ScreenIntelligence {
                 "نص",
                 "رسالة",
                 "title",
-                "عنوان"
+                "عنوان",
+                "label"
         )) {
 
             result.append(
                     "• نص / معلومات ✓\n"
             );
 
+            hasTextElements = true;
+            detectedElementCount++;
             detected = true;
         }
 
@@ -254,13 +305,17 @@ public class ScreenIntelligence {
                 "خانة",
                 "حقل",
                 "edittext",
-                "editable"
+                "editable",
+                "اكتب",
+                "كتابة"
         )) {
 
             result.append(
                     "• حقل إدخال ✓\n"
             );
 
+            hasEditableElements = true;
+            detectedElementCount++;
             detected = true;
         }
 
@@ -276,6 +331,7 @@ public class ScreenIntelligence {
                     "• صورة ✓\n"
             );
 
+            detectedElementCount++;
             detected = true;
         }
 
@@ -290,6 +346,7 @@ public class ScreenIntelligence {
                     "• قائمة / Menu ✓\n"
             );
 
+            detectedElementCount++;
             detected = true;
         }
 
@@ -305,6 +362,38 @@ public class ScreenIntelligence {
                     "• منطقة قابلة للتمرير ✓\n"
             );
 
+            hasScrollableElements = true;
+            detectedElementCount++;
+            detected = true;
+        }
+
+        if (containsAny(
+                lower,
+                "checkbox",
+                "check box",
+                "خانة اختيار"
+        )) {
+
+            result.append(
+                    "• خانة اختيار ✓\n"
+            );
+
+            detectedElementCount++;
+            detected = true;
+        }
+
+        if (containsAny(
+                lower,
+                "switch",
+                "toggle",
+                "مفتاح"
+        )) {
+
+            result.append(
+                    "• مفتاح تشغيل/إيقاف ✓\n"
+            );
+
+            detectedElementCount++;
             detected = true;
         }
 
@@ -319,25 +408,22 @@ public class ScreenIntelligence {
     }
 
     // =========================================================
-    // ANALYZE ACCESSIBILITY TREE
+    // ACCESSIBILITY TREE ANALYSIS
     // =========================================================
 
     private String analyzeCapabilities(
             String tree
     ) {
 
-        if (tree == null ||
-                tree.trim().isEmpty()) {
+        if (isEmpty(tree)) {
 
             return
-                    "CAPABILITIES:\n"
+                    "DETECTED CAPABILITIES:\n"
                     + "ما كايناش معلومات كافية.";
         }
 
         String lower =
-                tree.toLowerCase(
-                        Locale.ROOT
-                );
+                normalize(tree);
 
         StringBuilder result =
                 new StringBuilder();
@@ -346,12 +432,15 @@ public class ScreenIntelligence {
                 "DETECTED CAPABILITIES:\n"
         );
 
-        boolean found =
-                false;
+        boolean found = false;
 
-        if (lower.contains(
-                "[clickable]"
+        if (containsAny(
+                lower,
+                "[clickable]",
+                "clickable"
         )) {
+
+            hasClickableElements = true;
 
             result.append(
                     "• الضغط على العناصر: YES ✓\n"
@@ -360,9 +449,13 @@ public class ScreenIntelligence {
             found = true;
         }
 
-        if (lower.contains(
-                "[editable]"
+        if (containsAny(
+                lower,
+                "[editable]",
+                "editable"
         )) {
+
+            hasEditableElements = true;
 
             result.append(
                     "• إدخال النص: YES ✓\n"
@@ -371,12 +464,29 @@ public class ScreenIntelligence {
             found = true;
         }
 
-        if (lower.contains(
-                "[scrollable]"
+        if (containsAny(
+                lower,
+                "[scrollable]",
+                "scrollable"
         )) {
+
+            hasScrollableElements = true;
 
             result.append(
                     "• التمرير: YES ✓\n"
+            );
+
+            found = true;
+        }
+
+        if (containsAny(
+                lower,
+                "[enabled]",
+                "enabled"
+        )) {
+
+            result.append(
+                    "• عناصر مفعلة: YES ✓\n"
             );
 
             found = true;
@@ -389,19 +499,160 @@ public class ScreenIntelligence {
             );
         }
 
+        result.append(
+                "• عدد العناصر المكتشفة: "
+        );
+
+        result.append(
+                detectedElementCount
+        );
+
+        result.append("\n");
+
         return result.toString();
     }
 
     // =========================================================
-    // CLICK ELEMENT
+    // ACTION HINTS
+    // =========================================================
+
+    private String buildActionHints(
+            String screenText,
+            String tree
+    ) {
+
+        String combined =
+                normalize(
+                        safe(screenText)
+                                + " "
+                                + safe(tree)
+                );
+
+        StringBuilder result =
+                new StringBuilder();
+
+        result.append(
+                "JARVIS ACTION HINTS:\n"
+        );
+
+        List<String> hints =
+                new ArrayList<>();
+
+        if (hasClickableElements ||
+                containsAny(
+                        combined,
+                        "button",
+                        "زر",
+                        "clickable",
+                        "اضغط"
+                )) {
+
+            hints.add(
+                    "يمكن محاولة الضغط على عنصر مناسب."
+            );
+        }
+
+        if (hasEditableElements ||
+                containsAny(
+                        combined,
+                        "input",
+                        "edittext",
+                        "editable",
+                        "حقل",
+                        "خانة"
+                )) {
+
+            hints.add(
+                    "يمكن محاولة إدخال النص."
+            );
+        }
+
+        if (hasScrollableElements ||
+                containsAny(
+                        combined,
+                        "scrollable",
+                        "scroll",
+                        "تمرير"
+                )) {
+
+            hints.add(
+                    "يمكن محاولة التمرير."
+            );
+        }
+
+        if (containsAny(
+                combined,
+                "search",
+                "بحث",
+                "google"
+        )) {
+
+            hints.add(
+                    "كاين مؤشر على واجهة بحث."
+            );
+        }
+
+        if (containsAny(
+                combined,
+                "login",
+                "sign in",
+                "تسجيل الدخول",
+                "دخول"
+        )) {
+
+            hints.add(
+                    "كاين مؤشر على واجهة تسجيل الدخول."
+            );
+        }
+
+        if (containsAny(
+                combined,
+                "password",
+                "كلمة السر",
+                "كلمه السر"
+        )) {
+
+            hints.add(
+                    "كاين حقل متعلق بكلمة السر."
+            );
+        }
+
+        if (hints.isEmpty()) {
+
+            result.append(
+                    "• ما كايناش إشارة واضحة لإجراء محدد.\n"
+            );
+
+        } else {
+
+            for (String hint : hints) {
+
+                result.append(
+                        "• "
+                );
+
+                result.append(
+                        hint
+                );
+
+                result.append(
+                        "\n"
+                );
+            }
+        }
+
+        return result.toString();
+    }
+
+    // =========================================================
+    // CLICK
     // =========================================================
 
     public String clickElement(
             String target
     ) {
 
-        if (target == null ||
-                target.trim().isEmpty()) {
+        if (isEmpty(target)) {
 
             return
                     "JARVIS: عطيني اسم العنصر اللي بغيتي نضغط عليه.";
@@ -425,13 +676,13 @@ public class ScreenIntelligence {
 
             return
                     "JARVIS: تم الضغط على \""
-                            + target
+                            + target.trim()
                             + "\" ✓";
         }
 
         return
                 "JARVIS: ما لقيتش العنصر \""
-                        + target
+                        + target.trim()
                         + "\" أو ما قدرتش نضغط عليه.";
     }
 
@@ -443,8 +694,7 @@ public class ScreenIntelligence {
             String target
     ) {
 
-        if (target == null ||
-                target.trim().isEmpty()) {
+        if (isEmpty(target)) {
 
             return
                     "JARVIS: خاصني اسم العنصر.";
@@ -459,8 +709,10 @@ public class ScreenIntelligence {
                     "JARVIS: Accessibility Service غير مفعلة.";
         }
 
-        return service.getNodeInfoByText(
-                target.trim()
+        return safe(
+                service.getNodeInfoByText(
+                        target.trim()
+                )
         );
     }
 
@@ -562,10 +814,9 @@ public class ScreenIntelligence {
     // LAST ANALYSIS
     // =========================================================
 
-    public String getLastAnalysis() {
+    public synchronized String getLastAnalysis() {
 
-        if (lastAnalysis == null ||
-                lastAnalysis.trim().isEmpty()) {
+        if (isEmpty(lastAnalysis)) {
 
             return
                     "مازال ما تحللات حتى شاشة.";
@@ -587,12 +838,19 @@ public class ScreenIntelligence {
 
         if (service == null) {
 
-            return "";
+            return lastPackage;
         }
 
-        return safe(
-                service.getCurrentPackage()
-        );
+        String packageName =
+                safe(
+                        service.getCurrentPackage()
+                );
+
+        if (!packageName.isEmpty()) {
+            lastPackage = packageName;
+        }
+
+        return lastPackage;
     }
 
     // =========================================================
@@ -610,7 +868,9 @@ public class ScreenIntelligence {
                     "Accessibility Service غير مفعلة.";
         }
 
-        return service.getScreenText();
+        return safe(
+                service.getScreenText()
+        );
     }
 
     // =========================================================
@@ -628,14 +888,16 @@ public class ScreenIntelligence {
                     "Accessibility Service غير مفعلة.";
         }
 
-        return service.getScreenTree();
+        return safe(
+                service.getScreenTree()
+        );
     }
 
     // =========================================================
     // ENABLE / DISABLE
     // =========================================================
 
-    public String enable() {
+    public synchronized String enable() {
 
         enabled = true;
 
@@ -643,7 +905,7 @@ public class ScreenIntelligence {
                 "Screen Intelligence: ENABLED ✓";
     }
 
-    public String disable() {
+    public synchronized String disable() {
 
         enabled = false;
 
@@ -676,7 +938,7 @@ public class ScreenIntelligence {
     // STATUS
     // =========================================================
 
-    public String getStatus() {
+    public synchronized String getStatus() {
 
         JarvisAccessibilityService service =
                 JarvisAccessibilityService.getInstance();
@@ -685,7 +947,9 @@ public class ScreenIntelligence {
 
             return
                     "Screen Intelligence: STANDBY\n"
-                    + "Accessibility Service: OFFLINE ⚠";
+                    + "Accessibility Service: OFFLINE ⚠\n"
+                    + "Analyses: "
+                    + analysisCount;
         }
 
         String packageName =
@@ -701,11 +965,26 @@ public class ScreenIntelligence {
                 packageName.isEmpty()
                         ? "UNKNOWN"
                         : packageName
-        );
+        )
+                + "\n"
+                + "Analyses: "
+                + analysisCount
+                + "\n"
+                + "Detected Elements: "
+                + detectedElementCount
+                + "\n"
+                + "Clickable: "
+                + (hasClickableElements ? "YES" : "NO")
+                + "\n"
+                + "Editable: "
+                + (hasEditableElements ? "YES" : "NO")
+                + "\n"
+                + "Scrollable: "
+                + (hasScrollableElements ? "YES" : "NO");
     }
 
     // =========================================================
-    // ANALYSIS TIME
+    // ANALYSIS DATA
     // =========================================================
 
     public long getLastAnalysisTime() {
@@ -713,20 +992,82 @@ public class ScreenIntelligence {
         return lastAnalysisTime;
     }
 
+    public int getAnalysisCount() {
+
+        return analysisCount;
+    }
+
+    public int getDetectedElementCount() {
+
+        return detectedElementCount;
+    }
+
+    public boolean hasClickableElements() {
+
+        return hasClickableElements;
+    }
+
+    public boolean hasEditableElements() {
+
+        return hasEditableElements;
+    }
+
+    public boolean hasScrollableElements() {
+
+        return hasScrollableElements;
+    }
+
+    public boolean hasTextElements() {
+
+        return hasTextElements;
+    }
+
     // =========================================================
-    // SAFE STRING
+    // CONTEXT
     // =========================================================
 
-    private String safe(
+    public Context getContext() {
+
+        return context;
+    }
+
+    // =========================================================
+    // NORMALIZATION
+    // =========================================================
+
+    private String normalize(
             String value
     ) {
 
         if (value == null) {
-
             return "";
         }
 
-        return value.trim();
+        return value
+                .trim()
+                .toLowerCase(
+                        Locale.ROOT
+                )
+                .replace(
+                        "أ",
+                        "ا"
+                )
+                .replace(
+                        "إ",
+                        "ا"
+                )
+                .replace(
+                        "آ",
+                        "ا"
+                )
+                .replace(
+                        "ة",
+                        "ه"
+                )
+                .replace(
+                        "ى",
+                        "ي"
+                );
     }
 
     // =========================================================
@@ -738,24 +1079,87 @@ public class ScreenIntelligence {
             String... values
     ) {
 
-        if (text == null) {
+        if (text == null ||
+                text.isEmpty()) {
 
             return false;
         }
 
         for (String value : values) {
 
-            if (value != null &&
-                    text.contains(
-                            value.toLowerCase(
-                                    Locale.ROOT
-                            )
-                    )) {
+            if (value == null ||
+                    value.isEmpty()) {
+
+                continue;
+            }
+
+            String normalized =
+                    normalize(value);
+
+            if (text.contains(
+                    normalized
+            )) {
 
                 return true;
             }
         }
 
         return false;
+    }
+
+    // =========================================================
+    // SAFE STRING
+    // =========================================================
+
+    private String safe(
+            String value
+    ) {
+
+        if (value == null) {
+            return "";
+        }
+
+        return value.trim();
+    }
+
+    // =========================================================
+    // LIMIT OUTPUT
+    // =========================================================
+
+    private String limit(
+            String value,
+            int max
+    ) {
+
+        if (value == null) {
+            return "";
+        }
+
+        if (max <= 0) {
+            return "";
+        }
+
+        if (value.length() <= max) {
+            return value;
+        }
+
+        return
+                value.substring(
+                        0,
+                        max
+                )
+                        + "\n...[TRUNCATED]";
+    }
+
+    // =========================================================
+    // EMPTY CHECK
+    // =========================================================
+
+    private boolean isEmpty(
+            String value
+    ) {
+
+        return value == null
+                || value.trim().isEmpty();
     }
 }
