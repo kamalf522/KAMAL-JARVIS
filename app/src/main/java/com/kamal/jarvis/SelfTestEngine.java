@@ -9,9 +9,15 @@ public class SelfTestEngine {
     private final MemoryManager memoryManager;
     private final SkillManager skillManager;
     private final CapabilityManager capabilityManager;
+    private final TaskManager taskManager;
+    private final LearningEngine learningEngine;
+
     private final SelfBuilderEngine selfBuilderEngine;
     private final CodeEvolutionEngine codeEvolutionEngine;
     private final ApkBuilderEngine apkBuilderEngine;
+
+    private final RecoverySystem recoverySystem;
+    private final SystemMonitor systemMonitor;
 
     public SelfTestEngine(Context context) {
 
@@ -19,34 +25,34 @@ public class SelfTestEngine {
                 context.getApplicationContext();
 
         memoryManager =
-                new MemoryManager(
-                        this.context
-                );
+                new MemoryManager(this.context);
 
         skillManager =
-                new SkillManager(
-                        this.context
-                );
+                new SkillManager(this.context);
 
         capabilityManager =
-                new CapabilityManager(
-                        this.context
-                );
+                new CapabilityManager(this.context);
+
+        taskManager =
+                new TaskManager(this.context);
+
+        learningEngine =
+                new LearningEngine(this.context);
 
         selfBuilderEngine =
-                new SelfBuilderEngine(
-                        this.context
-                );
+                new SelfBuilderEngine(this.context);
 
         codeEvolutionEngine =
-                new CodeEvolutionEngine(
-                        this.context
-                );
+                new CodeEvolutionEngine(this.context);
 
         apkBuilderEngine =
-                new ApkBuilderEngine(
-                        this.context
-                );
+                new ApkBuilderEngine(this.context);
+
+        recoverySystem =
+                new RecoverySystem(this.context);
+
+        systemMonitor =
+                new SystemMonitor(this.context);
     }
 
     public String runAllTests() {
@@ -65,81 +71,45 @@ public class SelfTestEngine {
                 "============================\n\n"
         );
 
-        TestResult memory =
-                testMemory();
+        TestResult[] tests = {
 
-        report.append(format(memory));
+                testMemory(),
 
-        if (memory.passed) {
-            passed++;
-        } else {
-            failed++;
-        }
+                testSkills(),
 
-        TestResult skills =
-                testSkills();
+                testCapabilities(),
 
-        report.append(format(skills));
+                testTasks(),
 
-        if (skills.passed) {
-            passed++;
-        } else {
-            failed++;
-        }
+                testLearning(),
 
-        TestResult capabilities =
-                testCapabilities();
+                testSelfBuilder(),
 
-        report.append(format(capabilities));
+                testCodeEvolution(),
 
-        if (capabilities.passed) {
-            passed++;
-        } else {
-            failed++;
-        }
+                testApkBuilder(),
 
-        TestResult builder =
-                testSelfBuilder();
+                testRecovery(),
 
-        report.append(format(builder));
+                testSystemMonitor(),
 
-        if (builder.passed) {
-            passed++;
-        } else {
-            failed++;
-        }
+                testEvolutionInfrastructure()
+        };
 
-        TestResult codeEvolution =
-                testCodeEvolution();
+        for (TestResult test : tests) {
 
-        report.append(format(codeEvolution));
+            report.append(
+                    format(test)
+            );
 
-        if (codeEvolution.passed) {
-            passed++;
-        } else {
-            failed++;
-        }
+            if (test.passed) {
 
-        TestResult apkBuilder =
-                testApkBuilder();
+                passed++;
 
-        report.append(format(apkBuilder));
+            } else {
 
-        if (apkBuilder.passed) {
-            passed++;
-        } else {
-            failed++;
-        }
-
-        TestResult evolution =
-                testEvolutionInfrastructure();
-
-        report.append(format(evolution));
-
-        if (evolution.passed) {
-            passed++;
-        } else {
-            failed++;
+                failed++;
+            }
         }
 
         report.append(
@@ -147,20 +117,39 @@ public class SelfTestEngine {
         );
 
         report.append(
-                "PASSED: "
-        ).append(passed);
+                "TESTS RUN: "
+        );
+
+        report.append(
+                tests.length
+        );
+
+        report.append(
+                "\nPASSED: "
+        );
+
+        report.append(
+                passed
+        );
 
         report.append(
                 "\nFAILED: "
-        ).append(failed);
+        );
+
+        report.append(
+                failed
+        );
 
         report.append("\n\n");
 
         if (failed == 0) {
+
             report.append(
                     "SYSTEM STATUS: HEALTHY ✓"
             );
+
         } else {
+
             report.append(
                     "SYSTEM STATUS: ISSUES DETECTED ⚠"
             );
@@ -170,6 +159,7 @@ public class SelfTestEngine {
     }
 
     public String testSystem() {
+
         return runAllTests();
     }
 
@@ -288,6 +278,79 @@ public class SelfTestEngine {
         }
     }
 
+    private TestResult testTasks() {
+
+        try {
+
+            int total =
+                    taskManager.getTaskCount();
+
+            int pending =
+                    taskManager.getPendingTaskCount();
+
+            int completed =
+                    taskManager.getCompletedTaskCount();
+
+            if (taskManager.isHealthy()) {
+
+                return new TestResult(
+                        "TASKS",
+                        true,
+                        "Task Manager ONLINE"
+                                + " | Total: "
+                                + total
+                                + " | Pending: "
+                                + pending
+                                + " | Completed: "
+                                + completed
+                );
+            }
+
+            return new TestResult(
+                    "TASKS",
+                    false,
+                    "Task Manager is not healthy"
+            );
+
+        } catch (Exception e) {
+
+            return new TestResult(
+                    "TASKS",
+                    false,
+                    safeError(e)
+            );
+        }
+    }
+
+    private TestResult testLearning() {
+
+        try {
+
+            if (learningEngine.isHealthy()) {
+
+                return new TestResult(
+                        "LEARNING",
+                        true,
+                        "Learning Engine ONLINE"
+                );
+            }
+
+            return new TestResult(
+                    "LEARNING",
+                    false,
+                    "Learning Engine is not healthy"
+            );
+
+        } catch (Exception e) {
+
+            return new TestResult(
+                    "LEARNING",
+                    false,
+                    safeError(e)
+            );
+        }
+    }
+
     private TestResult testSelfBuilder() {
 
         try {
@@ -302,7 +365,7 @@ public class SelfTestEngine {
                 return new TestResult(
                         "SELF BUILDER",
                         true,
-                        "Workspace / Snapshot / Rollback infrastructure ONLINE"
+                        "Workspace / Snapshot / Rollback ONLINE"
                 );
             }
 
@@ -336,7 +399,7 @@ public class SelfTestEngine {
                 return new TestResult(
                         "CODE EVOLUTION",
                         true,
-                        "Analysis / Generation / Modification infrastructure ONLINE"
+                        "Analysis / Generation / Modification ONLINE"
                 );
             }
 
@@ -390,6 +453,83 @@ public class SelfTestEngine {
         }
     }
 
+    private TestResult testRecovery() {
+
+        try {
+
+            String status =
+                    recoverySystem.getStatus();
+
+            if (status != null
+                    && !status.trim().isEmpty()
+                    && recoverySystem.isHealthy()) {
+
+                return new TestResult(
+                        "RECOVERY",
+                        true,
+                        "Recovery System ONLINE"
+                );
+            }
+
+            return new TestResult(
+                    "RECOVERY",
+                    false,
+                    "Recovery System needs attention"
+            );
+
+        } catch (Exception e) {
+
+            return new TestResult(
+                    "RECOVERY",
+                    false,
+                    safeError(e)
+            );
+        }
+    }
+
+    private TestResult testSystemMonitor() {
+
+        try {
+
+            String status =
+                    systemMonitor.getStatus();
+
+            int score =
+                    systemMonitor.getHealthScore();
+
+            if (status != null
+                    && !status.trim().isEmpty()
+                    && systemMonitor.isHealthy()) {
+
+                return new TestResult(
+                        "SYSTEM MONITOR",
+                        true,
+                        "System Monitor ONLINE"
+                                + " | Health: "
+                                + score
+                                + "/100"
+                );
+            }
+
+            return new TestResult(
+                    "SYSTEM MONITOR",
+                    false,
+                    "System Monitor needs attention"
+                            + " | Health: "
+                            + score
+                            + "/100"
+            );
+
+        } catch (Exception e) {
+
+            return new TestResult(
+                    "SYSTEM MONITOR",
+                    false,
+                    safeError(e)
+            );
+        }
+    }
+
     private TestResult testEvolutionInfrastructure() {
 
         try {
@@ -399,23 +539,29 @@ public class SelfTestEngine {
                             context
                     );
 
-            String status =
+            String target =
                     diagnosis.getNextDevelopmentTarget();
 
-            if (status != null
-                    && !status.trim().isEmpty()) {
+            int readiness =
+                    diagnosis.getReadinessScore();
+
+            if (target != null
+                    && !target.trim().isEmpty()) {
 
                 return new TestResult(
                         "EVOLUTION",
                         true,
-                        "Diagnosis / Development Target infrastructure ONLINE"
+                        "Self Diagnosis ONLINE"
+                                + " | Readiness: "
+                                + readiness
+                                + "%"
                 );
             }
 
             return new TestResult(
                     "EVOLUTION",
                     false,
-                    "Evolution infrastructure returned empty status"
+                    "Evolution infrastructure returned empty target"
             );
 
         } catch (Exception e) {
@@ -430,34 +576,30 @@ public class SelfTestEngine {
 
     public boolean isHealthy() {
 
-        TestResult memory =
-                testMemory();
+        TestResult[] tests = {
 
-        TestResult skills =
-                testSkills();
+                testMemory(),
+                testSkills(),
+                testCapabilities(),
+                testTasks(),
+                testLearning(),
+                testSelfBuilder(),
+                testCodeEvolution(),
+                testApkBuilder(),
+                testRecovery(),
+                testSystemMonitor(),
+                testEvolutionInfrastructure()
+        };
 
-        TestResult capabilities =
-                testCapabilities();
+        for (TestResult test : tests) {
 
-        TestResult builder =
-                testSelfBuilder();
+            if (!test.passed) {
 
-        TestResult codeEvolution =
-                testCodeEvolution();
+                return false;
+            }
+        }
 
-        TestResult apkBuilder =
-                testApkBuilder();
-
-        TestResult evolution =
-                testEvolutionInfrastructure();
-
-        return memory.passed
-                && skills.passed
-                && capabilities.passed
-                && builder.passed
-                && codeEvolution.passed
-                && apkBuilder.passed
-                && evolution.passed;
+        return true;
     }
 
     public String testSystem(
@@ -465,6 +607,7 @@ public class SelfTestEngine {
     ) {
 
         if (system == null) {
+
             return "اسم النظام غير موجود.";
         }
 
@@ -489,6 +632,18 @@ public class SelfTestEngine {
             return format(testCapabilities());
         }
 
+        if (name.contains("task")
+                || name.contains("مهمة")) {
+
+            return format(testTasks());
+        }
+
+        if (name.contains("learning")
+                || name.contains("تعلم")) {
+
+            return format(testLearning());
+        }
+
         if (name.contains("builder")
                 || name.contains("بناء")) {
 
@@ -508,13 +663,28 @@ public class SelfTestEngine {
             return format(testApkBuilder());
         }
 
+        if (name.contains("recovery")
+                || name.contains("استرجاع")) {
+
+            return format(testRecovery());
+        }
+
+        if (name.contains("monitor")
+                || name.contains("مراقبة")) {
+
+            return format(testSystemMonitor());
+        }
+
         if (name.contains("evolution")
                 || name.contains("تطور")) {
 
-            return format(testEvolutionInfrastructure());
+            return format(
+                    testEvolutionInfrastructure()
+            );
         }
 
-        return "ما عنديش اختبار لهذا النظام حاليا.";
+        return
+                "ما عنديش اختبار لهذا النظام حاليا.";
     }
 
     private String format(
@@ -542,6 +712,7 @@ public class SelfTestEngine {
     ) {
 
         if (e == null) {
+
             return "Unknown error";
         }
 
