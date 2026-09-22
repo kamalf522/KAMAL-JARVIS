@@ -9,14 +9,11 @@ import java.util.List;
  * JARVIS Self Diagnosis Manager
  *
  * مسؤول على:
- * - فحص الأنظمة الموجودة فعليا
- * - تحديد الأنظمة اللي فيها مشكل
- * - حساب الجاهزية
- * - اقتراح التطوير التالي
- *
- * مهم:
- * ما بقاش كيعتمد على لائحة قديمة كتقول بأن الأنظمة
- * الموجودة أصلا مازال ناقصة.
+ * - فحص الأنظمة الحقيقية
+ * - اكتشاف الأعطال
+ * - حساب جاهزية JARVIS
+ * - ربط التشخيص مع Recovery System
+ * - تحديد أولوية التطوير
  */
 public class SelfDiagnosisManager {
 
@@ -27,6 +24,8 @@ public class SelfDiagnosisManager {
     private final MemoryManager memoryManager;
     private final TaskManager taskManager;
     private final LearningEngine learningEngine;
+    private final RecoverySystem recoverySystem;
+    private final SystemMonitor systemMonitor;
 
     public SelfDiagnosisManager(Context context) {
 
@@ -47,6 +46,12 @@ public class SelfDiagnosisManager {
 
         learningEngine =
                 new LearningEngine(this.context);
+
+        recoverySystem =
+                new RecoverySystem(this.context);
+
+        systemMonitor =
+                new SystemMonitor(this.context);
     }
 
     // =========================================================
@@ -69,10 +74,7 @@ public class SelfDiagnosisManager {
                 "============================\n\n"
         );
 
-        // -----------------------------------------------------
         // CORE
-        // -----------------------------------------------------
-
         result.append("CORE SYSTEM\n");
 
         result.append(
@@ -82,10 +84,7 @@ public class SelfDiagnosisManager {
         healthy++;
         checked++;
 
-        // -----------------------------------------------------
         // MEMORY
-        // -----------------------------------------------------
-
         result.append("\nMEMORY SYSTEM\n");
 
         try {
@@ -134,10 +133,7 @@ public class SelfDiagnosisManager {
 
         checked++;
 
-        // -----------------------------------------------------
         // CAPABILITIES
-        // -----------------------------------------------------
-
         result.append("\nCAPABILITY SYSTEM\n");
 
         try {
@@ -186,10 +182,7 @@ public class SelfDiagnosisManager {
 
         checked++;
 
-        // -----------------------------------------------------
         // SKILLS
-        // -----------------------------------------------------
-
         result.append("\nSKILL SYSTEM\n");
 
         try {
@@ -238,10 +231,7 @@ public class SelfDiagnosisManager {
 
         checked++;
 
-        // -----------------------------------------------------
-        // TASK SYSTEM
-        // -----------------------------------------------------
-
+        // TASKS
         result.append("\nTASK SYSTEM\n");
 
         try {
@@ -293,10 +283,7 @@ public class SelfDiagnosisManager {
 
         checked++;
 
-        // -----------------------------------------------------
-        // LEARNING SYSTEM
-        // -----------------------------------------------------
-
+        // LEARNING
         result.append("\nLEARNING SYSTEM\n");
 
         try {
@@ -335,34 +322,96 @@ public class SelfDiagnosisManager {
 
         checked++;
 
-        // -----------------------------------------------------
-        // DIAGNOSIS ENGINE
-        // -----------------------------------------------------
+        // RECOVERY
+        result.append("\nRECOVERY SYSTEM\n");
 
-        result.append("\nSELF-DIAGNOSIS\n");
+        try {
 
-        result.append(
-                "✓ Diagnosis Engine: ONLINE\n"
-        );
+            if (recoverySystem.isHealthy()) {
 
-        healthy++;
+                result.append(
+                        "✓ Recovery System: ONLINE\n"
+                );
+
+                healthy++;
+
+            } else {
+
+                result.append(
+                        "⚠ Recovery System: ATTENTION\n"
+                );
+            }
+
+        } catch (Exception e) {
+
+            result.append(
+                    "✗ Recovery System: ERROR\n"
+            );
+
+            result.append(
+                    "  "
+            );
+
+            result.append(
+                    safeError(e)
+            );
+
+            result.append("\n");
+        }
+
         checked++;
 
-        // -----------------------------------------------------
-        // MISSING / DEVELOPMENT SYSTEMS
-        // -----------------------------------------------------
+        // SYSTEM MONITOR
+        result.append("\nSYSTEM MONITOR\n");
 
+        try {
+
+            if (systemMonitor.isHealthy()) {
+
+                result.append(
+                        "✓ System Monitor: ONLINE\n"
+                );
+
+                healthy++;
+
+            } else {
+
+                result.append(
+                        "⚠ System Monitor: ATTENTION\n"
+                );
+            }
+
+        } catch (Exception e) {
+
+            result.append(
+                    "✗ System Monitor: ERROR\n"
+            );
+
+            result.append(
+                    "  "
+            );
+
+            result.append(
+                    safeError(e)
+            );
+
+            result.append("\n");
+        }
+
+        checked++;
+
+        // DEVELOPMENT TARGETS
         List<String> missing =
                 getMissingSystems();
 
         result.append(
-                "\nSYSTEMS REQUIRING DEVELOPMENT\n"
+                "\nSYSTEMS REQUIRING ATTENTION\n"
         );
 
         if (missing.isEmpty()) {
 
             result.append(
-                    "✓ No core manager is currently missing.\n"
+                    "✓ No core system currently requires repair.\n"
             );
 
         } else {
@@ -375,10 +424,7 @@ public class SelfDiagnosisManager {
             }
         }
 
-        // -----------------------------------------------------
         // SCORE
-        // -----------------------------------------------------
-
         int percentage = 0;
 
         if (checked > 0) {
@@ -433,21 +479,13 @@ public class SelfDiagnosisManager {
     }
 
     // =========================================================
-    // FIND REAL MISSING SYSTEMS
+    // FIND REAL PROBLEMS
     // =========================================================
 
     public List<String> getMissingSystems() {
 
         List<String> missing =
                 new ArrayList<>();
-
-        /*
-         * الأنظمة الأساسية التالية راه موجودة فعليا
-         * داخل المشروع، لذلك ما خاصناش نعتبرها Missing.
-         *
-         * أي نظام جديد مستقبلا يقدر يتزاد هنا فقط
-         * إلا كان فعلا مازال ما تطورش.
-         */
 
         try {
 
@@ -480,11 +518,6 @@ public class SelfDiagnosisManager {
                     "Learning Engine — غير متاح"
             );
         }
-
-        /*
-         * إلا كانت الذاكرة ما خداماش، نسجلوها كمشكل
-         * بدل ما نقولو بأنها وحدة ناقصة.
-         */
 
         try {
 
@@ -534,6 +567,38 @@ public class SelfDiagnosisManager {
             );
         }
 
+        try {
+
+            if (!recoverySystem.isHealthy()) {
+
+                missing.add(
+                        "Recovery System — يحتاج تدخل"
+                );
+            }
+
+        } catch (Exception e) {
+
+            missing.add(
+                    "Recovery System — غير متاح"
+            );
+        }
+
+        try {
+
+            if (!systemMonitor.isHealthy()) {
+
+                missing.add(
+                        "System Monitor — يحتاج تدخل"
+                );
+            }
+
+        } catch (Exception e) {
+
+            missing.add(
+                    "System Monitor — غير متاح"
+            );
+        }
+
         return missing;
     }
 
@@ -552,14 +617,6 @@ public class SelfDiagnosisManager {
                     "أولوية الإصلاح التالية:\n"
                             + missing.get(0);
         }
-
-        /*
-         * إلا كانت الأنظمة الأساسية كلها سليمة،
-         * التطور ما خاصوش يرجع دائما لـ Self Builder.
-         *
-         * الأولوية كتولي:
-         * تحسين القدرة على التعلم والتطور الداخلي.
-         */
 
         return
                 "أولوية التطوير التالية:\n"
@@ -688,7 +745,7 @@ public class SelfDiagnosisManager {
         );
 
         plan.append(
-                "→ تحسين حلقة: Analyze → Plan → Learn → Test → Evolve\n\n"
+                "→ Analyze → Plan → Learn → Test → Evolve\n\n"
         );
 
         plan.append(
@@ -700,7 +757,7 @@ public class SelfDiagnosisManager {
         );
 
         plan.append(
-                "→ تعلم من الأخطاء السابقة\n"
+                "→ التعلم من الأخطاء السابقة\n"
         );
 
         plan.append(
@@ -708,11 +765,11 @@ public class SelfDiagnosisManager {
         );
 
         plan.append(
-                "→ تحسين المهارات والقدرات بدون APK جديد\n"
+                "→ تطوير داخلي بدون APK جديد عندما يكون ممكنا\n"
         );
 
         plan.append(
-                "→ تجهيز تغييرات الكود للـ Build عندما تكون ضرورية\n"
+                "→ تجهيز تغييرات الكود والـ APK عند الحاجة\n"
         );
 
         return plan.toString();
@@ -726,11 +783,14 @@ public class SelfDiagnosisManager {
 
         try {
 
-            return memoryManager.getMemoryCount() >= 0
+            return
+                    memoryManager.getMemoryCount() >= 0
                     && capabilityManager.getCount() >= 0
                     && skillManager.getSkillCount() >= 0
                     && taskManager.isHealthy()
-                    && learningEngine.isHealthy();
+                    && learningEngine.isHealthy()
+                    && recoverySystem.isHealthy()
+                    && systemMonitor.isHealthy();
 
         } catch (Exception e) {
 
@@ -745,7 +805,7 @@ public class SelfDiagnosisManager {
     public int getReadinessScore() {
 
         int score = 0;
-        int total = 5;
+        int total = 7;
 
         try {
 
@@ -786,6 +846,24 @@ public class SelfDiagnosisManager {
         try {
 
             if (learningEngine.isHealthy()) {
+                score++;
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        try {
+
+            if (recoverySystem.isHealthy()) {
+                score++;
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        try {
+
+            if (systemMonitor.isHealthy()) {
                 score++;
             }
 
