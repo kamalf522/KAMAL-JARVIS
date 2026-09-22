@@ -11,6 +11,8 @@ public class SystemMonitor {
     private final CapabilityManager capabilityManager;
     private final TaskManager taskManager;
     private final PermissionManager permissionManager;
+    private final ActionHistoryManager actionHistoryManager;
+    private final ApprovalEngine approvalEngine;
 
     public SystemMonitor(Context context) {
 
@@ -31,6 +33,12 @@ public class SystemMonitor {
 
         permissionManager =
                 new PermissionManager(this.context);
+
+        actionHistoryManager =
+                new ActionHistoryManager(this.context);
+
+        approvalEngine =
+                new ApprovalEngine(this.context);
     }
 
     public String getFullStatus() {
@@ -108,6 +116,16 @@ public class SystemMonitor {
                 taskManager.getCompletedTaskCount()
         );
 
+        report.append("\n");
+
+        report.append(
+                "Action Records: "
+        );
+
+        report.append(
+                actionHistoryManager.getHistoryCount()
+        );
+
         report.append("\n\n");
 
         report.append(
@@ -117,6 +135,92 @@ public class SystemMonitor {
         report.append(
                 permissionManager
                         .getPermissionStatus()
+        );
+
+        report.append("\n");
+
+        report.append(
+                "APPROVAL SYSTEM\n"
+        );
+
+        report.append(
+                approvalEngine.getStatus()
+        );
+
+        report.append("\n\n");
+
+        report.append(
+                "SUBSYSTEM STATUS\n"
+        );
+
+        report.append(
+                "Memory Manager: "
+        );
+
+        report.append(
+                isMemoryHealthy()
+                        ? "ONLINE ✓"
+                        : "ERROR ⚠"
+        );
+
+        report.append("\n");
+
+        report.append(
+                "Skill Manager: "
+        );
+
+        report.append(
+                isSkillHealthy()
+                        ? "ONLINE ✓"
+                        : "ERROR ⚠"
+        );
+
+        report.append("\n");
+
+        report.append(
+                "Capability Manager: "
+        );
+
+        report.append(
+                isCapabilityHealthy()
+                        ? "ONLINE ✓"
+                        : "ERROR ⚠"
+        );
+
+        report.append("\n");
+
+        report.append(
+                "Task Manager: "
+        );
+
+        report.append(
+                taskManager.isHealthy()
+                        ? "ONLINE ✓"
+                        : "ERROR ⚠"
+        );
+
+        report.append("\n");
+
+        report.append(
+                "Action History: "
+        );
+
+        report.append(
+                actionHistoryManager.isHealthy()
+                        ? "ONLINE ✓"
+                        : "ERROR ⚠"
+        );
+
+        report.append("\n");
+
+        report.append(
+                "Permissions: "
+        );
+
+        report.append(
+                permissionManager.isHealthy()
+                        ? "ONLINE ✓"
+                        : "ATTENTION ⚠"
         );
 
         report.append("\n\n");
@@ -145,15 +249,12 @@ public class SystemMonitor {
 
         try {
 
-            memoryManager.getMemoryCount();
-
-            skillManager.getSkillCount();
-
-            capabilityManager.getCount();
-
-            taskManager.getTaskCount();
-
-            return true;
+            return
+                    isMemoryHealthy()
+                    && isSkillHealthy()
+                    && isCapabilityHealthy()
+                    && taskManager.isHealthy()
+                    && actionHistoryManager.isHealthy();
 
         } catch (Exception e) {
 
@@ -167,7 +268,6 @@ public class SystemMonitor {
 
             return
                     "System Monitor: ONLINE ✓";
-
         }
 
         return
@@ -178,29 +278,22 @@ public class SystemMonitor {
 
         int score = 0;
 
-        try {
+        if (isMemoryHealthy()) {
+            score += 20;
+        }
 
-            memoryManager.getMemoryCount();
+        if (isSkillHealthy()) {
+            score += 20;
+        }
 
-            score += 25;
-
-        } catch (Exception ignored) {
+        if (isCapabilityHealthy()) {
+            score += 20;
         }
 
         try {
 
-            skillManager.getSkillCount();
-
-            score += 25;
-
-        } catch (Exception ignored) {
-        }
-
-        try {
-
-            if (capabilityManager.getCount() > 0) {
-
-                score += 25;
+            if (taskManager.isHealthy()) {
+                score += 15;
             }
 
         } catch (Exception ignored) {
@@ -208,9 +301,18 @@ public class SystemMonitor {
 
         try {
 
-            taskManager.getTaskCount();
+            if (actionHistoryManager.isHealthy()) {
+                score += 15;
+            }
 
-            score += 25;
+        } catch (Exception ignored) {
+        }
+
+        try {
+
+            if (permissionManager.isHealthy()) {
+                score += 10;
+            }
 
         } catch (Exception ignored) {
         }
@@ -227,5 +329,133 @@ public class SystemMonitor {
                 + getHealthScore()
                 + "/100\n\n"
                 + getStatus();
+    }
+
+    public String getSubsystemReport() {
+
+        StringBuilder report =
+                new StringBuilder();
+
+        report.append(
+                "JARVIS SUBSYSTEMS\n"
+        );
+
+        report.append(
+                "============================\n\n"
+        );
+
+        report.append(
+                "Memory: "
+        );
+
+        report.append(
+                isMemoryHealthy()
+                        ? "ONLINE ✓"
+                        : "ERROR ⚠"
+        );
+
+        report.append("\n");
+
+        report.append(
+                "Skills: "
+        );
+
+        report.append(
+                isSkillHealthy()
+                        ? "ONLINE ✓"
+                        : "ERROR ⚠"
+        );
+
+        report.append("\n");
+
+        report.append(
+                "Capabilities: "
+        );
+
+        report.append(
+                isCapabilityHealthy()
+                        ? "ONLINE ✓"
+                        : "ERROR ⚠"
+        );
+
+        report.append("\n");
+
+        report.append(
+                "Tasks: "
+        );
+
+        report.append(
+                taskManager.isHealthy()
+                        ? "ONLINE ✓"
+                        : "ERROR ⚠"
+        );
+
+        report.append("\n");
+
+        report.append(
+                "Action History: "
+        );
+
+        report.append(
+                actionHistoryManager.isHealthy()
+                        ? "ONLINE ✓"
+                        : "ERROR ⚠"
+        );
+
+        report.append("\n");
+
+        report.append(
+                "Permissions: "
+        );
+
+        report.append(
+                permissionManager.isHealthy()
+                        ? "ONLINE ✓"
+                        : "ATTENTION ⚠"
+        );
+
+        return report.toString();
+    }
+
+    private boolean isMemoryHealthy() {
+
+        try {
+
+            memoryManager.getMemoryCount();
+
+            return true;
+
+        } catch (Exception e) {
+
+            return false;
+        }
+    }
+
+    private boolean isSkillHealthy() {
+
+        try {
+
+            skillManager.getSkillCount();
+
+            return true;
+
+        } catch (Exception e) {
+
+            return false;
+        }
+    }
+
+    private boolean isCapabilityHealthy() {
+
+        try {
+
+            capabilityManager.getCount();
+
+            return true;
+
+        } catch (Exception e) {
+
+            return false;
+        }
     }
 }
