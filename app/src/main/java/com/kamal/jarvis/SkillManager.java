@@ -24,6 +24,12 @@ public class SkillManager {
 
     public SkillManager(Context context) {
 
+        if (context == null) {
+            throw new IllegalArgumentException(
+                    "SkillManager context cannot be null"
+            );
+        }
+
         preferences =
                 context.getApplicationContext()
                         .getSharedPreferences(
@@ -34,7 +40,7 @@ public class SkillManager {
         initialize();
     }
 
-    private void initialize() {
+    private synchronized void initialize() {
 
         if (!preferences.contains(KEY_SKILLS)) {
 
@@ -51,7 +57,7 @@ public class SkillManager {
     // ADD SKILL
     // =========================================================
 
-    public boolean addSkill(
+    public synchronized boolean addSkill(
             String name,
             String description
     ) {
@@ -62,25 +68,25 @@ public class SkillManager {
             return false;
         }
 
+        String cleanName =
+                name.trim();
+
+        String cleanDescription =
+                description == null
+                        ? ""
+                        : description.trim();
+
         try {
 
             JSONArray skills =
                     getSkills();
 
-            for (int i = 0;
-                    i < skills.length();
-                    i++) {
+            if (findSkillIndex(
+                    skills,
+                    cleanName
+            ) >= 0) {
 
-                JSONObject skill =
-                        skills.getJSONObject(i);
-
-                if (skill.getString("name")
-                        .equalsIgnoreCase(
-                                name.trim()
-                        )) {
-
-                    return false;
-                }
+                return false;
             }
 
             JSONObject skill =
@@ -88,14 +94,12 @@ public class SkillManager {
 
             skill.put(
                     "name",
-                    name.trim()
+                    cleanName
             );
 
             skill.put(
                     "description",
-                    description == null
-                            ? ""
-                            : description.trim()
+                    cleanDescription
             );
 
             skill.put(
@@ -125,9 +129,7 @@ public class SkillManager {
 
             skills.put(skill);
 
-            saveSkills(skills);
-
-            return true;
+            return saveSkills(skills);
 
         } catch (Exception e) {
 
@@ -139,11 +141,13 @@ public class SkillManager {
     // REMOVE SKILL
     // =========================================================
 
-    public boolean removeSkill(
+    public synchronized boolean removeSkill(
             String name
     ) {
 
-        if (name == null) {
+        if (name == null ||
+                name.trim().isEmpty()) {
+
             return false;
         }
 
@@ -152,36 +156,32 @@ public class SkillManager {
             JSONArray skills =
                     getSkills();
 
+            int index =
+                    findSkillIndex(
+                            skills,
+                            name.trim()
+                    );
+
+            if (index < 0) {
+                return false;
+            }
+
             JSONArray updated =
                     new JSONArray();
 
-            boolean removed = false;
-
             for (int i = 0;
-                    i < skills.length();
-                    i++) {
+                 i < skills.length();
+                 i++) {
 
-                JSONObject skill =
-                        skills.getJSONObject(i);
+                if (i != index) {
 
-                if (skill.getString("name")
-                        .equalsIgnoreCase(
-                                name.trim()
-                        )) {
-
-                    removed = true;
-                    continue;
+                    updated.put(
+                            skills.getJSONObject(i)
+                    );
                 }
-
-                updated.put(skill);
             }
 
-            if (removed) {
-
-                saveSkills(updated);
-            }
-
-            return removed;
+            return saveSkills(updated);
 
         } catch (Exception e) {
 
@@ -193,7 +193,7 @@ public class SkillManager {
     // ENABLE / DISABLE
     // =========================================================
 
-    public boolean setEnabled(
+    public synchronized boolean setEnabled(
             String name,
             boolean enabled
     ) {
@@ -209,45 +209,42 @@ public class SkillManager {
             JSONArray skills =
                     getSkills();
 
-            for (int i = 0;
-                    i < skills.length();
-                    i++) {
-
-                JSONObject skill =
-                        skills.getJSONObject(i);
-
-                if (skill.getString("name")
-                        .equalsIgnoreCase(
-                                name.trim()
-                        )) {
-
-                    skill.put(
-                            "enabled",
-                            enabled
+            int index =
+                    findSkillIndex(
+                            skills,
+                            name.trim()
                     );
 
-                    skill.put(
-                            "updated",
-                            now()
-                    );
-
-                    saveSkills(skills);
-
-                    return true;
-                }
+            if (index < 0) {
+                return false;
             }
 
-        } catch (Exception ignored) {
-        }
+            JSONObject skill =
+                    skills.getJSONObject(index);
 
-        return false;
+            skill.put(
+                    "enabled",
+                    enabled
+            );
+
+            skill.put(
+                    "updated",
+                    now()
+            );
+
+            return saveSkills(skills);
+
+        } catch (Exception e) {
+
+            return false;
+        }
     }
 
     // =========================================================
     // RECORD SUCCESS
     // =========================================================
 
-    public void recordSuccess(
+    public synchronized void recordSuccess(
             String name
     ) {
 
@@ -261,7 +258,7 @@ public class SkillManager {
     // RECORD FAILURE
     // =========================================================
 
-    public void recordFailure(
+    public synchronized void recordFailure(
             String name
     ) {
 
@@ -271,13 +268,15 @@ public class SkillManager {
         );
     }
 
-    private void updateResult(
+    private boolean updateResult(
             String name,
             boolean success
     ) {
 
-        if (name == null) {
-            return;
+        if (name == null ||
+                name.trim().isEmpty()) {
+
+            return false;
         }
 
         try {
@@ -285,57 +284,56 @@ public class SkillManager {
             JSONArray skills =
                     getSkills();
 
-            for (int i = 0;
-                    i < skills.length();
-                    i++) {
-
-                JSONObject skill =
-                        skills.getJSONObject(i);
-
-                if (skill.getString("name")
-                        .equalsIgnoreCase(
-                                name.trim()
-                        )) {
-
-                    if (success) {
-
-                        int value =
-                                skill.optInt(
-                                        "success",
-                                        0
-                                );
-
-                        skill.put(
-                                "success",
-                                value + 1
-                        );
-
-                    } else {
-
-                        int value =
-                                skill.optInt(
-                                        "failure",
-                                        0
-                                );
-
-                        skill.put(
-                                "failure",
-                                value + 1
-                        );
-                    }
-
-                    skill.put(
-                            "updated",
-                            now()
+            int index =
+                    findSkillIndex(
+                            skills,
+                            name.trim()
                     );
 
-                    saveSkills(skills);
-
-                    return;
-                }
+            if (index < 0) {
+                return false;
             }
 
-        } catch (Exception ignored) {
+            JSONObject skill =
+                    skills.getJSONObject(index);
+
+            if (success) {
+
+                int value =
+                        skill.optInt(
+                                "success",
+                                0
+                        );
+
+                skill.put(
+                        "success",
+                        value + 1
+                );
+
+            } else {
+
+                int value =
+                        skill.optInt(
+                                "failure",
+                                0
+                        );
+
+                skill.put(
+                        "failure",
+                        value + 1
+                );
+            }
+
+            skill.put(
+                    "updated",
+                    now()
+            );
+
+            return saveSkills(skills);
+
+        } catch (Exception e) {
+
+            return false;
         }
     }
 
@@ -343,11 +341,13 @@ public class SkillManager {
     // FIND SKILL
     // =========================================================
 
-    public JSONObject getSkill(
+    public synchronized JSONObject getSkill(
             String name
     ) {
 
-        if (name == null) {
+        if (name == null ||
+                name.trim().isEmpty()) {
+
             return null;
         }
 
@@ -356,40 +356,36 @@ public class SkillManager {
             JSONArray skills =
                     getSkills();
 
-            for (int i = 0;
-                    i < skills.length();
-                    i++) {
+            int index =
+                    findSkillIndex(
+                            skills,
+                            name.trim()
+                    );
 
-                JSONObject skill =
-                        skills.getJSONObject(i);
-
-                if (skill.getString("name")
-                        .equalsIgnoreCase(
-                                name.trim()
-                        )) {
-
-                    return skill;
-                }
+            if (index < 0) {
+                return null;
             }
 
-        } catch (Exception ignored) {
-        }
+            return skills.getJSONObject(index);
 
-        return null;
+        } catch (Exception e) {
+
+            return null;
+        }
     }
 
     // =========================================================
     // CHECK SKILL
     // =========================================================
 
-    public boolean hasSkill(
+    public synchronized boolean hasSkill(
             String name
     ) {
 
         return getSkill(name) != null;
     }
 
-    public boolean isEnabled(
+    public synchronized boolean isEnabled(
             String name
     ) {
 
@@ -404,10 +400,11 @@ public class SkillManager {
     }
 
     // =========================================================
-    // LIST SKILLS
+    // SKILL NAMES
     // =========================================================
 
-    public List<String> getSkillNames() {
+    public synchronized List<String>
+    getSkillNames() {
 
         List<String> result =
                 new ArrayList<>();
@@ -418,15 +415,67 @@ public class SkillManager {
                     getSkills();
 
             for (int i = 0;
-                    i < skills.length();
-                    i++) {
+                 i < skills.length();
+                 i++) {
 
                 JSONObject skill =
                         skills.getJSONObject(i);
 
-                result.add(
-                        skill.getString("name")
-                );
+                String name =
+                        skill.optString(
+                                "name",
+                                ""
+                        ).trim();
+
+                if (!name.isEmpty()) {
+
+                    result.add(name);
+                }
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        return result;
+    }
+
+    // =========================================================
+    // ENABLED SKILLS
+    // =========================================================
+
+    public synchronized List<String>
+    getEnabledSkillNames() {
+
+        List<String> result =
+                new ArrayList<>();
+
+        try {
+
+            JSONArray skills =
+                    getSkills();
+
+            for (int i = 0;
+                 i < skills.length();
+                 i++) {
+
+                JSONObject skill =
+                        skills.getJSONObject(i);
+
+                if (skill.optBoolean(
+                        "enabled",
+                        false
+                )) {
+
+                    String name =
+                            skill.optString(
+                                    "name",
+                                    ""
+                            ).trim();
+
+                    if (!name.isEmpty()) {
+                        result.add(name);
+                    }
+                }
             }
 
         } catch (Exception ignored) {
@@ -439,16 +488,96 @@ public class SkillManager {
     // SKILL COUNT
     // =========================================================
 
-    public int getSkillCount() {
+    public synchronized int getSkillCount() {
 
         return getSkillNames().size();
+    }
+
+    public synchronized int getEnabledSkillCount() {
+
+        return getEnabledSkillNames().size();
+    }
+
+    // =========================================================
+    // SUCCESS / FAILURE
+    // =========================================================
+
+    public synchronized int getSuccessCount(
+            String name
+    ) {
+
+        JSONObject skill =
+                getSkill(name);
+
+        if (skill == null) {
+            return 0;
+        }
+
+        return skill.optInt(
+                "success",
+                0
+        );
+    }
+
+    public synchronized int getFailureCount(
+            String name
+    ) {
+
+        JSONObject skill =
+                getSkill(name);
+
+        if (skill == null) {
+            return 0;
+        }
+
+        return skill.optInt(
+                "failure",
+                0
+        );
+    }
+
+    public synchronized double
+    getSuccessRate(
+            String name
+    ) {
+
+        JSONObject skill =
+                getSkill(name);
+
+        if (skill == null) {
+            return 0.0;
+        }
+
+        int success =
+                skill.optInt(
+                        "success",
+                        0
+                );
+
+        int failure =
+                skill.optInt(
+                        "failure",
+                        0
+                );
+
+        int total =
+                success + failure;
+
+        if (total <= 0) {
+            return 0.0;
+        }
+
+        return
+                ((double) success / total)
+                        * 100.0;
     }
 
     // =========================================================
     // SKILL REPORT
     // =========================================================
 
-    public String getSkillReport() {
+    public synchronized String
+    getSkillReport() {
 
         StringBuilder report =
                 new StringBuilder();
@@ -471,9 +600,25 @@ public class SkillManager {
                 return report.toString();
             }
 
+            report.append(
+                    "إجمالي المهارات: "
+            )
+                    .append(
+                            skills.length()
+                    )
+                    .append("\n");
+
+            report.append(
+                    "المفعلة: "
+            )
+                    .append(
+                            getEnabledSkillCount()
+                    )
+                    .append("\n\n");
+
             for (int i = 0;
-                    i < skills.length();
-                    i++) {
+                 i < skills.length();
+                 i++) {
 
                 JSONObject skill =
                         skills.getJSONObject(i);
@@ -514,47 +659,51 @@ public class SkillManager {
 
                 report.append(
                         "المهارة: "
-                );
-
-                report.append(name);
-
-                report.append("\n");
+                )
+                        .append(name)
+                        .append("\n");
 
                 report.append(
                         "الحالة: "
-                );
-
-                report.append(
-                        enabled
-                                ? "مفعلة"
-                                : "متوقفة"
-                );
-
-                report.append("\n");
+                )
+                        .append(
+                                enabled
+                                        ? "مفعلة"
+                                        : "متوقفة"
+                        )
+                        .append("\n");
 
                 report.append(
                         "الوصف: "
-                );
-
-                report.append(description);
-
-                report.append("\n");
+                )
+                        .append(description)
+                        .append("\n");
 
                 report.append(
                         "نجاح: "
-                );
-
-                report.append(success);
-
-                report.append("\n");
+                )
+                        .append(success)
+                        .append("\n");
 
                 report.append(
                         "فشل: "
-                );
+                )
+                        .append(failure)
+                        .append("\n");
 
-                report.append(failure);
-
-                report.append("\n");
+                report.append(
+                        "نسبة النجاح: "
+                )
+                        .append(
+                                String.format(
+                                        Locale.US,
+                                        "%.1f%%",
+                                        getSuccessRate(
+                                                name
+                                        )
+                                )
+                        )
+                        .append("\n");
             }
 
         } catch (Exception e) {
@@ -580,7 +729,7 @@ public class SkillManager {
     // EXPORT
     // =========================================================
 
-    public String exportSkills() {
+    public synchronized String exportSkills() {
 
         return getSkills().toString();
     }
@@ -589,7 +738,7 @@ public class SkillManager {
     // IMPORT
     // =========================================================
 
-    public boolean importSkills(
+    public synchronized boolean importSkills(
             String json
     ) {
 
@@ -604,9 +753,93 @@ public class SkillManager {
             JSONArray data =
                     new JSONArray(json);
 
-            saveSkills(data);
+            JSONArray cleanData =
+                    new JSONArray();
 
-            return true;
+            for (int i = 0;
+                 i < data.length();
+                 i++) {
+
+                JSONObject original =
+                        data.optJSONObject(i);
+
+                if (original == null) {
+                    continue;
+                }
+
+                String name =
+                        original.optString(
+                                "name",
+                                ""
+                        ).trim();
+
+                if (name.isEmpty()) {
+                    continue;
+                }
+
+                JSONObject skill =
+                        new JSONObject();
+
+                skill.put(
+                        "name",
+                        name
+                );
+
+                skill.put(
+                        "description",
+                        original.optString(
+                                "description",
+                                ""
+                        )
+                );
+
+                skill.put(
+                        "enabled",
+                        original.optBoolean(
+                                "enabled",
+                                true
+                        )
+                );
+
+                skill.put(
+                        "success",
+                        Math.max(
+                                0,
+                                original.optInt(
+                                        "success",
+                                        0
+                                )
+                        )
+                );
+
+                skill.put(
+                        "failure",
+                        Math.max(
+                                0,
+                                original.optInt(
+                                        "failure",
+                                        0
+                                )
+                        )
+                );
+
+                skill.put(
+                        "created",
+                        original.optString(
+                                "created",
+                                now()
+                        )
+                );
+
+                skill.put(
+                        "updated",
+                        now()
+                );
+
+                cleanData.put(skill);
+            }
+
+            return saveSkills(cleanData);
 
         } catch (Exception e) {
 
@@ -618,7 +851,7 @@ public class SkillManager {
     // CLEAR
     // =========================================================
 
-    public void clearSkills() {
+    public synchronized void clearSkills() {
 
         preferences.edit()
                 .putString(
@@ -626,6 +859,42 @@ public class SkillManager {
                         "[]"
                 )
                 .apply();
+    }
+
+    // =========================================================
+    // STATUS
+    // =========================================================
+
+    public synchronized boolean isHealthy() {
+
+        try {
+
+            JSONArray skills =
+                    getSkills();
+
+            return skills != null;
+
+        } catch (Exception e) {
+
+            return false;
+        }
+    }
+
+    public synchronized String getStatus() {
+
+        if (!isHealthy()) {
+
+            return
+                    "Skill Manager: ERROR ⚠";
+        }
+
+        return
+                "Skill Manager: ONLINE ✓\n"
+                + "Skills: "
+                + getSkillCount()
+                + "\n"
+                + "Enabled: "
+                + getEnabledSkillCount();
     }
 
     // =========================================================
@@ -642,6 +911,12 @@ public class SkillManager {
                             "[]"
                     );
 
+            if (data == null ||
+                    data.trim().isEmpty()) {
+
+                return new JSONArray();
+            }
+
             return new JSONArray(data);
 
         } catch (Exception e) {
@@ -650,16 +925,71 @@ public class SkillManager {
         }
     }
 
-    private void saveSkills(
+    private boolean saveSkills(
             JSONArray skills
     ) {
 
-        preferences.edit()
+        if (skills == null) {
+            return false;
+        }
+
+        return preferences.edit()
                 .putString(
                         KEY_SKILLS,
                         skills.toString()
                 )
-                .apply();
+                .commit();
+    }
+
+    // =========================================================
+    // FIND INDEX
+    // =========================================================
+
+    private int findSkillIndex(
+            JSONArray skills,
+            String name
+    ) {
+
+        if (skills == null ||
+                name == null) {
+
+            return -1;
+        }
+
+        String wanted =
+                name.trim();
+
+        if (wanted.isEmpty()) {
+            return -1;
+        }
+
+        for (int i = 0;
+             i < skills.length();
+             i++) {
+
+            try {
+
+                JSONObject skill =
+                        skills.getJSONObject(i);
+
+                String current =
+                        skill.optString(
+                                "name",
+                                ""
+                        ).trim();
+
+                if (current.equalsIgnoreCase(
+                        wanted
+                )) {
+
+                    return i;
+                }
+
+            } catch (Exception ignored) {
+            }
+        }
+
+        return -1;
     }
 
     // =========================================================
