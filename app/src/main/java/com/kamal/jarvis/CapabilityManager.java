@@ -67,7 +67,7 @@ public class CapabilityManager {
                         )
                         .putString(
                                 KEY_VERSION,
-                                "2.0"
+                                "3.0"
                         )
                         .commit();
 
@@ -78,7 +78,7 @@ public class CapabilityManager {
                 preferences.edit()
                         .putString(
                                 KEY_VERSION,
-                                "2.0"
+                                "3.0"
                         )
                         .commit();
             }
@@ -192,6 +192,16 @@ public class CapabilityManager {
                 "learning",
                 "تعلم معلومات وأوامر جديدة"
         );
+
+        addCapability(
+                "knowledge",
+                "إدارة المعرفة والمعلومات"
+        );
+
+        addCapability(
+                "self_builder",
+                "إدارة مساحة التطوير والبناء الذاتي"
+        );
     }
 
     // =========================================================
@@ -214,7 +224,6 @@ public class CapabilityManager {
                 normalizeName(name);
 
         if (cleanName.isEmpty()) {
-
             return false;
         }
 
@@ -230,14 +239,13 @@ public class CapabilityManager {
                     );
 
             if (existingIndex >= 0) {
-
                 return false;
             }
 
             JSONObject capability =
                     new JSONObject();
 
-            String now =
+            String timestamp =
                     now();
 
             capability.put(
@@ -274,12 +282,12 @@ public class CapabilityManager {
 
             capability.put(
                     "created_at",
-                    now
+                    timestamp
             );
 
             capability.put(
                     "updated_at",
-                    now
+                    timestamp
             );
 
             capability.put(
@@ -328,11 +336,10 @@ public class CapabilityManager {
             JSONArray updated =
                     new JSONArray();
 
-            boolean removed =
-                    false;
-
             String cleanName =
                     normalizeName(name);
+
+            boolean removed = false;
 
             for (int i = 0;
                     i < capabilities.length();
@@ -364,14 +371,13 @@ public class CapabilityManager {
                 );
             }
 
-            if (removed) {
-
-                return saveCapabilities(
-                        updated
-                );
+            if (!removed) {
+                return false;
             }
 
-            return false;
+            return saveCapabilities(
+                    updated
+            );
 
         } catch (Exception e) {
 
@@ -435,7 +441,6 @@ public class CapabilityManager {
                         );
 
                 if (currentName.equals(name)) {
-
                     return i;
                 }
             }
@@ -521,9 +526,7 @@ public class CapabilityManager {
             }
 
             JSONObject capability =
-                    capabilities.optJSONObject(
-                            index
-                    );
+                    capabilities.optJSONObject(index);
 
             if (capability == null) {
                 return false;
@@ -635,9 +638,7 @@ public class CapabilityManager {
             }
 
             JSONObject capability =
-                    capabilities.optJSONObject(
-                            index
-                    );
+                    capabilities.optJSONObject(index);
 
             if (capability == null) {
                 return;
@@ -698,15 +699,13 @@ public class CapabilityManager {
             }
 
             JSONObject capability =
-                    capabilities.optJSONObject(
-                            index
-                    );
+                    capabilities.optJSONObject(index);
 
             if (capability == null) {
                 return;
             }
 
-            String currentTime =
+            String timestamp =
                     now();
 
             int usage =
@@ -741,7 +740,7 @@ public class CapabilityManager {
 
                 capability.put(
                         "last_success",
-                        currentTime
+                        timestamp
                 );
 
             } else {
@@ -753,13 +752,13 @@ public class CapabilityManager {
 
                 capability.put(
                         "last_failure",
-                        currentTime
+                        timestamp
                 );
             }
 
             capability.put(
                     "updated_at",
-                    currentTime
+                    timestamp
             );
 
             saveCapabilities(
@@ -878,7 +877,7 @@ public class CapabilityManager {
     }
 
     // =========================================================
-    // GET ALL CAPABILITIES
+    // CAPABILITY NAMES
     // =========================================================
 
     public synchronized String getCapabilityNames() {
@@ -905,32 +904,25 @@ public class CapabilityManager {
                 continue;
             }
 
-            result.append(
-                    i + 1
-            );
-
-            result.append(". ");
-
-            result.append(
-                    capability.optString(
-                            "name",
-                            "Unknown"
+            result.append(i + 1)
+                    .append(". ")
+                    .append(
+                            capability.optString(
+                                    "name",
+                                    "Unknown"
+                            )
                     )
-            );
-
-            result.append(" — ");
-
-            result.append(
-                    capability.optString(
-                            "status",
-                            "unknown"
+                    .append(" — ")
+                    .append(
+                            capability.optString(
+                                    "status",
+                                    "unknown"
+                            )
                     )
-            );
-
-            result.append("\n");
+                    .append("\n");
         }
 
-        return result.toString();
+        return result.toString().trim();
     }
 
     // =========================================================
@@ -970,136 +962,99 @@ public class CapabilityManager {
 
         report.append("\n\n");
 
-        try {
+        JSONArray capabilities =
+                getCapabilities();
 
-            JSONArray capabilities =
-                    getCapabilities();
-
-            if (capabilities.length() == 0) {
-
-                report.append(
-                        "لا توجد قدرات مسجلة."
-                );
-
-                return report.toString();
-            }
-
-            for (int i = 0;
-                    i < capabilities.length();
-                    i++) {
-
-                JSONObject capability =
-                        capabilities.optJSONObject(i);
-
-                if (capability == null) {
-                    continue;
-                }
-
-                report.append(
-                        "━━━━━━━━━━━━━━\n"
-                );
-
-                report.append(
-                        "القدرة: "
-                );
-
-                report.append(
-                        capability.optString(
-                                "name",
-                                "Unknown"
-                        )
-                );
-
-                report.append("\n");
-
-                report.append(
-                        "الوصف: "
-                );
-
-                report.append(
-                        capability.optString(
-                                "description",
-                                ""
-                        )
-                );
-
-                report.append("\n");
-
-                report.append(
-                        "الحالة: "
-                );
-
-                report.append(
-                        capability.optString(
-                                "status",
-                                "unknown"
-                        )
-                );
-
-                report.append("\n");
-
-                report.append(
-                        "الاستخدام: "
-                );
-
-                report.append(
-                        capability.optInt(
-                                "usage",
-                                0
-                        )
-                );
-
-                report.append("\n");
-
-                report.append(
-                        "النجاح: "
-                );
-
-                report.append(
-                        capability.optInt(
-                                "success",
-                                0
-                        )
-                );
-
-                report.append("\n");
-
-                report.append(
-                        "الفشل: "
-                );
-
-                report.append(
-                        capability.optInt(
-                                "failure",
-                                0
-                        )
-                );
-
-                report.append("\n");
-
-                report.append(
-                        "معدل النجاح: "
-                );
-
-                report.append(
-                        formatRate(
-                                getSuccessRate(
-                                        capability.optString(
-                                                "name",
-                                                ""
-                                        )
-                                )
-                        )
-                );
-
-                report.append("\n");
-            }
-
-        } catch (Exception e) {
+        if (capabilities.length() == 0) {
 
             report.append(
-                    "\nتعذر قراءة سجل القدرات."
+                    "لا توجد قدرات مسجلة."
             );
+
+            return report.toString();
+        }
+
+        for (int i = 0;
+                i < capabilities.length();
+                i++) {
+
+            JSONObject capability =
+                    capabilities.optJSONObject(i);
+
+            if (capability == null) {
+                continue;
+            }
+
+            String name =
+                    capability.optString(
+                            "name",
+                            "Unknown"
+                    );
+
+            report.append(
+                    "━━━━━━━━━━━━━━\n"
+            );
+
+            report.append(
+                    "القدرة: "
+            );
+
+            report.append(name);
+
+            report.append("\nالوصف: ");
+
+            report.append(
+                    capability.optString(
+                            "description",
+                            ""
+                    )
+            );
+
+            report.append("\nالحالة: ");
+
+            report.append(
+                    capability.optString(
+                            "status",
+                            "unknown"
+                    )
+            );
+
+            report.append("\nالاستخدام: ");
+
+            report.append(
+                    capability.optInt(
+                            "usage",
+                            0
+                    )
+            );
+
+            report.append("\nالنجاح: ");
+
+            report.append(
+                    capability.optInt(
+                            "success",
+                            0
+                    )
+            );
+
+            report.append("\nالفشل: ");
+
+            report.append(
+                    capability.optInt(
+                            "failure",
+                            0
+                    )
+            );
+
+            report.append("\nمعدل النجاح: ");
+
+            report.append(
+                    formatRate(
+                            getSuccessRate(name)
+                    )
+            );
+
+            report.append("\n");
         }
 
         return report.toString();
@@ -1157,6 +1112,14 @@ public class CapabilityManager {
                         );
 
                 if (name.isEmpty()) {
+                    continue;
+                }
+
+                if (findCapabilityIndex(
+                        validated,
+                        name
+                ) >= 0) {
+
                     continue;
                 }
 
@@ -1246,15 +1209,9 @@ public class CapabilityManager {
                         )
                 );
 
-                if (findCapabilityIndex(
-                        validated,
-                        name
-                ) < 0) {
-
-                    validated.put(
-                            capability
-                    );
-                }
+                validated.put(
+                        capability
+                );
             }
 
             return saveCapabilities(
@@ -1279,7 +1236,7 @@ public class CapabilityManager {
 
         return preferences.getString(
                 KEY_VERSION,
-                "2.0"
+                "3.0"
         );
     }
 
@@ -1335,10 +1292,10 @@ public class CapabilityManager {
 
         return
                 "Capability Manager: ONLINE ✓\n"
-                + "Version: "
-                + getVersion()
-                + "\nCapabilities: "
-                + getCapabilityCount();
+                        + "Version: "
+                        + getVersion()
+                        + "\nCapabilities: "
+                        + getCapabilityCount();
     }
 
     // =========================================================
@@ -1418,21 +1375,48 @@ public class CapabilityManager {
         return value
                 .trim()
                 .toLowerCase(Locale.ROOT)
-                .replace(
-                        "أ",
-                        "ا"
-                )
-                .replace(
-                        "إ",
-                        "ا"
-                )
-                .replace(
-                        "آ",
-                        "ا"
-                )
-                .replace(
-                        "ة",
-                        "ه"
-                )
-                .replace(
-                        "ى
+                .replace("أ", "ا")
+                .replace("إ", "ا")
+                .replace("آ", "ا")
+                .replace("ة", "ه")
+                .replace("ى", "ي")
+                .replace("ؤ", "و")
+                .replace("ئ", "ي");
+    }
+
+    // =========================================================
+    // CURRENT TIME
+    // =========================================================
+
+    private String now() {
+
+        try {
+
+            return new SimpleDateFormat(
+                    "yyyy-MM-dd HH:mm:ss",
+                    Locale.US
+            ).format(
+                    new Date()
+            );
+
+        } catch (Exception e) {
+
+            return "";
+        }
+    }
+
+    // =========================================================
+    // FORMAT RATE
+    // =========================================================
+
+    private String formatRate(
+            double rate
+    ) {
+
+        return String.format(
+                Locale.US,
+                "%.1f%%",
+                rate
+        );
+    }
+}
