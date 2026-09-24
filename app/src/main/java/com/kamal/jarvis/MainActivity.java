@@ -64,7 +64,12 @@ public class MainActivity extends Activity
         window.setStatusBarColor(BG);
         window.setNavigationBarColor(BG);
 
-        commandRouter = new CommandRouter(this);
+        try {
+            commandRouter = new CommandRouter(this);
+        } catch (Exception e) {
+            commandRouter = null;
+        }
+
         textToSpeech = new TextToSpeech(this, this);
 
         createInterface();
@@ -90,17 +95,13 @@ public class MainActivity extends Activity
             int strokeColor,
             int strokeWidth
     ) {
-
         GradientDrawable drawable =
                 new GradientDrawable();
 
         drawable.setColor(color);
-        drawable.setCornerRadius(
-                dp(radius)
-        );
+        drawable.setCornerRadius(dp(radius));
 
         if (strokeWidth > 0) {
-
             drawable.setStroke(
                     dp(strokeWidth),
                     strokeColor
@@ -116,7 +117,6 @@ public class MainActivity extends Activity
             int color,
             Typeface typeface
     ) {
-
         TextView view =
                 new TextView(this);
 
@@ -132,9 +132,7 @@ public class MainActivity extends Activity
             LinearLayout parent,
             int height
     ) {
-
-        View space =
-                new View(this);
+        View space = new View(this);
 
         parent.addView(
                 space,
@@ -250,8 +248,7 @@ public class MainActivity extends Activity
                 )
         );
 
-        statusDot =
-                new View(this);
+        statusDot = new View(this);
 
         statusDot.setBackground(
                 roundedBackground(
@@ -295,7 +292,6 @@ public class MainActivity extends Activity
         );
 
         header.addView(statusBox);
-
         root.addView(header);
 
         addSpace(root, 16);
@@ -452,8 +448,797 @@ public class MainActivity extends Activity
                 chatText,
                 new ScrollView.LayoutParams(
                         ScrollView.LayoutParams.MATCH_PARENT,
-                        ScrollView.LayoutParams.WRAP_CONTENT
+                        dp(150)
                 )
         );
 
         sessionCard.addView(
+                chatScroll,
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        dp(150)
+                )
+        );
+
+        root.addView(sessionCard);
+
+        addSpace(root, 12);
+
+        // =====================================================
+        // INPUT
+        // =====================================================
+
+        LinearLayout inputRow =
+                new LinearLayout(this);
+
+        inputRow.setOrientation(
+                LinearLayout.HORIZONTAL
+        );
+
+        inputText =
+                new EditText(this);
+
+        inputText.setSingleLine(false);
+        inputText.setTextColor(WHITE);
+        inputText.setHintTextColor(MUTED);
+        inputText.setHint("كتب الأمر ديالك هنا...");
+        inputText.setTextSize(14);
+        inputText.setPadding(
+                dp(14),
+                dp(10),
+                dp(14),
+                dp(10)
+        );
+
+        inputText.setBackground(
+                roundedBackground(
+                        PANEL_2,
+                        18,
+                        Color.rgb(30, 74, 98),
+                        1
+                )
+        );
+
+        LinearLayout.LayoutParams inputParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        dp(52),
+                        1
+                );
+
+        inputRow.addView(
+                inputText,
+                inputParams
+        );
+
+        Button sendButton =
+                createButton(
+                        "SEND",
+                        CYAN
+                );
+
+        LinearLayout.LayoutParams sendParams =
+                new LinearLayout.LayoutParams(
+                        dp(82),
+                        dp(52)
+                );
+
+        sendParams.leftMargin = dp(8);
+
+        inputRow.addView(
+                sendButton,
+                sendParams
+        );
+
+        sendButton.setOnClickListener(
+                v -> executeTypedCommand()
+        );
+
+        root.addView(inputRow);
+
+        addSpace(root, 8);
+
+        // =====================================================
+        // VOICE BUTTON
+        // =====================================================
+
+        Button voiceButton =
+                createButton(
+                        "🎙  TALK TO JARVIS",
+                        GREEN
+                );
+
+        LinearLayout.LayoutParams voiceParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        dp(50)
+                );
+
+        root.addView(
+                voiceButton,
+                voiceParams
+        );
+
+        voiceButton.setOnClickListener(
+                v -> startVoiceRecognition()
+        );
+
+        addSpace(root, 8);
+
+        // =====================================================
+        // QUICK COMMANDS
+        // =====================================================
+
+        LinearLayout quickRow =
+                new LinearLayout(this);
+
+        quickRow.setOrientation(
+                LinearLayout.HORIZONTAL
+        );
+
+        Button statusButton =
+                createButton(
+                        "STATUS",
+                        CYAN
+                );
+
+        Button helpButton =
+                createButton(
+                        "HELP",
+                        YELLOW
+                );
+
+        quickRow.addView(
+                statusButton,
+                new LinearLayout.LayoutParams(
+                        0,
+                        dp(44),
+                        1
+                )
+        );
+
+        LinearLayout.LayoutParams helpParams =
+                new LinearLayout.LayoutParams(
+                        0,
+                        dp(44),
+                        1
+                );
+
+        helpParams.leftMargin = dp(8);
+
+        quickRow.addView(
+                helpButton,
+                helpParams
+        );
+
+        root.addView(quickRow);
+
+        statusButton.setOnClickListener(
+                v -> executeCommand("حالة جارفيس")
+        );
+
+        helpButton.setOnClickListener(
+                v -> executeCommand("شنو تقدر تدير")
+        );
+
+        setContentView(root);
+    }
+
+    private Button createButton(
+            String text,
+            int color
+    ) {
+        Button button =
+                new Button(this);
+
+        button.setText(text);
+        button.setTextColor(BG);
+        button.setTextSize(11);
+        button.setTypeface(
+                Typeface.create(
+                        "sans-serif",
+                        Typeface.BOLD
+                )
+        );
+
+        button.setGravity(
+                Gravity.CENTER
+        );
+
+        button.setAllCaps(false);
+
+        button.setBackground(
+                roundedBackground(
+                        color,
+                        16,
+                        color,
+                        0
+                )
+        );
+
+        return button;
+    }
+
+    // =========================================================
+    // COMMAND EXECUTION
+    // =========================================================
+
+    private void executeTypedCommand() {
+
+        if (inputText == null) {
+            return;
+        }
+
+        String command =
+                inputText.getText()
+                        .toString()
+                        .trim();
+
+        if (command.isEmpty()) {
+            return;
+        }
+
+        inputText.setText("");
+
+        hideKeyboard();
+
+        executeCommand(command);
+    }
+
+    private void executeCommand(
+            String command
+    ) {
+
+        if (commandRunning) {
+            return;
+        }
+
+        commandRunning = true;
+
+        setBusyState(true);
+
+        appendChat(
+                "YOU: " + command
+        );
+
+        new Thread(() -> {
+
+            String response;
+
+            try {
+
+                if (commandRouter == null) {
+
+                    response =
+                            "JARVIS Core مازال ما تهيأش.";
+
+                } else {
+
+                    response =
+                            commandRouter.execute(
+                                    command
+                            );
+                }
+
+            } catch (Exception e) {
+
+                response =
+                        "وقع خطأ أثناء تنفيذ الأمر.";
+
+            }
+
+            final String finalResponse =
+                    response == null
+                            ? ""
+                            : response.trim();
+
+            runOnUiThread(() -> {
+
+                appendChat(
+                        "JARVIS: "
+                                + (
+                                finalResponse.isEmpty()
+                                        ? "ما عنديش جواب."
+                                        : finalResponse
+                        )
+                );
+
+                speak(finalResponse);
+
+                setBusyState(false);
+
+                commandRunning = false;
+            });
+
+        }).start();
+    }
+
+    private void setBusyState(
+            boolean busy
+    ) {
+
+        if (coreStateText == null ||
+                statusText == null ||
+                statusDot == null) {
+            return;
+        }
+
+        if (busy) {
+
+            coreStateText.setText(
+                    "PROCESSING..."
+            );
+
+            coreStateText.setTextColor(
+                    YELLOW
+            );
+
+            statusText.setText(
+                    "BUSY"
+            );
+
+            statusText.setTextColor(
+                    YELLOW
+            );
+
+            statusDot.setBackground(
+                    roundedBackground(
+                            YELLOW,
+                            50,
+                            YELLOW,
+                            0
+                    )
+            );
+
+        } else {
+
+            coreStateText.setText(
+                    "SYSTEM READY"
+            );
+
+            coreStateText.setTextColor(
+                    WHITE
+            );
+
+            statusText.setText(
+                    "ONLINE"
+            );
+
+            statusText.setTextColor(
+                    GREEN
+            );
+
+            statusDot.setBackground(
+                    roundedBackground(
+                            GREEN,
+                            50,
+                            GREEN,
+                            0
+                    )
+            );
+        }
+    }
+
+    // =========================================================
+    // CHAT
+    // =========================================================
+
+    private void appendChat(
+            String message
+    ) {
+
+        if (chatText == null) {
+            return;
+        }
+
+        String old =
+                chatText.getText()
+                        .toString();
+
+        String updated;
+
+        if (old.trim().isEmpty()) {
+
+            updated = message;
+
+        } else {
+
+            updated =
+                    old
+                            + "\n\n"
+                            + message;
+        }
+
+        chatText.setText(updated);
+
+        if (chatScroll != null) {
+
+            chatScroll.post(
+                    () -> chatScroll.fullScroll(
+                            View.FOCUS_DOWN
+                    )
+            );
+        }
+
+        try {
+
+            AlphaAnimation animation =
+                    new AlphaAnimation(
+                            0.0f,
+                            1.0f
+                    );
+
+            animation.setDuration(220);
+
+            chatText.startAnimation(
+                    animation
+            );
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    // =========================================================
+    // VOICE
+    // =========================================================
+
+    private void startVoiceRecognition() {
+
+        if (Build.VERSION.SDK_INT >= 23 &&
+                checkSelfPermission(
+                        Manifest.permission.RECORD_AUDIO
+                ) != PackageManager.PERMISSION_GRANTED) {
+
+            requestPermissions(
+                    new String[]{
+                            Manifest.permission.RECORD_AUDIO
+                    },
+                    REQUEST_AUDIO
+            );
+
+            return;
+        }
+
+        try {
+
+            Intent intent =
+                    new Intent(
+                            RecognizerIntent.ACTION_RECOGNIZE_SPEECH
+                    );
+
+            intent.putExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+            );
+
+            intent.putExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE,
+                    "ar-MA"
+            );
+
+            intent.putExtra(
+                    RecognizerIntent.EXTRA_PROMPT,
+                    "قول الأمر ديالك..."
+            );
+
+            startActivityForResult(
+                    intent,
+                    REQUEST_VOICE
+            );
+
+        } catch (Exception e) {
+
+            appendChat(
+                    "JARVIS: ما قدرتش نشغل التعرف على الصوت."
+            );
+        }
+    }
+
+    @Override
+    protected void onActivityResult(
+            int requestCode,
+            int resultCode,
+            Intent data
+    ) {
+        super.onActivityResult(
+                requestCode,
+                resultCode,
+                data
+        );
+
+        if (requestCode != REQUEST_VOICE ||
+                resultCode != RESULT_OK ||
+                data == null) {
+            return;
+        }
+
+        try {
+
+            ArrayList<String> results =
+                    data.getStringArrayListExtra(
+                            RecognizerIntent.EXTRA_RESULTS
+                    );
+
+            if (results == null ||
+                    results.isEmpty()) {
+                return;
+            }
+
+            String command =
+                    results.get(0);
+
+            if (command != null &&
+                    !command.trim().isEmpty()) {
+
+                executeCommand(
+                        command.trim()
+                );
+            }
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    // =========================================================
+    // TTS
+    // =========================================================
+
+    @Override
+    public void onInit(int status) {
+
+        if (status ==
+                TextToSpeech.SUCCESS) {
+
+            int result =
+                    textToSpeech.setLanguage(
+                            new Locale(
+                                    "ar",
+                                    "MA"
+                            )
+                    );
+
+            ttsReady =
+                    result !=
+                            TextToSpeech.LANG_MISSING_DATA
+                            &&
+                            result !=
+                                    TextToSpeech.LANG_NOT_SUPPORTED;
+
+        } else {
+
+            ttsReady = false;
+        }
+    }
+
+    private void speak(
+            String text
+    ) {
+
+        if (!ttsReady ||
+                textToSpeech == null ||
+                text == null ||
+                text.trim().isEmpty()) {
+            return;
+        }
+
+        try {
+
+            textToSpeech.speak(
+                    text,
+                    TextToSpeech.QUEUE_FLUSH,
+                    null,
+                    "JARVIS_RESPONSE"
+            );
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    // =========================================================
+    // PERMISSIONS
+    // =========================================================
+
+    private void requestRequiredPermissions() {
+
+        ArrayList<String> permissions =
+                new ArrayList<>();
+
+        if (Build.VERSION.SDK_INT >= 23) {
+
+            if (checkSelfPermission(
+                    Manifest.permission.RECORD_AUDIO
+            ) != PackageManager.PERMISSION_GRANTED) {
+
+                permissions.add(
+                        Manifest.permission.RECORD_AUDIO
+                );
+            }
+        }
+
+        if (Build.VERSION.SDK_INT >=
+                Build.VERSION_CODES.TIRAMISU) {
+
+            if (checkSelfPermission(
+                    Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED) {
+
+                permissions.add(
+                        Manifest.permission.POST_NOTIFICATIONS
+                );
+            }
+        }
+
+        if (!permissions.isEmpty()) {
+
+            requestPermissions(
+                    permissions.toArray(
+                            new String[0]
+                    ),
+                    REQUEST_AUDIO
+            );
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(
+            int requestCode,
+            String[] permissions,
+            int[] grantResults
+    ) {
+        super.onRequestPermissionsResult(
+                requestCode,
+                permissions,
+                grantResults
+        );
+
+        if (requestCode == REQUEST_AUDIO) {
+
+            if (Build.VERSION.SDK_INT >=
+                    Build.VERSION_CODES.TIRAMISU) {
+
+                boolean notificationMissing =
+                        checkSelfPermission(
+                                Manifest.permission.POST_NOTIFICATIONS
+                        ) != PackageManager.PERMISSION_GRANTED;
+
+                if (notificationMissing) {
+
+                    requestPermissions(
+                            new String[]{
+                                    Manifest.permission.POST_NOTIFICATIONS
+                            },
+                            REQUEST_NOTIFICATIONS
+                    );
+                }
+            }
+        }
+    }
+
+    // =========================================================
+    // BACKGROUND SERVICE
+    // =========================================================
+
+    private void startJarvisBackgroundService() {
+
+        try {
+
+            Intent serviceIntent =
+                    new Intent(
+                            this,
+                            JarvisBackgroundService.class
+                    );
+
+            if (Build.VERSION.SDK_INT >=
+                    Build.VERSION_CODES.O) {
+
+                startForegroundService(
+                        serviceIntent
+                );
+
+            } else {
+
+                startService(
+                        serviceIntent
+                );
+            }
+
+        } catch (Exception e) {
+
+            appendChat(
+                    "JARVIS: Background Service غير متاح حاليا."
+            );
+        }
+    }
+
+    // =========================================================
+    // INCOMING INTENT
+    // =========================================================
+
+    private void handleIncomingIntent(
+            Intent intent
+    ) {
+
+        if (intent == null) {
+            return;
+        }
+
+        try {
+
+            String command =
+                    intent.getStringExtra(
+                            "command"
+                    );
+
+            if (command != null &&
+                    !command.trim().isEmpty()) {
+
+                executeCommand(
+                        command.trim()
+                );
+            }
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    // =========================================================
+    // KEYBOARD
+    // =========================================================
+
+    private void hideKeyboard() {
+
+        try {
+
+            InputMethodManager manager =
+                    (InputMethodManager)
+                            getSystemService(
+                                    Context.INPUT_METHOD_SERVICE
+                            );
+
+            if (manager != null &&
+                    inputText != null) {
+
+                manager.hideSoftInputFromWindow(
+                        inputText.getWindowToken(),
+                        0
+                );
+            }
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    // =========================================================
+    // LIFECYCLE
+    // =========================================================
+
+    @Override
+    protected void onNewIntent(
+            Intent intent
+    ) {
+        super.onNewIntent(intent);
+
+        setIntent(intent);
+
+        handleIncomingIntent(intent);
+    }
+
+    @Override
+    protected void onDestroy() {
+
+        try {
+
+            if (textToSpeech != null) {
+
+                textToSpeech.stop();
+                textToSpeech.shutdown();
+
+                textToSpeech = null;
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        super.onDestroy();
+    }
+}
