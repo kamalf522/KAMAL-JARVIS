@@ -59,8 +59,7 @@ public class PlanningEngine {
         if (goal == null ||
                 goal.trim().isEmpty()) {
 
-            return
-                    "خاصك تحدد الهدف اللي بغيتي JARVIS يخطط ليه.";
+            return "خاصك تحدد الهدف اللي بغيتي JARVIS يخطط ليه.";
         }
 
         String cleanGoal =
@@ -77,8 +76,7 @@ public class PlanningEngine {
 
         if (steps.isEmpty()) {
 
-            return
-                    "ما قدرتش نبني خطة صالحة لهاد الهدف.";
+            return "ما قدرتش نبني خطة صالحة لهاد الهدف.";
         }
 
         String oldPlan =
@@ -89,9 +87,7 @@ public class PlanningEngine {
         if (oldPlan != null &&
                 !oldPlan.trim().isEmpty()) {
 
-            savePlanHistory(
-                    oldPlan
-            );
+            savePlanHistory(oldPlan);
         }
 
         String now =
@@ -143,15 +139,13 @@ public class PlanningEngine {
     }
 
     // =========================================================
-    // SMART GOAL DETECTION
+    // GOAL TYPE
     // =========================================================
 
     private String detectGoalType(String goal) {
 
         String lower =
-                goal.toLowerCase(
-                        Locale.ROOT
-                );
+                normalize(goal);
 
         if (containsAny(
                 lower,
@@ -169,7 +163,6 @@ public class PlanningEngine {
                 "كورس",
                 "course"
         )) {
-
             return "LEARNING";
         }
 
@@ -189,7 +182,6 @@ public class PlanningEngine {
                 "client",
                 "clients"
         )) {
-
             return "BUSINESS";
         }
 
@@ -208,7 +200,6 @@ public class PlanningEngine {
                 "workout",
                 "gym"
         )) {
-
             return "FITNESS";
         }
 
@@ -228,7 +219,6 @@ public class PlanningEngine {
                 "تطوير",
                 "development"
         )) {
-
             return "DEVELOPMENT";
         }
 
@@ -241,13 +231,11 @@ public class PlanningEngine {
                 "عادة",
                 "عاده",
                 "انضباط",
-                "انضباط",
                 "routine",
                 "organize",
                 "schedule",
                 "discipline"
         )) {
-
             return "PERSONAL";
         }
 
@@ -255,7 +243,7 @@ public class PlanningEngine {
     }
 
     // =========================================================
-    // STEP GENERATION
+    // GENERATE STEPS
     // =========================================================
 
     private List<String> generateSteps(
@@ -498,9 +486,7 @@ public class PlanningEngine {
     // ADD STEP AS TASK
     // =========================================================
 
-    public String addPlanStepAsTask(
-            String step
-    ) {
+    public String addPlanStepAsTask(String step) {
 
         if (step == null ||
                 step.trim().isEmpty()) {
@@ -514,7 +500,7 @@ public class PlanningEngine {
     }
 
     // =========================================================
-    // ADD CURRENT PLAN STEP
+    // ADD CURRENT STEP
     // =========================================================
 
     public synchronized String addCurrentStepAsTask() {
@@ -523,18 +509,14 @@ public class PlanningEngine {
                 getStoredSteps();
 
         if (steps.isEmpty()) {
-
-            return
-                    "ما كايناش خطة نشطة.";
+            return "ما كايناش خطة نشطة.";
         }
 
         int progress =
                 getProgress();
 
         if (progress >= steps.size()) {
-
-            return
-                    "الخطة كاملة، ما بقا حتى Step.";
+            return "الخطة كاملة، ما بقا حتى Step.";
         }
 
         return taskManager.addTask(
@@ -543,7 +525,7 @@ public class PlanningEngine {
     }
 
     // =========================================================
-    // GET CURRENT STEP
+    // CURRENT STEP
     // =========================================================
 
     public String getCurrentStep() {
@@ -552,25 +534,21 @@ public class PlanningEngine {
                 getStoredSteps();
 
         if (steps.isEmpty()) {
-
-            return
-                    "ما كايناش خطة نشطة.";
+            return "ما كايناش خطة نشطة.";
         }
 
         int progress =
                 getProgress();
 
         if (progress >= steps.size()) {
-
-            return
-                    "الخطة مكتملة ✓";
+            return "الخطة مكتملة ✓";
         }
 
         return steps.get(progress);
     }
 
     // =========================================================
-    // COMPLETE CURRENT STEP
+    // COMPLETE STEP
     // =========================================================
 
     public synchronized String completeCurrentStep() {
@@ -579,25 +557,19 @@ public class PlanningEngine {
                 getStoredSteps();
 
         if (steps.isEmpty()) {
-
-            return
-                    "ما كايناش خطة نشطة.";
+            return "ما كايناش خطة نشطة.";
         }
 
         int progress =
                 getProgress();
 
         if (progress >= steps.size()) {
-
-            return
-                    "الخطة راه كاملة ✓";
+            return "الخطة راه كاملة ✓";
         }
 
         progress++;
 
-        saveProgress(
-                progress
-        );
+        saveProgress(progress);
 
         if (progress >= steps.size()) {
 
@@ -629,9 +601,7 @@ public class PlanningEngine {
                 getStoredSteps();
 
         if (steps.isEmpty()) {
-
-            return
-                    "ما كايناش خطة نشطة.";
+            return "ما كايناش خطة نشطة.";
         }
 
         if (progress < 0) {
@@ -642,15 +612,13 @@ public class PlanningEngine {
             progress = steps.size();
         }
 
-        saveProgress(
-                progress
-        );
+        saveProgress(progress);
 
         return getProgressReport();
     }
 
     // =========================================================
-    // GET ACTIVE PLAN
+    // ACTIVE PLAN
     // =========================================================
 
     public String getActivePlan() {
@@ -663,8 +631,7 @@ public class PlanningEngine {
         if (goal == null ||
                 goal.trim().isEmpty()) {
 
-            return
-                    "ما كاين حتى Plan نشطة حاليا.";
+            return "ما كاين حتى Plan نشطة حاليا.";
         }
 
         String type =
@@ -686,10 +653,6 @@ public class PlanningEngine {
         );
     }
 
-    // =========================================================
-    // GET PLAN GOAL
-    // =========================================================
-
     public String getActiveGoal() {
 
         String goal =
@@ -707,7 +670,7 @@ public class PlanningEngine {
     }
 
     // =========================================================
-    // PROGRESS
+    // PROGRESS REPORT
     // =========================================================
 
     public String getProgressReport() {
@@ -716,9 +679,7 @@ public class PlanningEngine {
                 getStoredSteps();
 
         if (steps.isEmpty()) {
-
-            return
-                    "ما كايناش خطة باش نحسب التقدم.";
+            return "ما كايناش خطة باش نحسب التقدم.";
         }
 
         int progress =
@@ -818,9 +779,7 @@ public class PlanningEngine {
         if (oldPlan != null &&
                 !oldPlan.trim().isEmpty()) {
 
-            savePlanHistory(
-                    oldPlan
-            );
+            savePlanHistory(oldPlan);
         }
 
         memoryManager.removeMemory(
@@ -851,8 +810,7 @@ public class PlanningEngine {
                 PLAN_VERSION_KEY
         );
 
-        return
-                "تم حذف الخطة النشطة ✓";
+        return "تم حذف الخطة النشطة ✓";
     }
 
     // =========================================================
@@ -958,4 +916,342 @@ public class PlanningEngine {
 
         plan.append(
                 percentage
-       
+        );
+
+        plan.append(
+                "%"
+        );
+
+        return plan.toString().trim();
+    }
+
+    // =========================================================
+    // STORED STEPS
+    // =========================================================
+
+    private List<String> getStoredSteps() {
+
+        String stored =
+                memoryManager.getMemory(
+                        PLAN_STEPS_KEY
+                );
+
+        return deserializeSteps(stored);
+    }
+
+    private String serializeSteps(
+            List<String> steps
+    ) {
+
+        if (steps == null ||
+                steps.isEmpty()) {
+
+            return "";
+        }
+
+        StringBuilder result =
+                new StringBuilder();
+
+        for (String step : steps) {
+
+            if (step == null) {
+                continue;
+            }
+
+            String clean =
+                    step
+                            .replace("\\", "\\\\")
+                            .replace("|", "\\|")
+                            .replace("\n", " ");
+
+            if (result.length() > 0) {
+                result.append("|");
+            }
+
+            result.append(clean);
+        }
+
+        return result.toString();
+    }
+
+    private List<String> deserializeSteps(
+            String stored
+    ) {
+
+        List<String> steps =
+                new ArrayList<>();
+
+        if (stored == null ||
+                stored.trim().isEmpty()) {
+
+            return steps;
+        }
+
+        StringBuilder current =
+                new StringBuilder();
+
+        boolean escaped = false;
+
+        for (int i = 0;
+             i < stored.length();
+             i++) {
+
+            char c =
+                    stored.charAt(i);
+
+            if (escaped) {
+
+                current.append(c);
+                escaped = false;
+
+            } else if (c == '\\') {
+
+                escaped = true;
+
+            } else if (c == '|') {
+
+                String step =
+                        current.toString().trim();
+
+                if (!step.isEmpty()) {
+                    steps.add(step);
+                }
+
+                current.setLength(0);
+
+            } else {
+
+                current.append(c);
+            }
+        }
+
+        if (escaped) {
+            current.append('\\');
+        }
+
+        String last =
+                current.toString().trim();
+
+        if (!last.isEmpty()) {
+            steps.add(last);
+        }
+
+        return steps;
+    }
+
+    // =========================================================
+    // PROGRESS STORAGE
+    // =========================================================
+
+    private int getProgress() {
+
+        String value =
+                memoryManager.getMemory(
+                        PLAN_PROGRESS_KEY
+                );
+
+        if (value == null ||
+                value.trim().isEmpty()) {
+
+            return 0;
+        }
+
+        try {
+
+            int progress =
+                    Integer.parseInt(
+                            value.trim()
+                    );
+
+            if (progress < 0) {
+                return 0;
+            }
+
+            List<String> steps =
+                    getStoredSteps();
+
+            if (!steps.isEmpty() &&
+                    progress > steps.size()) {
+
+                return steps.size();
+            }
+
+            return progress;
+
+        } catch (Exception e) {
+
+            return 0;
+        }
+    }
+
+    private void saveProgress(
+            int progress
+    ) {
+
+        memoryManager.saveMemory(
+                PLAN_PROGRESS_KEY,
+                String.valueOf(progress)
+        );
+
+        memoryManager.saveMemory(
+                PLAN_UPDATED_KEY,
+                String.valueOf(
+                        System.currentTimeMillis()
+                )
+        );
+    }
+
+    // =========================================================
+    // HISTORY
+    // =========================================================
+
+    private void savePlanHistory(
+            String oldPlan
+    ) {
+
+        if (oldPlan == null ||
+                oldPlan.trim().isEmpty()) {
+
+            return;
+        }
+
+        String history =
+                memoryManager.getMemory(
+                        PLAN_HISTORY_KEY
+                );
+
+        if (history == null) {
+            history = "";
+        }
+
+        String entry =
+                System.currentTimeMillis()
+                + ":"
+                + oldPlan.trim();
+
+        String newHistory;
+
+        if (history.trim().isEmpty()) {
+
+            newHistory = entry;
+
+        } else {
+
+            newHistory =
+                    history
+                            + "\n"
+                            + entry;
+        }
+
+        String[] lines =
+                newHistory.split("\n");
+
+        StringBuilder limited =
+                new StringBuilder();
+
+        int start =
+                Math.max(
+                        0,
+                        lines.length - 20
+                );
+
+        for (int i = start;
+             i < lines.length;
+             i++) {
+
+            if (lines[i] == null ||
+                    lines[i].trim().isEmpty()) {
+
+                continue;
+            }
+
+            if (limited.length() > 0) {
+                limited.append("\n");
+            }
+
+            limited.append(
+                    lines[i]
+            );
+        }
+
+        memoryManager.saveMemory(
+                PLAN_HISTORY_KEY,
+                limited.toString()
+        );
+    }
+
+    public String getPlanHistory() {
+
+        String history =
+                memoryManager.getMemory(
+                        PLAN_HISTORY_KEY
+                );
+
+        if (history == null ||
+                history.trim().isEmpty()) {
+
+            return "ما كاين حتى Plan قديمة.";
+        }
+
+        return
+                "JARVIS PLAN HISTORY\n"
+                + "============================\n\n"
+                + history;
+    }
+
+    // =========================================================
+    // UTILITIES
+    // =========================================================
+
+    private boolean containsAny(
+            String value,
+            String... words
+    ) {
+
+        if (value == null ||
+                words == null) {
+
+            return false;
+        }
+
+        for (String word : words) {
+
+            if (word == null ||
+                    word.trim().isEmpty()) {
+
+                continue;
+            }
+
+            if (value.contains(
+                    normalize(word)
+            )) {
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private String normalize(
+            String value
+    ) {
+
+        if (value == null) {
+            return "";
+        }
+
+        return value
+                .trim()
+                .toLowerCase(Locale.ROOT)
+                .replace("أ", "ا")
+                .replace("إ", "ا")
+                .replace("آ", "ا")
+                .replace("ة", "ه")
+                .replace("ى", "ي")
+                .replace("ؤ", "و")
+                .replace("ئ", "ي")
+                .replace("ـ", "")
+                .replaceAll("\\s+", " ");
+    }
+}
