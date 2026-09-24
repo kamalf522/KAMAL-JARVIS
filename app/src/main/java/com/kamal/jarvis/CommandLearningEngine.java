@@ -16,19 +16,13 @@ public class CommandLearningEngine {
             "__command_learning_index__";
 
     private final Context context;
-
     private final MemoryManager memoryManager;
-
     private final LearningEngine learningEngine;
-
     private final SkillManager skillManager;
 
-    public CommandLearningEngine(
-            Context context
-    ) {
+    public CommandLearningEngine(Context context) {
 
         if (context == null) {
-
             throw new IllegalArgumentException(
                     "CommandLearningEngine context cannot be null"
             );
@@ -38,26 +32,16 @@ public class CommandLearningEngine {
                 context.getApplicationContext();
 
         memoryManager =
-                new MemoryManager(
-                        this.context
-                );
+                new MemoryManager(this.context);
 
         learningEngine =
-                new LearningEngine(
-                        this.context
-                );
+                new LearningEngine(this.context);
 
         skillManager =
-                new SkillManager(
-                        this.context
-                );
+                new SkillManager(this.context);
 
         initialize();
     }
-
-    // =========================================================
-    // INITIALIZE
-    // =========================================================
 
     private void initialize() {
 
@@ -89,15 +73,13 @@ public class CommandLearningEngine {
         if (command == null ||
                 command.trim().isEmpty()) {
 
-            return
-                    "خاصك تعطيني الأمر اللي بغيتي JARVIS يتعلم.";
+            return "خاصك تعطيني الأمر اللي بغيتي JARVIS يتعلم.";
         }
 
         if (action == null ||
                 action.trim().isEmpty()) {
 
-            return
-                    "خاصك تحدد شنو خاص JARVIS يدير ملي يسمع الأمر.";
+            return "خاصك تحدد شنو خاص JARVIS يدير ملي يسمع الأمر.";
         }
 
         String cleanCommand =
@@ -117,13 +99,9 @@ public class CommandLearningEngine {
                 cleanAction
         );
 
-        initializeMeta(
-                normalized
-        );
+        initializeMeta(normalized);
 
-        addToIndex(
-                normalized
-        );
+        addToIndex(normalized);
 
         try {
 
@@ -158,11 +136,8 @@ public class CommandLearningEngine {
             return null;
         }
 
-        String cleanCommand =
-                command.trim();
-
         String normalized =
-                normalize(cleanCommand);
+                normalize(command);
 
         String exact =
                 memoryManager.getMemory(
@@ -172,17 +147,11 @@ public class CommandLearningEngine {
         if (exact != null &&
                 !exact.trim().isEmpty()) {
 
-            recordUsage(
-                    normalized
-            );
+            recordUsage(normalized);
 
             return exact.trim();
         }
 
-        /*
-         * محاولة البحث عن أمر قريب
-         * باستعمال الكلمات الأساسية.
-         */
         String index =
                 memoryManager.getMemory(
                         KEY_INDEX
@@ -222,9 +191,7 @@ public class CommandLearningEngine {
                 if (action != null &&
                         !action.trim().isEmpty()) {
 
-                    recordUsage(
-                            candidate
-                    );
+                    recordUsage(candidate);
 
                     return action.trim();
                 }
@@ -235,7 +202,7 @@ public class CommandLearningEngine {
     }
 
     // =========================================================
-    // CHECK IF COMMAND IS LEARNED
+    // CHECK
     // =========================================================
 
     public boolean isCommandLearned(
@@ -261,7 +228,7 @@ public class CommandLearningEngine {
     }
 
     // =========================================================
-    // FORGET COMMAND
+    // FORGET
     // =========================================================
 
     public synchronized String forgetCommand(
@@ -271,15 +238,11 @@ public class CommandLearningEngine {
         if (command == null ||
                 command.trim().isEmpty()) {
 
-            return
-                    "حدد الأمر اللي بغيتي نحيد.";
+            return "حدد الأمر اللي بغيتي نحيد.";
         }
 
-        String cleanCommand =
-                command.trim();
-
         String normalized =
-                normalize(cleanCommand);
+                normalize(command);
 
         memoryManager.removeMemory(
                 buildKey(normalized)
@@ -289,17 +252,15 @@ public class CommandLearningEngine {
                 buildMetaKey(normalized)
         );
 
-        removeFromIndex(
-                normalized
-        );
+        removeFromIndex(normalized);
 
         return
                 "تم نسيان الأمر ✓\n\n"
-                + cleanCommand;
+                + command.trim();
     }
 
     // =========================================================
-    // GET LEARNED ACTION
+    // GET ACTION
     // =========================================================
 
     public String getLearnedAction(
@@ -307,15 +268,12 @@ public class CommandLearningEngine {
     ) {
 
         String action =
-                findLearnedCommand(
-                        command
-                );
+                findLearnedCommand(command);
 
         if (action == null ||
                 action.trim().isEmpty()) {
 
-            return
-                    "هاد الأمر مازال ما تعلموش JARVIS.";
+            return "هاد الأمر مازال ما تعلموش JARVIS.";
         }
 
         return
@@ -324,7 +282,7 @@ public class CommandLearningEngine {
     }
 
     // =========================================================
-    // RECORD SUCCESS
+    // SUCCESS
     // =========================================================
 
     public synchronized void recordSuccess(
@@ -352,7 +310,7 @@ public class CommandLearningEngine {
     }
 
     // =========================================================
-    // RECORD FAILURE
+    // FAILURE
     // =========================================================
 
     public synchronized void recordFailure(
@@ -390,20 +348,16 @@ public class CommandLearningEngine {
 
         if (success) {
 
-            recordSuccess(
-                    command
-            );
+            recordSuccess(command);
 
         } else {
 
-            recordFailure(
-                    command
-            );
+            recordFailure(command);
         }
     }
 
     // =========================================================
-    // GET USAGE COUNT
+    // USAGE
     // =========================================================
 
     public int getUsageCount(
@@ -421,10 +375,6 @@ public class CommandLearningEngine {
         ).usage;
     }
 
-    // =========================================================
-    // GET SUCCESS COUNT
-    // =========================================================
-
     public int getSuccessCount(
             String command
     ) {
@@ -439,10 +389,6 @@ public class CommandLearningEngine {
                 normalize(command)
         ).success;
     }
-
-    // =========================================================
-    // GET FAILURE COUNT
-    // =========================================================
 
     public int getFailureCount(
             String command
@@ -483,7 +429,6 @@ public class CommandLearningEngine {
                 stats.failure;
 
         if (total <= 0) {
-
             return 0f;
         }
 
@@ -494,7 +439,7 @@ public class CommandLearningEngine {
     }
 
     // =========================================================
-    // GET LEARNED COMMAND COUNT
+    // COUNT
     // =========================================================
 
     public int getLearnedCommandCount() {
@@ -529,7 +474,7 @@ public class CommandLearningEngine {
     }
 
     // =========================================================
-    // GET LEARNED COMMANDS
+    // LIST
     // =========================================================
 
     public String getLearnedCommands() {
@@ -542,8 +487,7 @@ public class CommandLearningEngine {
         if (index == null ||
                 index.trim().isEmpty()) {
 
-            return
-                    "مازال ما تعلم حتى أمر.";
+            return "مازال ما تعلم حتى أمر.";
         }
 
         StringBuilder result =
@@ -575,38 +519,23 @@ public class CommandLearningEngine {
                             buildKey(command)
                     );
 
-            result.append(
-                    number++
-            );
-
-            result.append(
-                    ". "
-            );
-
-            result.append(
-                    command
-            );
-
-            result.append(
-                    "\n   → "
-            );
-
-            result.append(
-                    action == null
-                            ? "غير معروف"
-                            : action
-            );
-
-            result.append(
-                    "\n"
-            );
+            result.append(number++)
+                    .append(". ")
+                    .append(command)
+                    .append("\n   → ")
+                    .append(
+                            action == null
+                                    ? "غير معروف"
+                                    : action
+                    )
+                    .append("\n");
         }
 
         return result.toString();
     }
 
     // =========================================================
-    // LEARNING REPORT
+    // REPORT
     // =========================================================
 
     public String getLearningReport(
@@ -616,8 +545,7 @@ public class CommandLearningEngine {
         if (command == null ||
                 command.trim().isEmpty()) {
 
-            return
-                    "حدد الأمر اللي بغيتي التقرير ديالو.";
+            return "حدد الأمر اللي بغيتي التقرير ديالو.";
         }
 
         String normalized =
@@ -638,91 +566,62 @@ public class CommandLearningEngine {
                 "=== COMMAND LEARNING ===\n\n"
         );
 
-        report.append(
-                "الأمر: "
-        );
+        report.append("الأمر: ")
+                .append(command.trim())
+                .append("\n\n");
 
-        report.append(
-                command.trim()
-        );
-
-        report.append(
-                "\n\nالإجراء: "
-        );
-
-        report.append(
-                action == null
-                        ? "مازال ما متعلمش"
-                        : action
-        );
-
-        report.append(
-                "\n\nمرات الاستعمال: "
-        );
-
-        report.append(
-                stats.usage
-        );
-
-        report.append(
-                "\nالنجاحات: "
-        );
-
-        report.append(
-                stats.success
-        );
-
-        report.append(
-                "\nالفشل: "
-        );
-
-        report.append(
-                stats.failure
-        );
-
-        report.append(
-                "\nنسبة النجاح: "
-        );
-
-        report.append(
-                String.format(
-                        Locale.ROOT,
-                        "%.1f%%",
-                        getSuccessRate(command)
+        report.append("الإجراء: ")
+                .append(
+                        action == null
+                                ? "مازال ما متعلمش"
+                                : action
                 )
-        );
+                .append("\n\n");
+
+        report.append("مرات الاستعمال: ")
+                .append(stats.usage)
+                .append("\n");
+
+        report.append("النجاحات: ")
+                .append(stats.success)
+                .append("\n");
+
+        report.append("الفشل: ")
+                .append(stats.failure)
+                .append("\n");
+
+        report.append("نسبة النجاح: ")
+                .append(
+                        String.format(
+                                Locale.ROOT,
+                                "%.1f%%",
+                                getSuccessRate(command)
+                        )
+                );
 
         return report.toString();
     }
 
     // =========================================================
-    // BUILD MEMORY KEY
+    // KEYS
     // =========================================================
 
     private String buildKey(
             String command
     ) {
 
-        return
-                PREFIX
-                + normalize(command);
+        return PREFIX + normalize(command);
     }
-
-    // =========================================================
-    // BUILD META KEY
-    // =========================================================
 
     private String buildMetaKey(
             String command
     ) {
 
-        return
-                META_PREFIX
-                + normalize(command);
+        return META_PREFIX + normalize(command);
     }
 
     // =========================================================
-    // NORMALIZE COMMAND
+    // NORMALIZE
     // =========================================================
 
     private String normalize(
@@ -730,62 +629,28 @@ public class CommandLearningEngine {
     ) {
 
         if (value == null) {
-
             return "";
         }
 
         String clean =
-                value
-                        .trim()
-                        .toLowerCase(
-                                Locale.ROOT
-                        );
+                value.trim()
+                        .toLowerCase(Locale.ROOT);
 
         clean =
                 clean
-                        .replace(
-                                "أ",
-                                "ا"
-                        )
-                        .replace(
-                                "إ",
-                                "ا"
-                        )
-                        .replace(
-                                "آ",
-                                "ا"
-                        )
-                        .replace(
-                                "ة",
-                                "ه"
-                        )
-                        .replace(
-                                "ى",
-                                "ي"
-                        );
+                        .replace("أ", "ا")
+                        .replace("إ", "ا")
+                        .replace("آ", "ا")
+                        .replace("ة", "ه")
+                        .replace("ى", "ي");
 
         clean =
                 clean
-                        .replace(
-                                "؟",
-                                " "
-                        )
-                        .replace(
-                                "?",
-                                " "
-                        )
-                        .replace(
-                                "!",
-                                " "
-                        )
-                        .replace(
-                                "،",
-                                " "
-                        )
-                        .replace(
-                                ",",
-                                " "
-                        );
+                        .replace("؟", " ")
+                        .replace("?", " ")
+                        .replace("!", " ")
+                        .replace("،", " ")
+                        .replace(",", " ");
 
         while (clean.contains("  ")) {
 
@@ -800,7 +665,7 @@ public class CommandLearningEngine {
     }
 
     // =========================================================
-    // SIMILAR COMMAND
+    // SIMILARITY
     // =========================================================
 
     private boolean isSimilarCommand(
@@ -815,7 +680,6 @@ public class CommandLearningEngine {
         }
 
         if (first.equals(second)) {
-
             return true;
         }
 
@@ -837,7 +701,6 @@ public class CommandLearningEngine {
                 firstWords) {
 
             if (word.length() < 2) {
-
                 continue;
             }
 
@@ -847,7 +710,6 @@ public class CommandLearningEngine {
                 if (word.equals(other)) {
 
                     matches++;
-
                     break;
                 }
             }
@@ -860,18 +722,18 @@ public class CommandLearningEngine {
                 );
 
         if (usefulWords <= 1) {
-
             return matches >= 1;
         }
 
         return
                 matches >= 2 ||
                 ((float) matches /
-                        (float) usefulWords) >= 0.60f;
+                        (float) usefulWords)
+                        >= 0.60f;
     }
 
     // =========================================================
-    // ADD TO INDEX
+    // INDEX
     // =========================================================
 
     private void addToIndex(
@@ -893,7 +755,6 @@ public class CommandLearningEngine {
                 );
 
         if (index == null) {
-
             index = "";
         }
 
@@ -913,8 +774,7 @@ public class CommandLearningEngine {
 
         if (index.trim().isEmpty()) {
 
-            index =
-                    normalized;
+            index = normalized;
 
         } else {
 
@@ -929,10 +789,6 @@ public class CommandLearningEngine {
                 index
         );
     }
-
-    // =========================================================
-    // REMOVE FROM INDEX
-    // =========================================================
 
     private void removeFromIndex(
             String command
@@ -967,21 +823,15 @@ public class CommandLearningEngine {
             String current =
                     item.trim();
 
-            if (current.equals(
-                    command
-            )) {
-
+            if (current.equals(command)) {
                 continue;
             }
 
             if (result.length() > 0) {
-
                 result.append("|");
             }
 
-            result.append(
-                    current
-            );
+            result.append(current);
         }
 
         memoryManager.saveMemory(
@@ -991,7 +841,7 @@ public class CommandLearningEngine {
     }
 
     // =========================================================
-    // INITIALIZE META
+    // META
     // =========================================================
 
     private void initializeMeta(
@@ -1019,7 +869,7 @@ public class CommandLearningEngine {
     }
 
     // =========================================================
-    // RECORD USAGE
+    // USAGE
     // =========================================================
 
     private void recordUsage(
@@ -1064,9 +914,7 @@ public class CommandLearningEngine {
 
             String stored =
                     memoryManager.getMemory(
-                            buildMetaKey(
-                                    command
-                            )
+                            buildMetaKey(command)
                     );
 
             if (stored == null ||
@@ -1081,25 +929,19 @@ public class CommandLearningEngine {
             if (values.length > 0) {
 
                 stats.usage =
-                        parseInt(
-                                values[0]
-                        );
+                        parseInt(values[0]);
             }
 
             if (values.length > 1) {
 
                 stats.success =
-                        parseInt(
-                                values[1]
-                        );
+                        parseInt(values[1]);
             }
 
             if (values.length > 2) {
 
                 stats.failure =
-                        parseInt(
-                                values[2]
-                        );
+                        parseInt(values[2]);
             }
 
         } catch (Exception ignored) {
@@ -1155,4 +997,23 @@ public class CommandLearningEngine {
 
             return 0;
         }
-   
+    }
+
+    // =========================================================
+    // COMMAND STATS
+    // =========================================================
+
+    private static class CommandStats {
+
+        int usage;
+        int success;
+        int failure;
+
+        CommandStats() {
+
+            usage = 0;
+            success = 0;
+            failure = 0;
+        }
+    }
+}
