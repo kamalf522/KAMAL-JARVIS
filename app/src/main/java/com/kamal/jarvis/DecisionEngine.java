@@ -10,18 +10,16 @@ import java.util.Locale;
 /**
  * JARVIS Decision Engine
  *
- * الدور:
+ * مسؤول عن:
  * - تحليل الأمر
- * - تحديد النية الأساسية
- * - حساب درجة الثقة
+ * - تحديد النية
+ * - حساب الثقة
  * - تحديد الأولوية
- * - الاستفادة من الذاكرة والخطة والمهام والأوامر المتعلمة
+ * - الاستفادة من الذاكرة والخطط والمهام
  * - حفظ آخر قرار
  *
- * ملاحظة:
- * هذا النظام لا ينفذ الأمر.
- * هو طبقة القرار التي تعطي باقي الأنظمة معلومات أفضل
- * قبل مرحلة التنفيذ.
+ * هذا النظام لا ينفذ الأمر بنفسه.
+ * هو طبقة القرار قبل التنفيذ.
  */
 public class DecisionEngine {
 
@@ -47,7 +45,6 @@ public class DecisionEngine {
     private static final int MAX_CONFIDENCE = 99;
 
     private final Context context;
-
     private final MemoryManager memoryManager;
     private final TaskManager taskManager;
     private final PlanningEngine planningEngine;
@@ -61,53 +58,31 @@ public class DecisionEngine {
             );
         }
 
-        this.context =
-                context.getApplicationContext();
+        this.context = context.getApplicationContext();
 
-        memoryManager =
-                new MemoryManager(
-                        this.context
-                );
-
-        taskManager =
-                new TaskManager(
-                        this.context
-                );
-
-        planningEngine =
-                new PlanningEngine(
-                        this.context
-                );
-
+        memoryManager = new MemoryManager(this.context);
+        taskManager = new TaskManager(this.context);
+        planningEngine = new PlanningEngine(this.context);
         commandLearningEngine =
-                new CommandLearningEngine(
-                        this.context
-                );
+                new CommandLearningEngine(this.context);
     }
 
     // =========================================================
     // MAIN DECISION
     // =========================================================
 
-    public synchronized String decide(
-            String command
-    ) {
+    public synchronized String decide(String command) {
 
-        if (command == null ||
-                command.trim().isEmpty()) {
-
+        if (command == null || command.trim().isEmpty()) {
             return "ما وصلني حتى أمر.";
         }
 
-        String cleanCommand =
-                normalize(command);
+        String cleanCommand = normalize(command);
 
         try {
 
             DecisionResult result =
-                    analyzeCommand(
-                            cleanCommand
-                    );
+                    analyzeCommand(cleanCommand);
 
             saveDecision(
                     cleanCommand,
@@ -126,11 +101,9 @@ public class DecisionEngine {
                             "GENERAL",
                             "NORMAL",
                             "تحليل الأمر بشكل عام",
-                            20,
+                            MIN_CONFIDENCE,
                             "تعذر التحليل المتقدم؛ تم استعمال القرار العام.",
-                            Collections.singletonList(
-                                    "FALLBACK"
-                            ),
+                            Collections.singletonList("FALLBACK"),
                             null
                     );
 
@@ -150,80 +123,33 @@ public class DecisionEngine {
     // ANALYSIS
     // =========================================================
 
-    private DecisionResult analyzeCommand(
-            String command
-    ) {
+    private DecisionResult analyzeCommand(String command) {
 
         String lower =
-                command.toLowerCase(
-                        Locale.ROOT
-                );
+                command.toLowerCase(Locale.ROOT);
 
         List<CategoryScore> scores =
                 new ArrayList<>();
 
-        scores.add(
-                scoreEvolution(lower)
-        );
-
-        scores.add(
-                scoreDevelopment(lower)
-        );
-
-        scores.add(
-                scoreReminder(lower)
-        );
-
-        scores.add(
-                scoreTask(lower)
-        );
-
-        scores.add(
-                scorePlanning(lower)
-        );
-
-        scores.add(
-                scoreLearning(lower)
-        );
-
-        scores.add(
-                scoreKnowledge(lower)
-        );
-
-        scores.add(
-                scoreScreen(lower)
-        );
-
-        scores.add(
-                scoreAndroid(lower)
-        );
-
-        scores.add(
-                scoreAutomation(lower)
-        );
-
-        scores.add(
-                scoreFitness(lower)
-        );
-
-        scores.add(
-                scoreBusiness(lower)
-        );
-
-        scores.add(
-                scoreMemory(lower)
-        );
+        scores.add(scoreEvolution(lower));
+        scores.add(scoreDevelopment(lower));
+        scores.add(scoreReminder(lower));
+        scores.add(scoreTask(lower));
+        scores.add(scorePlanning(lower));
+        scores.add(scoreLearning(lower));
+        scores.add(scoreKnowledge(lower));
+        scores.add(scoreScreen(lower));
+        scores.add(scoreAndroid(lower));
+        scores.add(scoreAutomation(lower));
+        scores.add(scoreFitness(lower));
+        scores.add(scoreBusiness(lower));
+        scores.add(scoreMemory(lower));
 
         CategoryScore best =
-                findBestScore(
-                        scores
-                );
+                findBestScore(scores);
 
         CategoryScore second =
-                findSecondBest(
-                        scores,
-                        best
-                );
+                findSecondBest(scores, best);
 
         int contextBoost =
                 calculateContextBoost(
@@ -238,9 +164,7 @@ public class DecisionEngine {
                 );
 
         int urgencyBoost =
-                isUrgent(lower)
-                        ? 2
-                        : 0;
+                isUrgent(lower) ? 2 : 0;
 
         int finalScore =
                 best.score
@@ -248,14 +172,11 @@ public class DecisionEngine {
                         + learnedBoost
                         + urgencyBoost;
 
-        String type =
-                best.type;
-
         String priority =
                 determinePriority(
                         lower,
                         finalScore,
-                        type
+                        best.type
                 );
 
         int confidence =
@@ -282,25 +203,19 @@ public class DecisionEngine {
                         learnedBoost
                 );
 
-        String learnedAction =
-                null;
+        String learnedAction = null;
 
         try {
-
             learnedAction =
                     commandLearningEngine
-                            .findLearnedCommand(
-                                    command
-                            );
-
+                            .findLearnedCommand(command);
         } catch (Exception ignored) {
         }
 
-        String action =
-                best.action;
+        String action = best.action;
 
-        if (learnedAction != null &&
-                !learnedAction.trim().isEmpty()) {
+        if (learnedAction != null
+                && !learnedAction.trim().isEmpty()) {
 
             action =
                     "استعمال الإجراء المتعلم: "
@@ -308,7 +223,7 @@ public class DecisionEngine {
         }
 
         return new DecisionResult(
-                type,
+                best.type,
                 priority,
                 action,
                 confidence,
@@ -319,12 +234,10 @@ public class DecisionEngine {
     }
 
     // =========================================================
-    // EVOLUTION
+    // CATEGORY SCORING
     // =========================================================
 
-    private CategoryScore scoreEvolution(
-            String text
-    ) {
+    private CategoryScore scoreEvolution(String text) {
 
         int score = 0;
 
@@ -364,13 +277,7 @@ public class DecisionEngine {
         );
     }
 
-    // =========================================================
-    // DEVELOPMENT
-    // =========================================================
-
-    private CategoryScore scoreDevelopment(
-            String text
-    ) {
+    private CategoryScore scoreDevelopment(String text) {
 
         int score = 0;
 
@@ -418,13 +325,7 @@ public class DecisionEngine {
         );
     }
 
-    // =========================================================
-    // REMINDER
-    // =========================================================
-
-    private CategoryScore scoreReminder(
-            String text
-    ) {
+    private CategoryScore scoreReminder(String text) {
 
         int score = 0;
 
@@ -442,7 +343,7 @@ public class DecisionEngine {
         if (containsAny(
                 text,
                 "غدا",
-                "غدا",
+                "غداً",
                 "اليوم",
                 "بعد",
                 "ساعة",
@@ -461,13 +362,7 @@ public class DecisionEngine {
         );
     }
 
-    // =========================================================
-    // TASK
-    // =========================================================
-
-    private CategoryScore scoreTask(
-            String text
-    ) {
+    private CategoryScore scoreTask(String text) {
 
         int score = 0;
 
@@ -493,13 +388,7 @@ public class DecisionEngine {
         );
     }
 
-    // =========================================================
-    // PLANNING
-    // =========================================================
-
-    private CategoryScore scorePlanning(
-            String text
-    ) {
+    private CategoryScore scorePlanning(String text) {
 
         int score = 0;
 
@@ -525,13 +414,7 @@ public class DecisionEngine {
         );
     }
 
-    // =========================================================
-    // LEARNING
-    // =========================================================
-
-    private CategoryScore scoreLearning(
-            String text
-    ) {
+    private CategoryScore scoreLearning(String text) {
 
         int score = 0;
 
@@ -560,13 +443,7 @@ public class DecisionEngine {
         );
     }
 
-    // =========================================================
-    // KNOWLEDGE
-    // =========================================================
-
-    private CategoryScore scoreKnowledge(
-            String text
-    ) {
+    private CategoryScore scoreKnowledge(String text) {
 
         int score = 0;
 
@@ -593,13 +470,7 @@ public class DecisionEngine {
         );
     }
 
-    // =========================================================
-    // SCREEN
-    // =========================================================
-
-    private CategoryScore scoreScreen(
-            String text
-    ) {
+    private CategoryScore scoreScreen(String text) {
 
         int score = 0;
 
@@ -623,13 +494,7 @@ public class DecisionEngine {
         );
     }
 
-    // =========================================================
-    // ANDROID
-    // =========================================================
-
-    private CategoryScore scoreAndroid(
-            String text
-    ) {
+    private CategoryScore scoreAndroid(String text) {
 
         int score = 0;
 
@@ -660,13 +525,7 @@ public class DecisionEngine {
         );
     }
 
-    // =========================================================
-    // AUTOMATION
-    // =========================================================
-
-    private CategoryScore scoreAutomation(
-            String text
-    ) {
+    private CategoryScore scoreAutomation(String text) {
 
         int score = 0;
 
@@ -693,13 +552,7 @@ public class DecisionEngine {
         );
     }
 
-    // =========================================================
-    // FITNESS
-    // =========================================================
-
-    private CategoryScore scoreFitness(
-            String text
-    ) {
+    private CategoryScore scoreFitness(String text) {
 
         int score = 0;
 
@@ -724,4 +577,758 @@ public class DecisionEngine {
                 "FITNESS",
                 "استخدام نظام التخطيط الرياضي",
                 score,
-                "الأمر مرتبط بالجسم أو
+                "الأمر مرتبط بالجسم أو الرياضة."
+        );
+    }
+
+    private CategoryScore scoreBusiness(String text) {
+
+        int score = 0;
+
+        if (containsAny(
+                text,
+                "فلوس",
+                "مال",
+                "ربح",
+                "بيع",
+                "شراء",
+                "مشروع",
+                "تجارة",
+                "business",
+                "money",
+                "profit",
+                "sell",
+                "buy"
+        )) {
+            score += 4;
+        }
+
+        return new CategoryScore(
+                "BUSINESS",
+                "استخدام نظام الأعمال",
+                score,
+                "الأمر مرتبط بالمال أو التجارة أو المشروع."
+        );
+    }
+
+    private CategoryScore scoreMemory(String text) {
+
+        int score = 0;
+
+        if (containsAny(
+                text,
+                "تذكر",
+                "ذاكرة",
+                "نسى",
+                "نسيت",
+                "معلومة عليا",
+                "memory",
+                "remember",
+                "forget"
+        )) {
+            score += 6;
+        }
+
+        return new CategoryScore(
+                "MEMORY",
+                "استخدام Memory Manager",
+                score,
+                "الأمر مرتبط بالذاكرة أو المعلومات المحفوظة."
+        );
+    }
+
+    // =========================================================
+    // SCORE HELPERS
+    // =========================================================
+
+    private CategoryScore findBestScore(
+            List<CategoryScore> scores
+    ) {
+
+        CategoryScore best = null;
+
+        for (CategoryScore score : scores) {
+
+            if (best == null
+                    || score.score > best.score) {
+
+                best = score;
+            }
+        }
+
+        if (best == null) {
+
+            return new CategoryScore(
+                    "GENERAL",
+                    "تنفيذ عام",
+                    0,
+                    "لم يتم العثور على نية محددة."
+            );
+        }
+
+        return best;
+    }
+
+    private CategoryScore findSecondBest(
+            List<CategoryScore> scores,
+            CategoryScore best
+    ) {
+
+        CategoryScore second = null;
+
+        for (CategoryScore score : scores) {
+
+            if (score == best) {
+                continue;
+            }
+
+            if (second == null
+                    || score.score > second.score) {
+
+                second = score;
+            }
+        }
+
+        if (second == null) {
+
+            return new CategoryScore(
+                    "GENERAL",
+                    "عام",
+                    0,
+                    ""
+            );
+        }
+
+        return second;
+    }
+
+    private int calculateContextBoost(
+            String text,
+            CategoryScore best
+    ) {
+
+        int boost = 0;
+
+        try {
+
+            String lastType =
+                    memoryManager.getMemory(
+                            LAST_TYPE_KEY
+                    );
+
+            if (lastType != null
+                    && lastType.equalsIgnoreCase(
+                    best.type
+            )) {
+                boost += 3;
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        if (containsAny(
+                text,
+                "هذا",
+                "هاد",
+                "نفس",
+                "نكمل",
+                "كمل",
+                "تابع"
+        )) {
+            boost += 2;
+        }
+
+        try {
+
+            String activePlan =
+                    planningEngine.getActivePlan();
+
+            if (activePlan != null
+                    && !activePlan.trim().isEmpty()
+                    && "PLANNING".equals(best.type)) {
+
+                boost += 2;
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        return boost;
+    }
+
+    private int calculateLearnedBoost(
+            String command,
+            CategoryScore best
+    ) {
+
+        try {
+
+            String learned =
+                    commandLearningEngine
+                            .findLearnedCommand(
+                                    command
+                            );
+
+            if (learned != null
+                    && !learned.trim().isEmpty()) {
+
+                return 5;
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        return 0;
+    }
+
+    private int calculateConfidence(
+            int score,
+            CategoryScore second,
+            int contextBoost,
+            int learnedBoost
+    ) {
+
+        int base =
+                MIN_CONFIDENCE + (score * 4);
+
+        int difference =
+                score - second.score;
+
+        base += difference * 2;
+        base += contextBoost;
+        base += learnedBoost;
+
+        if (base < MIN_CONFIDENCE) {
+            base = MIN_CONFIDENCE;
+        }
+
+        if (base > MAX_CONFIDENCE) {
+            base = MAX_CONFIDENCE;
+        }
+
+        return base;
+    }
+
+    private String determinePriority(
+            String text,
+            int score,
+            String type
+    ) {
+
+        if (containsAny(
+                text,
+                "عاجل",
+                "ضروري",
+                "دابا",
+                "الآن",
+                "حالاً",
+                "فورا",
+                "مهم جدا",
+                "urgent",
+                "now"
+        )) {
+            return "HIGH";
+        }
+
+        if ("REMINDER".equals(type)
+                || "TASK".equals(type)
+                || "AUTOMATION".equals(type)) {
+
+            if (score >= 8) {
+                return "HIGH";
+            }
+
+            return "NORMAL";
+        }
+
+        if ("EVOLUTION".equals(type)
+                || "DEVELOPMENT".equals(type)) {
+
+            if (score >= 10) {
+                return "HIGH";
+            }
+        }
+
+        if (score <= 1) {
+            return "LOW";
+        }
+
+        return "NORMAL";
+    }
+
+    private boolean isUrgent(String text) {
+
+        return containsAny(
+                text,
+                "عاجل",
+                "ضروري",
+                "دابا",
+                "الآن",
+                "حالاً",
+                "فورا",
+                "urgent",
+                "immediately"
+        );
+    }
+
+    // =========================================================
+    // SIGNALS / REASON
+    // =========================================================
+
+    private String buildReason(
+            CategoryScore best,
+            CategoryScore second,
+            int contextBoost,
+            int learnedBoost
+    ) {
+
+        StringBuilder builder =
+                new StringBuilder();
+
+        builder.append(best.reason);
+
+        if (second != null
+                && second.score > 0) {
+
+            builder.append(" المنافس الثاني: ")
+                    .append(second.type)
+                    .append(".");
+        }
+
+        if (contextBoost > 0) {
+
+            builder.append(
+                    " تم تعزيز القرار بالسياق السابق."
+            );
+        }
+
+        if (learnedBoost > 0) {
+
+            builder.append(
+                    " تم العثور على معرفة متعلمة."
+            );
+        }
+
+        return builder.toString();
+    }
+
+    private List<String> collectSignals(
+            String text,
+            CategoryScore best,
+            int contextBoost,
+            int learnedBoost
+    ) {
+
+        List<String> signals =
+                new ArrayList<>();
+
+        signals.add(
+                "TYPE=" + best.type
+        );
+
+        signals.add(
+                "SCORE=" + best.score
+        );
+
+        if (contextBoost > 0) {
+            signals.add(
+                    "CONTEXT_BOOST=" + contextBoost
+            );
+        }
+
+        if (learnedBoost > 0) {
+            signals.add(
+                    "LEARNED_BOOST=" + learnedBoost
+            );
+        }
+
+        if (isUrgent(text)) {
+            signals.add("URGENT");
+        }
+
+        return signals;
+    }
+
+    // =========================================================
+    // SAVE DECISION
+    // =========================================================
+
+    private void saveDecision(
+            String command,
+            DecisionResult result
+    ) {
+
+        try {
+
+            memoryManager.saveMemory(
+                    LAST_DECISION_KEY,
+                    buildCompactDecision(
+                            command,
+                            result
+                    )
+            );
+
+            memoryManager.saveMemory(
+                    LAST_TYPE_KEY,
+                    result.type
+            );
+
+            memoryManager.saveMemory(
+                    LAST_CONFIDENCE_KEY,
+                    String.valueOf(
+                            result.confidence
+                    )
+            );
+
+            memoryManager.saveMemory(
+                    LAST_PRIORITY_KEY,
+                    result.priority
+            );
+
+            memoryManager.saveMemory(
+                    LAST_COMMAND_KEY,
+                    command
+            );
+
+            int count = 0;
+
+            try {
+
+                String saved =
+                        memoryManager.getMemory(
+                                DECISION_COUNT_KEY
+                        );
+
+                if (saved != null) {
+                    count =
+                            Integer.parseInt(
+                                    saved
+                            );
+                }
+
+            } catch (Exception ignored) {
+            }
+
+            count++;
+
+            memoryManager.saveMemory(
+                    DECISION_COUNT_KEY,
+                    String.valueOf(count)
+            );
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    private String buildCompactDecision(
+            String command,
+            DecisionResult result
+    ) {
+
+        return "command="
+                + command
+                + "\ntype="
+                + result.type
+                + "\npriority="
+                + result.priority
+                + "\nconfidence="
+                + result.confidence
+                + "\naction="
+                + result.action;
+    }
+
+    // =========================================================
+    // REPORT
+    // =========================================================
+
+    private String buildDecisionReport(
+            String command,
+            DecisionResult result
+    ) {
+
+        StringBuilder builder =
+                new StringBuilder();
+
+        builder.append("🧠 قرار JARVIS\n\n");
+
+        builder.append("الأمر: ")
+                .append(command)
+                .append("\n");
+
+        builder.append("النوع: ")
+                .append(result.type)
+                .append("\n");
+
+        builder.append("الأولوية: ")
+                .append(result.priority)
+                .append("\n");
+
+        builder.append("الثقة: ")
+                .append(result.confidence)
+                .append("%\n");
+
+        builder.append("الإجراء: ")
+                .append(result.action)
+                .append("\n");
+
+        builder.append("السبب: ")
+                .append(result.reason)
+                .append("\n");
+
+        if (result.learnedAction != null
+                && !result.learnedAction.trim().isEmpty()) {
+
+            builder.append("تعلم سابق: ")
+                    .append(result.learnedAction)
+                    .append("\n");
+        }
+
+        if (result.signals != null
+                && !result.signals.isEmpty()) {
+
+            builder.append("الإشارات: ");
+
+            for (int i = 0;
+                 i < result.signals.size();
+                 i++) {
+
+                if (i > 0) {
+                    builder.append(", ");
+                }
+
+                builder.append(
+                        result.signals.get(i)
+                );
+            }
+        }
+
+        return builder.toString();
+    }
+
+    // =========================================================
+    // PUBLIC STATUS
+    // =========================================================
+
+    public synchronized String getStatus() {
+
+        StringBuilder builder =
+                new StringBuilder();
+
+        builder.append("Decision Engine: ONLINE\n");
+
+        try {
+
+            String count =
+                    memoryManager.getMemory(
+                            DECISION_COUNT_KEY
+                    );
+
+            builder.append("Decisions: ")
+                    .append(
+                            count == null
+                                    ? "0"
+                                    : count
+                    )
+                    .append("\n");
+
+        } catch (Exception e) {
+
+            builder.append(
+                    "Decisions: unavailable\n"
+            );
+        }
+
+        try {
+
+            String lastType =
+                    memoryManager.getMemory(
+                            LAST_TYPE_KEY
+                    );
+
+            builder.append("Last type: ")
+                    .append(
+                            lastType == null
+                                    ? "NONE"
+                                    : lastType
+                    )
+                    .append("\n");
+
+        } catch (Exception e) {
+
+            builder.append(
+                    "Last type: unavailable\n"
+            );
+        }
+
+        try {
+
+            String confidence =
+                    memoryManager.getMemory(
+                            LAST_CONFIDENCE_KEY
+                    );
+
+            builder.append("Last confidence: ")
+                    .append(
+                            confidence == null
+                                    ? "0"
+                                    : confidence
+                    )
+                    .append("%");
+
+        } catch (Exception e) {
+
+            builder.append(
+                    "Last confidence: unavailable"
+            );
+        }
+
+        return builder.toString();
+    }
+
+    public synchronized String getLastDecision() {
+
+        try {
+
+            String value =
+                    memoryManager.getMemory(
+                            LAST_DECISION_KEY
+                    );
+
+            if (value == null
+                    || value.trim().isEmpty()) {
+
+                return "لا يوجد قرار محفوظ.";
+            }
+
+            return value;
+
+        } catch (Exception e) {
+
+            return "تعذر قراءة آخر قرار.";
+        }
+    }
+
+    public synchronized int getDecisionCount() {
+
+        try {
+
+            String value =
+                    memoryManager.getMemory(
+                            DECISION_COUNT_KEY
+                    );
+
+            if (value == null) {
+                return 0;
+            }
+
+            return Integer.parseInt(value);
+
+        } catch (Exception e) {
+
+            return 0;
+        }
+    }
+
+    // =========================================================
+    // TEXT HELPERS
+    // =========================================================
+
+    private String normalize(String value) {
+
+        if (value == null) {
+            return "";
+        }
+
+        String result =
+                value.trim()
+                        .replaceAll(
+                                "\\s+",
+                                " "
+                        );
+
+        return result;
+    }
+
+    private boolean containsAny(
+            String text,
+            String... values
+    ) {
+
+        if (text == null || values == null) {
+            return false;
+        }
+
+        for (String value : values) {
+
+            if (value == null
+                    || value.trim().isEmpty()) {
+                continue;
+            }
+
+            if (text.contains(
+                    value.toLowerCase(
+                            Locale.ROOT
+                    )
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // =========================================================
+    // DATA CLASSES
+    // =========================================================
+
+    private static class CategoryScore {
+
+        final String type;
+        final String action;
+        final int score;
+        final String reason;
+
+        CategoryScore(
+                String type,
+                String action,
+                int score,
+                String reason
+        ) {
+
+            this.type = type;
+            this.action = action;
+            this.score = score;
+            this.reason = reason;
+        }
+    }
+
+    private static class DecisionResult {
+
+        final String type;
+        final String priority;
+        final String action;
+        final int confidence;
+        final String reason;
+        final List<String> signals;
+        final String learnedAction;
+
+        DecisionResult(
+                String type,
+                String priority,
+                String action,
+                int confidence,
+                String reason,
+                List<String> signals,
+                String learnedAction
+        ) {
+
+            this.type = type;
+            this.priority = priority;
+            this.action = action;
+            this.confidence = confidence;
+            this.reason = reason;
+            this.signals = signals;
+            this.learnedAction = learnedAction;
+        }
+    }
+}
