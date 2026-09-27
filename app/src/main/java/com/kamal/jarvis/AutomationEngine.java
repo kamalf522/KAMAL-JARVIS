@@ -8,8 +8,11 @@ import java.util.Locale;
 
 public class AutomationEngine {
 
-    private final Context context;
+    private static final long MAX_DELAY_MS = 15000L;
+    private static final int MAX_STEPS = 30;
+    private static final int MAX_RETRIES = 2;
 
+    private final Context context;
     private final DecisionEngine decisionEngine;
     private final TaskManager taskManager;
     private final ReminderEngine reminderEngine;
@@ -22,13 +25,19 @@ public class AutomationEngine {
     private volatile int lastStepCount = 0;
     private volatile int lastSuccessfulSteps = 0;
     private volatile int lastFailedStep = 0;
+    private volatile int lastRetryCount = 0;
+    private volatile boolean running = false;
 
     public AutomationEngine(Context context) {
 
+        if (context == null) {
+            throw new IllegalArgumentException(
+                    "AutomationEngine requires a valid Context"
+            );
+        }
+
         this.context =
-                context == null
-                        ? null
-                        : context.getApplicationContext();
+                context.getApplicationContext();
 
         decisionEngine =
                 new DecisionEngine(this.context);
@@ -50,29 +59,30 @@ public class AutomationEngine {
     // COMMAND ANALYSIS
     // =========================================================
 
-    public String analyzeCommand(String command) {
+    public synchronized String analyzeCommand(
+            String command
+    ) {
 
         if (isEmpty(command)) {
             return "ما عطيتيني حتى أمر.";
         }
 
-        String cleanCommand =
-                command.trim();
+        String clean =
+                normalize(command);
 
-        lastCommand =
-                cleanCommand;
+        lastCommand = clean;
 
         try {
 
             String decision =
                     safe(
                             decisionEngine.decide(
-                                    cleanCommand
+                                    clean
                             )
                     );
 
             contextEngine.updateCommand(
-                    cleanCommand,
+                    clean,
                     decision
             );
 
@@ -82,11 +92,11 @@ public class AutomationEngine {
 
             return
                     "تم تحليل الأمر ✓\n\n"
-                    + "الأمر:\n"
-                    + cleanCommand
-                    + "\n\n"
-                    + "نوع العملية:\n"
-                    + decision;
+                            + "الأمر:\n"
+                            + clean
+                            + "\n\n"
+                            + "القرار:\n"
+                            + decision;
 
         } catch (Exception e) {
 
@@ -107,92 +117,95 @@ public class AutomationEngine {
             return "ما عطيتيني حتى أمر.";
         }
 
-        String cleanCommand =
-                command.trim();
+        String clean =
+                normalize(command);
 
-        lastCommand =
-                cleanCommand;
-
+        lastCommand = clean;
         lastExecutionTime =
                 System.currentTimeMillis();
 
         lastStepCount = 0;
         lastSuccessfulSteps = 0;
         lastFailedStep = 0;
+        lastRetryCount = 0;
+        running = true;
 
         try {
 
             List<String> steps =
-                    splitIntoSteps(
-                            cleanCommand
-                    );
+                    splitIntoSteps(clean);
+
+            if (steps.isEmpty()) {
+                return finish(
+                        "ما قدرتش نفهم الأمر."
+                );
+            }
+
+            if (steps.size() > MAX_STEPS) {
+
+                return finish(
+                        "الأتمتة فيها بزاف ديال الخطوات. الحد الأقصى هو "
+                                + MAX_STEPS
+                                + "."
+                );
+            }
 
             lastStepCount =
                     steps.size();
 
             String result;
 
-            if (steps.size() > 1) {
-
-                result =
-                        executeSequence(
-                                cleanCommand,
-                                steps
-                        );
-
-            } else {
+            if (steps.size() == 1) {
 
                 result =
                         executeSingleCommand(
-                                cleanCommand
+                                steps.get(0)
                         );
 
                 if (isEmpty(result)) {
 
                     result =
                             executeSequence(
-                                    cleanCommand,
                                     steps
                             );
                 }
+
+            } else {
+
+                result =
+                        executeSequence(
+                                steps
+                        );
             }
 
-            lastResult =
-                    safe(result);
-
-            contextEngine.updateCommand(
-                    cleanCommand,
-                    lastResult
+            return finish(
+                    safe(result)
             );
-
-            contextEngine.updateDecision(
-                    steps.size() > 1
-                            ? "AUTOMATION"
-                            : "EXECUTED"
-            );
-
-            return lastResult;
 
         } catch (Exception e) {
 
-            lastResult =
-                    "JARVIS Automation: وقع خطأ أثناء التنفيذ ⚠";
+            String error =
+                    "وقع خطأ أثناء الأتمتة ⚠";
 
-            contextEngine.updateCommand(
-                    cleanCommand,
-                    lastResult
-            );
+            try {
 
-            contextEngine.updateDecision(
-                    "ERROR"
-            );
+                contextEngine.updateResult(
+                        error
+                );
 
-            return lastResult;
+            } catch (Exception ignored) {
+            }
+
+            return finish(error);
+
+        } finally {
+
+            running = false;
         }
     }
 
     // =========================================================
-    // SINGLE COMMAND ENGINE
+    // SINGLE COMMAND
     // =========================================================
 
     private String executeSingleCommand(
@@ -323,8 +336,9 @@ public class AutomationEngine {
                 "accessibility"
         )) {
 
-            return androidControlEngine
-                    .openAccessibilitySettings();
+            return
+                    androidControlEngine
+                            .openAccessibilitySettings();
         }
 
         if (containsAny(
@@ -336,8 +350,9 @@ public class AutomationEngine {
                 "device information"
         )) {
 
-            return androidControlEngine
-                    .openDeviceInformation();
+            return
+                    androidControlEngine
+                            .openDeviceInformation();
         }
 
         // -----------------------------------------------------
@@ -351,8 +366,9 @@ public class AutomationEngine {
                 "youtube"
         )) {
 
-            return androidControlEngine
-                    .openYouTube();
+            return
+                    androidControlEngine
+                            .openYouTube();
         }
 
         if (containsAny(
@@ -362,8 +378,9 @@ public class AutomationEngine {
                 "whatsapp"
         )) {
 
-            return androidControlEngine
-                    .openWhatsApp();
+            return
+                    androidControlEngine
+                            .openWhatsApp();
         }
 
         if (containsAny(
@@ -373,8 +390,9 @@ public class AutomationEngine {
                 "instagram"
         )) {
 
-            return androidControlEngine
-                    .openInstagram();
+            return
+                    androidControlEngine
+                            .openInstagram();
         }
 
         if (containsAny(
@@ -384,8 +402,9 @@ public class AutomationEngine {
                 "facebook"
         )) {
 
-            return androidControlEngine
-                    .openFacebook();
+            return
+                    androidControlEngine
+                            .openFacebook();
         }
 
         if (containsAny(
@@ -395,12 +414,65 @@ public class AutomationEngine {
                 "chrome"
         )) {
 
-            return androidControlEngine
-                    .openChrome();
+            return
+                    androidControlEngine
+                            .openChrome();
+        }
+
+        if (containsAny(
+                cmd,
+                "افتح الخرائط",
+                "فتح الخرائط",
+                "maps",
+                "google maps"
+        )) {
+
+            return
+                    androidControlEngine
+                            .openMaps();
+        }
+
+        if (containsAny(
+                cmd,
+                "افتح الكاميرا",
+                "فتح الكاميرا",
+                "camera"
+        )) {
+
+            return
+                    androidControlEngine
+                            .openCamera();
+        }
+
+        if (containsAny(
+                cmd,
+                "افتح الساعة",
+                "افتح المنبه",
+                "المنبه",
+                "clock",
+                "alarm"
+        )) {
+
+            return
+                    androidControlEngine
+                            .openClock();
+        }
+
+        if (containsAny(
+                cmd,
+                "افتح الحاسبة",
+                "افتح الآلة الحاسبة",
+                "الحاسبة",
+                "calculator"
+        )) {
+
+            return
+                    androidControlEngine
+                            .openCalculator();
         }
 
         // -----------------------------------------------------
-        // OPEN APPLICATION BY NAME
+        // APPLICATION BY NAME
         // -----------------------------------------------------
 
         if (startsWithAny(
@@ -422,10 +494,11 @@ public class AutomationEngine {
 
             if (!app.isEmpty()) {
 
-                return androidControlEngine
-                        .openApplicationByName(
-                                app
-                        );
+                return
+                        androidControlEngine
+                                .openApplicationByName(
+                                        app
+                                );
             }
         }
 
@@ -458,13 +531,45 @@ public class AutomationEngine {
 
             if (!query.isEmpty()) {
 
-                return androidControlEngine
-                        .searchWeb(query);
+                return
+                        androidControlEngine
+                                .searchWeb(query);
             }
         }
 
         // -----------------------------------------------------
-        // OPEN WEBSITE
+        // MAP SEARCH
+        // -----------------------------------------------------
+
+        if (startsWithAny(
+                cmd,
+                "قلب فالخريطة على ",
+                "قلب في الخريطة على ",
+                "ابحث فالخريطة عن ",
+                "ابحث في الخريطة عن ",
+                "search maps "
+        )) {
+
+            String query =
+                    extractAfterPrefix(
+                            command,
+                            "قلب فالخريطة على",
+                            "قلب في الخريطة على",
+                            "ابحث فالخريطة عن",
+                            "ابحث في الخريطة عن",
+                            "search maps"
+                    );
+
+            if (!query.isEmpty()) {
+
+                return
+                        androidControlEngine
+                                .searchMaps(query);
+            }
+        }
+
+        // -----------------------------------------------------
+        // WEBSITE
         // -----------------------------------------------------
 
         if (startsWithAny(
@@ -490,8 +595,9 @@ public class AutomationEngine {
 
             if (!url.isEmpty()) {
 
-                return androidControlEngine
-                        .openWebPage(url);
+                return
+                        androidControlEngine
+                                .openWebPage(url);
             }
         }
 
@@ -524,8 +630,9 @@ public class AutomationEngine {
 
             if (!number.isEmpty()) {
 
-                return androidControlEngine
-                        .dialNumber(number);
+                return
+                        androidControlEngine
+                                .dialNumber(number);
             }
         }
 
@@ -554,15 +661,16 @@ public class AutomationEngine {
 
             if (!target.isEmpty()) {
 
-                return androidControlEngine
-                        .clickScreenElement(
-                                target
-                        );
+                return
+                        androidControlEngine
+                                .clickScreenElement(
+                                        target
+                                );
             }
         }
 
         // -----------------------------------------------------
-        // SCREEN TEXT INPUT
+        // TEXT INPUT
         // -----------------------------------------------------
 
         if (startsWithAny(
@@ -582,11 +690,12 @@ public class AutomationEngine {
 
             if (!text.isEmpty()) {
 
-                return androidControlEngine
-                        .typeIntoScreen(
-                                "",
-                                text
-                        );
+                return
+                        androidControlEngine
+                                .typeIntoScreen(
+                                        "",
+                                        text
+                                );
             }
         }
 
@@ -606,8 +715,9 @@ public class AutomationEngine {
                 "scroll down"
         )) {
 
-            return androidControlEngine
-                    .scrollDown();
+            return
+                    androidControlEngine
+                            .scrollDown();
         }
 
         if (containsAny(
@@ -622,8 +732,9 @@ public class AutomationEngine {
                 "scroll up"
         )) {
 
-            return androidControlEngine
-                    .scrollUp();
+            return
+                    androidControlEngine
+                            .scrollUp();
         }
 
         // -----------------------------------------------------
@@ -642,8 +753,9 @@ public class AutomationEngine {
                 "read screen"
         )) {
 
-            return androidControlEngine
-                    .getCurrentScreenText();
+            return
+                    androidControlEngine
+                            .getCurrentScreenText();
         }
 
         if (containsAny(
@@ -653,12 +765,36 @@ public class AutomationEngine {
                 "screen tree"
         )) {
 
-            return androidControlEngine
-                    .getCurrentScreenTree();
+            return
+                    androidControlEngine
+                            .getCurrentScreenTree();
+        }
+
+        if (startsWithAny(
+                cmd,
+                "معلومات العنصر ",
+                "node info "
+        )) {
+
+            String target =
+                    extractAfterPrefix(
+                            command,
+                            "معلومات العنصر",
+                            "node info"
+                    );
+
+            if (!target.isEmpty()) {
+
+                return
+                        androidControlEngine
+                                .getNodeInfoByText(
+                                        target
+                                );
+            }
         }
 
         // -----------------------------------------------------
-        // TASK COMMANDS
+        // TASKS
         // -----------------------------------------------------
 
         if (startsWithAny(
@@ -681,7 +817,6 @@ public class AutomationEngine {
                     );
 
             if (!task.isEmpty()) {
-
                 return createTask(task);
             }
         }
@@ -725,11 +860,10 @@ public class AutomationEngine {
     }
 
     // =========================================================
-    // MULTI STEP AUTOMATION
+    // MULTI-STEP AUTOMATION
     // =========================================================
 
     private String executeSequence(
-            String command,
             List<String> steps
     ) {
 
@@ -737,7 +871,7 @@ public class AutomationEngine {
                 steps.isEmpty()) {
 
             return
-                    "JARVIS: ما قدرتش نفهم خطوات الأتمتة.";
+                    "ما كاين حتى خطوة للتنفيذ.";
         }
 
         StringBuilder report =
@@ -751,70 +885,45 @@ public class AutomationEngine {
                 "=================\n\n"
         );
 
-        int successCount = 0;
-        int totalCount = steps.size();
+        int successful = 0;
+        int failed = 0;
 
         for (int i = 0;
-             i < totalCount;
+             i < steps.size();
              i++) {
 
             String step =
                     steps.get(i);
 
-            if (step == null ||
-                    step.trim().isEmpty()) {
-
+            if (isEmpty(step)) {
                 continue;
             }
 
-            report.append(
-                    "STEP "
-            );
-
-            report.append(
-                    i + 1
-            );
-
-            report.append(
-                    ":\n"
-            );
-
-            report.append(
-                    step
-            );
-
-            report.append(
-                    "\n"
-            );
+            report.append("STEP ")
+                    .append(i + 1)
+                    .append(":\n")
+                    .append(step)
+                    .append("\n");
 
             String result =
-                    executeStep(
+                    executeStepWithRetry(
                             step
                     );
 
-            result =
-                    safe(result);
-
-            report.append(
-                    "RESULT:\n"
-            );
-
-            report.append(
-                    result
-            );
-
-            report.append(
-                    "\n\n"
-            );
+            report.append("RESULT:\n")
+                    .append(safe(result))
+                    .append("\n\n");
 
             if (isSuccessResult(result)) {
 
-                successCount++;
+                successful++;
 
                 lastSuccessfulSteps =
-                        successCount;
+                        successful;
 
             } else {
+
+                failed++;
 
                 lastFailedStep =
                         i + 1;
@@ -827,13 +936,14 @@ public class AutomationEngine {
                 );
 
                 report.append(
-                        "سبب التوقف: فشل تنفيذ الخطوة الحالية."
+                        "توقف التنفيذ بسبب فشل الخطوة "
                 );
 
-                lastSuccessfulSteps =
-                        successCount;
+                report.append(
+                        i + 1
+                );
 
-                return report.toString();
+                break;
             }
         }
 
@@ -842,42 +952,91 @@ public class AutomationEngine {
         );
 
         report.append(
-                successCount
+                successful
         );
 
-        report.append(
-                "/"
-        );
+        report.append("/")
+                .append(
+                        steps.size()
+                )
+                .append(
+                        " خطوات ناجحة."
+                );
 
-        report.append(
-                totalCount
-        );
-
-        report.append(
-                " خطوات منفذة بنجاح."
-        );
-
-        if (successCount == totalCount) {
+        if (failed == 0) {
 
             report.append(
                     "\n\nAUTOMATION COMPLETE ✓"
             );
 
-        } else {
+        } else if (successful > 0) {
 
             report.append(
                     "\n\nAUTOMATION PARTIAL ⚠"
             );
-        }
 
-        lastSuccessfulSteps =
-                successCount;
+        } else {
+
+            report.append(
+                    "\n\nAUTOMATION FAILED ✗"
+            );
+        }
 
         return report.toString();
     }
 
     // =========================================================
-    // EXECUTE STEP
+    // RETRY ENGINE
+    // =========================================================
+
+    private String executeStepWithRetry(
+            String step
+    ) {
+
+        String last =
+                "";
+
+        for (int attempt = 0;
+             attempt <= MAX_RETRIES;
+             attempt++) {
+
+            if (attempt > 0) {
+
+                lastRetryCount++;
+
+                try {
+
+                    Thread.sleep(
+                            350L * attempt
+                    );
+
+                } catch (InterruptedException e) {
+
+                    Thread.currentThread()
+                            .interrupt();
+
+                    return
+                            "توقف التنفيذ أثناء إعادة المحاولة ⚠";
+                }
+            }
+
+            last =
+                    executeStep(step);
+
+            if (isSuccessResult(last)) {
+                return last;
+            }
+
+            if (isHardFailure(last)) {
+                return last;
+            }
+        }
+
+        return safe(last);
+    }
+
+    // =========================================================
+    // STEP EXECUTION
     // =========================================================
 
     private String executeStep(
@@ -885,12 +1044,11 @@ public class AutomationEngine {
     ) {
 
         if (isEmpty(step)) {
-
             return "الخطوة فارغة.";
         }
 
         String clean =
-                step.trim();
+                normalize(step);
 
         long delay =
                 extractDelay(clean);
@@ -899,24 +1057,12 @@ public class AutomationEngine {
 
             try {
 
-                /*
-                 * الحد الأقصى 10 ثواني
-                 * باش الأتمتة ما تبقاش معلقة.
-                 */
-                long safeDelay =
-                        Math.min(
-                                delay,
-                                10000L
-                        );
-
-                Thread.sleep(
-                        safeDelay
-                );
+                Thread.sleep(delay);
 
                 return
                         "انتظرت "
-                        + safeDelay
-                        + "ms ✓";
+                                + delay
+                                + "ms ✓";
 
             } catch (InterruptedException e) {
 
@@ -934,13 +1080,126 @@ public class AutomationEngine {
                 );
 
         if (!isEmpty(result)) {
-
             return result;
         }
 
         return
                 "JARVIS: ما فهمتش هاد الخطوة:\n"
-                + clean;
+                        + clean;
+    }
+
+    // =========================================================
+    // DELAY PARSER
+    // =========================================================
+
+    private long extractDelay(
+            String command
+    ) {
+
+        String value =
+                normalize(command);
+
+        String[] prefixes = {
+                "انتظر ",
+                "انتضر ",
+                "تسنى ",
+                "تسنا ",
+                "wait "
+        };
+
+        for (String prefix :
+                prefixes) {
+
+            if (!value.startsWith(prefix)) {
+                continue;
+            }
+
+            String rest =
+                    value.substring(
+                            prefix.length()
+                    ).trim();
+
+            if (rest.isEmpty()) {
+                return -1L;
+            }
+
+            String[] parts =
+                    rest.split(
+                            "\\s+",
+                            2
+                    );
+
+            if (parts.length == 0) {
+                return -1L;
+            }
+
+            String numberText =
+                    parts[0]
+                            .replace(
+                                    ",",
+                                    "."
+                            );
+
+            try {
+
+                double number =
+                        Double.parseDouble(
+                                numberText
+                        );
+
+                if (number < 0) {
+                    return -1L;
+                }
+
+                long milliseconds;
+
+                if (containsAny(
+                        rest,
+                        "ثانية",
+                        "ثواني",
+                        "second",
+                        "seconds",
+                        "sec"
+                )) {
+
+                    milliseconds =
+                            (long)
+                                    (number * 1000L);
+
+                } else if (containsAny(
+                        rest,
+                        "دقيقة",
+                        "دقائق",
+                        "minute",
+                        "minutes",
+                        "min"
+                )) {
+
+                    milliseconds =
+                            (long)
+                                    (number * 60000L);
+
+                } else {
+
+                    milliseconds =
+                            (long) number;
+                }
+
+                if (milliseconds >
+                        MAX_DELAY_MS) {
+
+                    milliseconds =
+                            MAX_DELAY_MS;
+                }
+
+                return milliseconds;
+
+            } catch (Exception ignored) {
+                return -1L;
+            }
+        }
+
+        return -1L;
     }
 
     // =========================================================
@@ -958,7 +1217,7 @@ public class AutomationEngine {
             return steps;
         }
 
-        String normalized =
+        String value =
                 command.trim();
 
         String[] separators = {
@@ -977,15 +1236,15 @@ public class AutomationEngine {
         for (String separator :
                 separators) {
 
-            normalized =
-                    normalized.replace(
+            value =
+                    value.replace(
                             separator,
                             "||"
                     );
         }
 
         String[] parts =
-                normalized.split(
+                value.split(
                         "\\|\\|"
                 );
 
@@ -1000,18 +1259,12 @@ public class AutomationEngine {
                     part.trim();
 
             if (!clean.isEmpty()) {
-
-                steps.add(
-                        clean
-                );
+                steps.add(clean);
             }
         }
 
         if (steps.isEmpty()) {
-
-            steps.add(
-                    command.trim()
-            );
+            steps.add(command.trim());
         }
 
         return steps;
@@ -1026,21 +1279,28 @@ public class AutomationEngine {
     ) {
 
         if (isEmpty(task)) {
-
             return
                     "حدد المهمة اللي بغيتي نضيف.";
         }
 
-        String cleanTask =
+        String clean =
                 task.trim();
 
         String result =
                 taskManager.addTask(
-                        cleanTask
+                        clean
                 );
 
         contextEngine.updateGoal(
-                cleanTask
+                clean
+        );
+
+        contextEngine.updateAction(
+                "ADD_TASK"
+        );
+
+        contextEngine.updateResult(
+                safe(result)
         );
 
         return safe(result);
@@ -1050,22 +1310,40 @@ public class AutomationEngine {
             int index
     ) {
 
-        return safe(
+        String result =
                 taskManager.completeTask(
                         index
-                )
+                );
+
+        contextEngine.updateAction(
+                "COMPLETE_TASK"
         );
+
+        contextEngine.updateResult(
+                safe(result)
+        );
+
+        return safe(result);
     }
 
     public String removeTask(
             int index
     ) {
 
-        return safe(
+        String result =
                 taskManager.removeTask(
                         index
-                )
+                );
+
+        contextEngine.updateAction(
+                "REMOVE_TASK"
         );
+
+        contextEngine.updateResult(
+                safe(result)
+        );
+
+        return safe(result);
     }
 
     public String getTasks() {
@@ -1077,16 +1355,35 @@ public class AutomationEngine {
 
     public String clearCompletedTasks() {
 
-        return safe(
-                taskManager.clearCompleted()
+        String result =
+                taskManager
+                        .clearCompletedTasks();
+
+        contextEngine.updateAction(
+                "CLEAR_COMPLETED_TASKS"
         );
+
+        contextEngine.updateResult(
+                safe(result)
+        );
+
+        return safe(result);
     }
 
     public String clearAllTasks() {
 
-        return safe(
-                taskManager.clearAll()
+        String result =
+                taskManager.clearTasks();
+
+        contextEngine.updateAction(
+                "CLEAR_ALL_TASKS"
         );
+
+        contextEngine.updateResult(
+                safe(result)
+        );
+
+        return safe(result);
     }
 
     // =========================================================
@@ -1098,7 +1395,6 @@ public class AutomationEngine {
     ) {
 
         if (isEmpty(goal)) {
-
             return
                     "حدد الهدف الأول.";
         }
@@ -1110,9 +1406,23 @@ public class AutomationEngine {
                 cleanGoal
         );
 
-        return safe(
-                contextEngine.createContextPlan()
-        );
+        try {
+
+            String result =
+                    contextEngine
+                            .createContextPlan();
+
+            contextEngine.updatePlan(
+                    safe(result)
+            );
+
+            return safe(result);
+
+        } catch (Exception e) {
+
+            return
+                    "ما قدرتش نبني الخطة دابا ⚠";
+        }
     }
 
     // =========================================================
@@ -1125,17 +1435,25 @@ public class AutomationEngine {
     ) {
 
         if (isEmpty(title)) {
-
             return
                     "خاصك تحدد اسم التذكير.";
         }
 
-        return safe(
+        String result =
                 reminderEngine.createReminder(
                         title.trim(),
                         triggerTime
-                )
+                );
+
+        contextEngine.updateAction(
+                "CREATE_REMINDER"
         );
+
+        contextEngine.updateResult(
+                safe(result)
+        );
+
+        return safe(result);
     }
 
     public String getLastReminder() {
@@ -1149,7 +1467,7 @@ public class AutomationEngine {
     // STATUS
     // =========================================================
 
-    public String getAutomationStatus() {
+    public synchronized String getAutomationStatus() {
 
         StringBuilder report =
                 new StringBuilder();
@@ -1166,6 +1484,16 @@ public class AutomationEngine {
                 isHealthy()
                         ? "ONLINE ✓"
                         : "ERROR ⚠"
+        );
+
+        report.append(
+                "\nRunning: "
+        );
+
+        report.append(
+                running
+                        ? "YES"
+                        : "NO"
         );
 
         report.append(
@@ -1229,17 +1557,7 @@ public class AutomationEngine {
         );
 
         report.append(
-                "\nLast Result: "
-        );
-
-        report.append(
-                lastResult.isEmpty()
-                        ? "NONE"
-                        : lastResult
-        );
-
-        report.append(
-                "\n\nLast Steps: "
+                "\nLast Steps: "
         );
 
         report.append(
@@ -1266,6 +1584,14 @@ public class AutomationEngine {
                         )
         );
 
+        report.append(
+                "\nRetries: "
+        );
+
+        report.append(
+                lastRetryCount
+        );
+
         return report.toString();
     }
 
@@ -1286,10 +1612,9 @@ public class AutomationEngine {
                     && reminderEngine != null
                     && androidControlEngine != null
                     && contextEngine != null
-                    && androidControlEngine
-                            .isHealthy()
-                    && reminderEngine
-                            .isHealthy();
+                    && taskManager.isHealthy()
+                    && reminderEngine.isHealthy()
+                    && androidControlEngine.isHealthy();
 
         } catch (Exception e) {
 
@@ -1302,47 +1627,292 @@ public class AutomationEngine {
     // =========================================================
 
     public String getLastCommand() {
-
         return lastCommand;
     }
 
     public String getLastResult() {
-
         return lastResult;
     }
 
     public long getLastExecutionTime() {
-
         return lastExecutionTime;
     }
 
     public int getLastStepCount() {
-
         return lastStepCount;
     }
 
     public int getLastSuccessfulSteps() {
-
         return lastSuccessfulSteps;
     }
 
     public int getLastFailedStep() {
-
         return lastFailedStep;
     }
 
+    public int getLastRetryCount() {
+        return lastRetryCount;
+    }
+
+    public boolean isRunning() {
+        return running;
+    }
+
     // =========================================================
-    // DELAY ENGINE
+    // RESULT PROCESSING
     // =========================================================
 
-    private long extractDelay(
-            String command
+    private String finish(
+            String result
     ) {
 
-        String value =
-                normalize(command);
+        String clean =
+                safe(result);
 
-        if (!startsWithAny(
+        lastResult =
+                clean;
+
+        try {
+
+            contextEngine.updateResult(
+                    clean
+            );
+
+        } catch (Exception ignored) {
+        }
+
+        return clean;
+    }
+
+    private boolean isSuccessResult(
+            String result
+    ) {
+
+        if (isEmpty(result)) {
+            return false;
+        }
+
+        String value =
+                normalize(result);
+
+        if (isHardFailure(value)) {
+            return false;
+        }
+
+        return containsAny(
                 value,
-                "انتظر ",
-                "
+                "✓",
+                "تم ",
+                "فتحت ",
+                "رجعت ",
+                "رجع",
+                "قلبت ",
+                "تم الضغط",
+                "انتظرت ",
+                "مهمة",
+                "online"
+        );
+    }
+
+    private boolean isHardFailure(
+            String result
+    ) {
+
+        if (isEmpty(result)) {
+            return true;
+        }
+
+        String value =
+                normalize(result)
+                        .toLowerCase(
+                                Locale.ROOT
+                        );
+
+        return containsAny(
+                value,
+                "وقع خطأ",
+                "خطأ أثناء",
+                "فشل",
+                "ما قدرتش",
+                "ما قدرت",
+                "ما لقيتش",
+                "غير مفعلة",
+                "غير متوفر",
+                "غير جاهز",
+                "توقف التنفيذ",
+                "stopped",
+                "failed",
+                "error",
+                "exception"
+        );
+    }
+
+    // =========================================================
+    // TEXT HELPERS
+    // =========================================================
+
+    private String normalize(
+            String value
+    ) {
+
+        if (value == null) {
+            return "";
+        }
+
+        return value.trim()
+                .replaceAll(
+                        "\\s+",
+                        " "
+                );
+    }
+
+    private boolean isEmpty(
+            String value
+    ) {
+
+        return value == null
+                || value.trim().isEmpty();
+    }
+
+    private boolean containsAny(
+            String text,
+            String... values
+    ) {
+
+        if (text == null ||
+                values == null) {
+
+            return false;
+        }
+
+        String source =
+                text.toLowerCase(
+                        Locale.ROOT
+                );
+
+        for (String value :
+                values) {
+
+            if (value == null) {
+                continue;
+            }
+
+            String target =
+                    value.trim()
+                            .toLowerCase(
+                                    Locale.ROOT
+                            );
+
+            if (!target.isEmpty()
+                    && source.contains(target)) {
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean startsWithAny(
+            String text,
+            String... values
+    ) {
+
+        if (text == null ||
+                values == null) {
+
+            return false;
+        }
+
+        String source =
+                text.toLowerCase(
+                        Locale.ROOT
+                );
+
+        for (String value :
+                values) {
+
+            if (value == null) {
+                continue;
+            }
+
+            String target =
+                    value.trim()
+                            .toLowerCase(
+                                    Locale.ROOT
+                            );
+
+            if (!target.isEmpty()
+                    && source.startsWith(target)) {
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private String extractAfterPrefix(
+            String command,
+            String... prefixes
+    ) {
+
+        if (isEmpty(command) ||
+                prefixes == null) {
+
+            return "";
+        }
+
+        String original =
+                command.trim();
+
+        String lower =
+                original.toLowerCase(
+                        Locale.ROOT
+                );
+
+        for (String prefix :
+                prefixes) {
+
+            if (prefix == null) {
+                continue;
+            }
+
+            String cleanPrefix =
+                    prefix.trim();
+
+            if (cleanPrefix.isEmpty()) {
+                continue;
+            }
+
+            String lowerPrefix =
+                    cleanPrefix.toLowerCase(
+                            Locale.ROOT
+                    );
+
+            if (lower.startsWith(
+                    lowerPrefix
+            )) {
+
+                return original
+                        .substring(
+                                cleanPrefix.length()
+                        )
+                        .trim();
+            }
+        }
+
+        return "";
+    }
+
+    private String safe(
+            String value
+    ) {
+
+        if (value == null) {
+            return "";
+        }
+
+        return value.trim();
+    }
+}
