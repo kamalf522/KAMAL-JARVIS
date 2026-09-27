@@ -6,9 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
-import java.util.List;
 import java.util.Locale;
 
 public class ReminderEngine {
@@ -33,12 +31,9 @@ public class ReminderEngine {
     public ReminderEngine(Context context) {
 
         if (context != null) {
-
             this.context =
                     context.getApplicationContext();
-
         } else {
-
             this.context = null;
         }
 
@@ -59,7 +54,7 @@ public class ReminderEngine {
     }
 
     // =========================================================
-    // CREATE REMINDER
+    // CREATE
     // =========================================================
 
     public synchronized String createReminder(
@@ -67,25 +62,20 @@ public class ReminderEngine {
             long triggerTime
     ) {
 
-        if (context == null ||
-                memoryManager == null) {
-
-            return
-                    "Reminder Engine غير جاهز.";
+        if (!isReady()) {
+            return "Reminder Engine غير جاهز.";
         }
 
         if (title == null ||
                 title.trim().isEmpty()) {
 
-            return
-                    "خاصك تكتب شنو بغيتي نتذكرك به.";
+            return "خاصك تكتب شنو بغيتي نتذكرك به.";
         }
 
         if (triggerTime <=
                 System.currentTimeMillis()) {
 
-            return
-                    "وقت التذكير خاصو يكون فالمستقبل.";
+            return "وقت التذكير خاصو يكون فالمستقبل.";
         }
 
         try {
@@ -94,9 +84,7 @@ public class ReminderEngine {
                     getAlarmManager();
 
             if (alarmManager == null) {
-
-                return
-                        "Alarm Manager غير متوفر.";
+                return "Alarm Manager غير متوفر.";
             }
 
             String cleanTitle =
@@ -173,31 +161,87 @@ public class ReminderEngine {
 
             return
                     "تم إنشاء التذكير ✓\n\n"
-                    + cleanTitle
-                    + "\n"
-                    + formatted
-                    + "\n"
-                    + "ID: "
-                    + requestCode;
+                            + cleanTitle
+                            + "\n"
+                            + formatted
+                            + "\nID: "
+                            + requestCode;
 
         } catch (Exception e) {
 
             return
                     "فشل إنشاء التذكير: "
-                    + safeError(e);
+                            + safeError(e);
         }
     }
 
     // =========================================================
-    // GET LAST REMINDER
+    // COMPLETE / FIRE
+    // =========================================================
+
+    public synchronized String completeReminder(
+            int reminderId
+    ) {
+
+        if (!isReady()) {
+            return "Reminder Engine غير جاهز.";
+        }
+
+        try {
+
+            cancelAlarmOnly(
+                    reminderId
+            );
+
+            String reminder =
+                    memoryManager.getMemory(
+                            PREFIX + reminderId
+                    );
+
+            if (reminder == null ||
+                    reminder.trim().isEmpty()) {
+
+                removeFromIndex(
+                        reminderId
+                );
+
+                return
+                        "التذكير غير موجود أو سبق إكماله.";
+            }
+
+            memoryManager.removeMemory(
+                    PREFIX + reminderId
+            );
+
+            removeFromIndex(
+                    reminderId
+            );
+
+            if (reminderCount > 0) {
+                reminderCount--;
+            }
+
+            saveCount();
+
+            return
+                    "تم تنفيذ التذكير ✓";
+
+        } catch (Exception e) {
+
+            return
+                    "فشل إكمال التذكير: "
+                            + safeError(e);
+        }
+    }
+
+    // =========================================================
+    // GET LAST
     // =========================================================
 
     public synchronized String getLastReminder() {
 
         if (memoryManager == null) {
-
-            return
-                    "Reminder Engine غير جاهز.";
+            return "Reminder Engine غير جاهز.";
         }
 
         String reminder =
@@ -208,17 +252,16 @@ public class ReminderEngine {
         if (reminder == null ||
                 reminder.trim().isEmpty()) {
 
-            return
-                    "ما كاين حتى تذكير محفوظ.";
+            return "ما كاين حتى تذكير محفوظ.";
         }
 
         return
                 "آخر تذكير:\n"
-                + reminder;
+                        + reminder;
     }
 
     // =========================================================
-    // GET REMINDER
+    // GET ONE
     // =========================================================
 
     public synchronized String getReminder(
@@ -226,9 +269,7 @@ public class ReminderEngine {
     ) {
 
         if (memoryManager == null) {
-
-            return
-                    "Reminder Engine غير جاهز.";
+            return "Reminder Engine غير جاهز.";
         }
 
         String reminder =
@@ -239,26 +280,22 @@ public class ReminderEngine {
         if (reminder == null ||
                 reminder.trim().isEmpty()) {
 
-            return
-                    "ما لقيتش هاد التذكير.";
+            return "ما لقيتش هاد التذكير.";
         }
 
         return
                 "التذكير:\n"
-                + reminder;
+                        + reminder;
     }
 
     // =========================================================
-    // LIST REMINDERS
+    // LIST
     // =========================================================
 
-    public synchronized String
-    getAllReminders() {
+    public synchronized String getAllReminders() {
 
         if (memoryManager == null) {
-
-            return
-                    "Reminder Engine غير جاهز.";
+            return "Reminder Engine غير جاهز.";
         }
 
         String index =
@@ -269,8 +306,7 @@ public class ReminderEngine {
         if (index == null ||
                 index.trim().isEmpty()) {
 
-            return
-                    "ما كاين حتى تذكير نشط.";
+            return "ما كاين حتى تذكير نشط.";
         }
 
         String[] ids =
@@ -293,7 +329,6 @@ public class ReminderEngine {
 
             if (idText == null ||
                     idText.trim().isEmpty()) {
-
                 continue;
             }
 
@@ -311,7 +346,6 @@ public class ReminderEngine {
 
                 if (reminder == null ||
                         reminder.trim().isEmpty()) {
-
                     continue;
                 }
 
@@ -342,32 +376,26 @@ public class ReminderEngine {
                 );
 
             } catch (Exception ignored) {
-                // تجاهل ID غير صالح
             }
         }
 
         if (found == 0) {
-
-            return
-                    "ما كاين حتى تذكير نشط.";
+            return "ما كاين حتى تذكير نشط.";
         }
 
         return result.toString();
     }
 
     // =========================================================
-    // SEARCH REMINDERS
+    // SEARCH
     // =========================================================
 
-    public synchronized String
-    searchReminders(
+    public synchronized String searchReminders(
             String query
     ) {
 
         if (memoryManager == null) {
-
-            return
-                    "Reminder Engine غير جاهز.";
+            return "Reminder Engine غير جاهز.";
         }
 
         if (query == null ||
@@ -387,8 +415,7 @@ public class ReminderEngine {
         if (index == null ||
                 index.trim().isEmpty()) {
 
-            return
-                    "ما كاين حتى تذكير.";
+            return "ما كاين حتى تذكير.";
         }
 
         StringBuilder result =
@@ -403,7 +430,6 @@ public class ReminderEngine {
 
             if (idText == null ||
                     idText.trim().isEmpty()) {
-
                 continue;
             }
 
@@ -455,7 +481,6 @@ public class ReminderEngine {
                 }
 
             } catch (Exception ignored) {
-                // تجاهل ID غير صالح
             }
         }
 
@@ -470,51 +495,33 @@ public class ReminderEngine {
     }
 
     // =========================================================
-    // CANCEL REMINDER
+    // CANCEL
     // =========================================================
 
     public synchronized String cancelReminder(
             int reminderId
     ) {
 
-        if (context == null ||
-                memoryManager == null) {
-
-            return
-                    "Reminder Engine غير جاهز.";
+        if (!isReady()) {
+            return "Reminder Engine غير جاهز.";
         }
 
         try {
 
-            AlarmManager alarmManager =
-                    getAlarmManager();
+            String existing =
+                    memoryManager.getMemory(
+                            PREFIX + reminderId
+                    );
 
-            if (alarmManager == null) {
+            if (existing == null ||
+                    existing.trim().isEmpty()) {
 
-                return
-                        "Alarm Manager غير متوفر.";
+                return "ما لقيتش هاد التذكير.";
             }
 
-            Intent intent =
-                    new Intent(
-                            context,
-                            ReminderReceiver.class
-                    );
-
-            PendingIntent pendingIntent =
-                    PendingIntent.getBroadcast(
-                            context,
-                            reminderId,
-                            intent,
-                            PendingIntent.FLAG_UPDATE_CURRENT
-                                    | PendingIntent.FLAG_IMMUTABLE
-                    );
-
-            alarmManager.cancel(
-                    pendingIntent
+            cancelAlarmOnly(
+                    reminderId
             );
-
-            pendingIntent.cancel();
 
             memoryManager.removeMemory(
                     PREFIX + reminderId
@@ -537,7 +544,7 @@ public class ReminderEngine {
 
             return
                     "فشل إلغاء التذكير: "
-                    + safeError(e);
+                            + safeError(e);
         }
     }
 
@@ -545,8 +552,7 @@ public class ReminderEngine {
     // CLEAR LAST
     // =========================================================
 
-    public synchronized String
-    clearLastReminder() {
+    public synchronized String clearLastReminder() {
 
         if (memoryManager != null) {
 
@@ -563,14 +569,10 @@ public class ReminderEngine {
     // CLEAR ALL
     // =========================================================
 
-    public synchronized String
-    clearAllReminders() {
+    public synchronized String clearAllReminders() {
 
-        if (context == null ||
-                memoryManager == null) {
-
-            return
-                    "Reminder Engine غير جاهز.";
+        if (!isReady()) {
+            return "Reminder Engine غير جاهز.";
         }
 
         try {
@@ -586,43 +588,22 @@ public class ReminderEngine {
                 String[] ids =
                         index.split(",");
 
-                AlarmManager alarmManager =
-                        getAlarmManager();
+                for (String idText : ids) {
 
-                if (alarmManager != null) {
+                    try {
 
-                    for (String idText : ids) {
+                        int id =
+                                Integer.parseInt(
+                                        idText.trim()
+                                );
 
-                        try {
+                        cancelAlarmOnly(id);
 
-                            int id =
-                                    Integer.parseInt(
-                                            idText.trim()
-                                    );
+                        memoryManager.removeMemory(
+                                PREFIX + id
+                        );
 
-                            Intent intent =
-                                    new Intent(
-                                            context,
-                                            ReminderReceiver.class
-                                    );
-
-                            PendingIntent pendingIntent =
-                                    PendingIntent.getBroadcast(
-                                            context,
-                                            id,
-                                            intent,
-                                            PendingIntent.FLAG_UPDATE_CURRENT
-                                                    | PendingIntent.FLAG_IMMUTABLE
-                                    );
-
-                            alarmManager.cancel(
-                                    pendingIntent
-                            );
-
-                            pendingIntent.cancel();
-
-                        } catch (Exception ignored) {
-                        }
+                    } catch (Exception ignored) {
                     }
                 }
             }
@@ -646,7 +627,7 @@ public class ReminderEngine {
 
             return
                     "فشل حذف التذكيرات: "
-                    + safeError(e);
+                            + safeError(e);
         }
     }
 
@@ -654,8 +635,7 @@ public class ReminderEngine {
     // COUNT
     // =========================================================
 
-    public synchronized int
-    getReminderCount() {
+    public synchronized int getReminderCount() {
 
         return reminderCount;
     }
@@ -674,10 +654,7 @@ public class ReminderEngine {
                 return false;
             }
 
-            AlarmManager alarmManager =
-                    getAlarmManager();
-
-            return alarmManager != null;
+            return getAlarmManager() != null;
 
         } catch (Exception e) {
 
@@ -699,8 +676,18 @@ public class ReminderEngine {
 
         return
                 "Reminder Engine: ONLINE ✓\n"
-                + "Reminders: "
-                + reminderCount;
+                        + "Reminders: "
+                        + reminderCount;
+    }
+
+    // =========================================================
+    // READY
+    // =========================================================
+
+    private boolean isReady() {
+
+        return context != null &&
+                memoryManager != null;
     }
 
     // =========================================================
@@ -721,6 +708,48 @@ public class ReminderEngine {
     }
 
     // =========================================================
+    // CANCEL ALARM ONLY
+    // =========================================================
+
+    private void cancelAlarmOnly(
+            int reminderId
+    ) {
+
+        AlarmManager alarmManager =
+                getAlarmManager();
+
+        if (alarmManager == null) {
+            return;
+        }
+
+        Intent intent =
+                new Intent(
+                        context,
+                        ReminderReceiver.class
+                );
+
+        intent.putExtra(
+                "reminder_id",
+                reminderId
+        );
+
+        PendingIntent pendingIntent =
+                PendingIntent.getBroadcast(
+                        context,
+                        reminderId,
+                        intent,
+                        PendingIntent.FLAG_UPDATE_CURRENT
+                                | PendingIntent.FLAG_IMMUTABLE
+                );
+
+        alarmManager.cancel(
+                pendingIntent
+        );
+
+        pendingIntent.cancel();
+    }
+
+    // =========================================================
     // ID
     // =========================================================
 
@@ -733,15 +762,29 @@ public class ReminderEngine {
                                         & 0x7fffffff
                         );
 
-        if (id == 0) {
+        if (id <= 0) {
             id = 1;
+        }
+
+        while (
+                memoryManager != null &&
+                memoryManager.getMemory(
+                        PREFIX + id
+                ) != null
+        ) {
+
+            id++;
+
+            if (id <= 0) {
+                id = 1;
+            }
         }
 
         return id;
     }
 
     // =========================================================
-    // INDEX
+    // INDEX ADD
     // =========================================================
 
     private void addToIndex(
@@ -757,23 +800,21 @@ public class ReminderEngine {
                         INDEX_KEY
                 );
 
+        String id =
+                String.valueOf(
+                        reminderId
+                );
+
         if (index == null ||
                 index.trim().isEmpty()) {
 
             memoryManager.saveMemory(
                     INDEX_KEY,
-                    String.valueOf(
-                            reminderId
-                    )
+                    id
             );
 
             return;
         }
-
-        String id =
-                String.valueOf(
-                        reminderId
-                );
 
         String[] ids =
                 index.split(",");
@@ -790,11 +831,13 @@ public class ReminderEngine {
 
         memoryManager.saveMemory(
                 INDEX_KEY,
-                index
-                        + ","
-                        + id
+                index + "," + id
         );
     }
+
+    // =========================================================
+    // INDEX REMOVE
+    // =========================================================
 
     private void removeFromIndex(
             int reminderId
@@ -811,7 +854,6 @@ public class ReminderEngine {
 
         if (index == null ||
                 index.trim().isEmpty()) {
-
             return;
         }
 
@@ -830,19 +872,16 @@ public class ReminderEngine {
 
             if (id == null ||
                     id.trim().isEmpty()) {
-
                 continue;
             }
 
             if (target.equals(
                     id.trim()
             )) {
-
                 continue;
             }
 
             if (newIndex.length() > 0) {
-
                 newIndex.append(",");
             }
 
@@ -867,7 +906,7 @@ public class ReminderEngine {
     }
 
     // =========================================================
-    // COUNT STORAGE
+    // COUNT
     // =========================================================
 
     private int loadCount() {
@@ -917,7 +956,7 @@ public class ReminderEngine {
     }
 
     // =========================================================
-    // FORMAT TIME
+    // FORMAT
     // =========================================================
 
     private String formatTime(
@@ -949,26 +988,11 @@ public class ReminderEngine {
                 .toLowerCase(
                         Locale.ROOT
                 )
-                .replace(
-                        "أ",
-                        "ا"
-                )
-                .replace(
-                        "إ",
-                        "ا"
-                )
-                .replace(
-                        "آ",
-                        "ا"
-                )
-                .replace(
-                        "ة",
-                        "ه"
-                )
-                .replace(
-                        "ى",
-                        "ي"
-                );
+                .replace("أ", "ا")
+                .replace("إ", "ا")
+                .replace("آ", "ا")
+                .replace("ة", "ه")
+                .replace("ى", "ي");
     }
 
     // =========================================================
@@ -980,7 +1004,6 @@ public class ReminderEngine {
     ) {
 
         if (e == null) {
-
             return "Unknown error";
         }
 
