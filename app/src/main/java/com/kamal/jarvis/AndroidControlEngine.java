@@ -48,13 +48,45 @@ public class AndroidControlEngine {
     }
 
     // =========================================================
+    // ACCESSIBILITY
+    // =========================================================
+
+    private JarvisAccessibilityService
+    getAccessibilityService() {
+
+        return JarvisAccessibilityService
+                .getInstance();
+    }
+
+    public boolean isAccessibilityConnected() {
+
+        return getAccessibilityService() != null;
+    }
+
+    public String getAccessibilityStatus() {
+
+        JarvisAccessibilityService service =
+                getAccessibilityService();
+
+        if (service == null) {
+
+            return
+                    "JARVIS Accessibility Service: OFFLINE ⚠";
+        }
+
+        return service.getStatus();
+    }
+
+    // =========================================================
     // SETTINGS
     // =========================================================
 
     public String openSettings() {
 
         return launch(
-                new Intent(Settings.ACTION_SETTINGS),
+                new Intent(
+                        Settings.ACTION_SETTINGS
+                ),
                 "الإعدادات"
         );
     }
@@ -62,7 +94,9 @@ public class AndroidControlEngine {
     public String openWifiSettings() {
 
         return launch(
-                new Intent(Settings.ACTION_WIFI_SETTINGS),
+                new Intent(
+                        Settings.ACTION_WIFI_SETTINGS
+                ),
                 "إعدادات Wi-Fi"
         );
     }
@@ -70,7 +104,9 @@ public class AndroidControlEngine {
     public String openBluetoothSettings() {
 
         return launch(
-                new Intent(Settings.ACTION_BLUETOOTH_SETTINGS),
+                new Intent(
+                        Settings.ACTION_BLUETOOTH_SETTINGS
+                ),
                 "إعدادات Bluetooth"
         );
     }
@@ -86,6 +122,7 @@ public class AndroidControlEngine {
     }
 
     public String openAppSettings() {
+
         return openApplicationSettings();
     }
 
@@ -100,6 +137,7 @@ public class AndroidControlEngine {
     }
 
     public String openDeviceInfo() {
+
         return openDeviceInformation();
     }
 
@@ -154,40 +192,12 @@ public class AndroidControlEngine {
     }
 
     public String openAccessibilitySettingsForJarvis() {
+
         return openAccessibilitySettings();
     }
 
     // =========================================================
-    // ACCESSIBILITY
-    // =========================================================
-
-    public boolean isAccessibilityConnected() {
-
-        return JarvisAccessibilityService
-                .getInstance() != null;
-    }
-
-    public String getAccessibilityStatus() {
-
-        JarvisAccessibilityService service =
-                JarvisAccessibilityService.getInstance();
-
-        if (service == null) {
-            return "JARVIS Accessibility Service: OFFLINE ⚠";
-        }
-
-        return service.getStatus();
-    }
-
-    private JarvisAccessibilityService
-    getAccessibilityService() {
-
-        return JarvisAccessibilityService
-                .getInstance();
-    }
-
-    // =========================================================
-    // GLOBAL CONTROLS
+    // GLOBAL PHONE CONTROLS
     // =========================================================
 
     public String goHome() {
@@ -198,7 +208,7 @@ public class AndroidControlEngine {
         if (service == null) {
 
             return
-                    "ما نقدرش نرجع للصفحة الرئيسية حتى تفعل Accessibility Service.";
+                    "ما نقدرش نرجع للرئيسية حتى تفعل Accessibility Service.";
         }
 
         return service.goHome()
@@ -315,7 +325,7 @@ public class AndroidControlEngine {
 
                 return
                         "ما لقيتش تطبيق بالحزمة: "
-                        + packageId;
+                                + packageId;
             }
 
             launchIntent.addFlags(
@@ -357,9 +367,14 @@ public class AndroidControlEngine {
                                     PackageManager.GET_META_DATA
                             );
 
-            ApplicationInfo bestMatch = null;
-            String bestLabel = null;
-            int bestScore = 0;
+            ApplicationInfo bestMatch =
+                    null;
+
+            String bestLabel =
+                    null;
+
+            int bestScore =
+                    0;
 
             for (ApplicationInfo app :
                     applications) {
@@ -385,34 +400,48 @@ public class AndroidControlEngine {
                     continue;
                 }
 
-                int score = 0;
+                int score =
+                        0;
 
                 if (name.equals(target)) {
+
                     score = 100;
+
                 } else if (name.startsWith(target)) {
+
                     score = 80;
+
                 } else if (name.contains(target)) {
+
                     score = 60;
+
                 } else if (target.contains(name)) {
+
                     score = 40;
                 }
 
-                if (score > bestScore) {
-
-                    Intent launchIntent =
-                            packageManager
-                                    .getLaunchIntentForPackage(
-                                            app.packageName
-                                    );
-
-                    if (launchIntent != null) {
-
-                        bestScore = score;
-                        bestMatch = app;
-                        bestLabel =
-                                label.toString();
-                    }
+                if (score <= bestScore) {
+                    continue;
                 }
+
+                Intent launchIntent =
+                        packageManager
+                                .getLaunchIntentForPackage(
+                                        app.packageName
+                                );
+
+                if (launchIntent == null) {
+                    continue;
+                }
+
+                bestScore =
+                        score;
+
+                bestMatch =
+                        app;
+
+                bestLabel =
+                        label.toString();
             }
 
             if (bestMatch != null) {
@@ -435,8 +464,8 @@ public class AndroidControlEngine {
 
                     return
                             "فتحت "
-                            + bestLabel
-                            + " ✓";
+                                    + safe(bestLabel)
+                                    + " ✓";
                 }
             }
 
@@ -448,7 +477,7 @@ public class AndroidControlEngine {
 
         return
                 "ما لقيتش التطبيق: "
-                + applicationName;
+                        + applicationName;
     }
 
     public boolean isApplicationInstalled(
@@ -522,10 +551,6 @@ public class AndroidControlEngine {
                 "Chrome"
         );
     }
-
-    // =========================================================
-    // MAPS
-    // =========================================================
 
     public String openMaps() {
 
@@ -606,9 +631,9 @@ public class AndroidControlEngine {
                 );
 
                 return
-                        "قلبت فـالخريطة على: "
-                        + query.trim()
-                        + " ✓";
+                        "قلبت فالخريطة على: "
+                                + query.trim()
+                                + " ✓";
             }
 
         } catch (Exception ignored) {
@@ -618,10 +643,6 @@ public class AndroidControlEngine {
                 query + " Google Maps"
         );
     }
-
-    // =========================================================
-    // CAMERA
-    // =========================================================
 
     public String openCamera() {
 
@@ -658,10 +679,6 @@ public class AndroidControlEngine {
         }
     }
 
-    // =========================================================
-    // CLOCK
-    // =========================================================
-
     public String openClock() {
 
         return launch(
@@ -671,10 +688,6 @@ public class AndroidControlEngine {
                 "المنبه والساعة"
         );
     }
-
-    // =========================================================
-    // CALCULATOR
-    // =========================================================
 
     public String openCalculator() {
 
@@ -734,20 +747,17 @@ public class AndroidControlEngine {
 
             finalUrl =
                     "https://"
-                    + finalUrl;
+                            + finalUrl;
         }
 
         try {
 
-            Uri uri =
-                    Uri.parse(
-                            finalUrl
-                    );
-
             Intent intent =
                     new Intent(
                             Intent.ACTION_VIEW,
-                            uri
+                            Uri.parse(
+                                    finalUrl
+                            )
                     );
 
             intent.addFlags(
@@ -969,10 +979,10 @@ public class AndroidControlEngine {
 
         return result
                 ? "تم الضغط على "
-                + target.trim()
-                + " ✓"
+                        + target.trim()
+                        + " ✓"
                 : "ما لقيتش العنصر: "
-                + target.trim();
+                        + target.trim();
     }
 
     public String typeIntoScreen(
@@ -980,10 +990,16 @@ public class AndroidControlEngine {
             String text
     ) {
 
-        if (isEmpty(text)) {
+        if (text == null) {
 
             return
                     "خاصني النص اللي نكتب.";
+        }
+
+        if (text.trim().isEmpty()) {
+
+            return
+                    "النص فارغ.";
         }
 
         JarvisAccessibilityService service =
@@ -997,4 +1013,171 @@ public class AndroidControlEngine {
 
         boolean result =
                 service.typeText(
-                        target ==
+                        target == null
+                                ? ""
+                                : target.trim(),
+                        text
+                );
+
+        return result
+                ? "كتبت النص ✓"
+                : "ما قدرتش نكتب النص. تأكد أن خانة الكتابة موجودة ومفعلة.";
+    }
+
+    // =========================================================
+    // SCROLL
+    // =========================================================
+
+    public String scrollDown() {
+
+        JarvisAccessibilityService service =
+                getAccessibilityService();
+
+        if (service == null) {
+
+            return
+                    "خاصك تفعل Accessibility Service أولا.";
+        }
+
+        return service.scrollForward()
+                ? "هبطت الشاشة ✓"
+                : "ما قدرتش نهبط الشاشة ⚠";
+    }
+
+    public String scrollUp() {
+
+        JarvisAccessibilityService service =
+                getAccessibilityService();
+
+        if (service == null) {
+
+            return
+                    "خاصك تفعل Accessibility Service أولا.";
+        }
+
+        return service.scrollBackward()
+                ? "طلعت الشاشة ✓"
+                : "ما قدرتش نطلع الشاشة ⚠";
+    }
+
+    // =========================================================
+    // GENERIC LAUNCH
+    // =========================================================
+
+    private String launch(
+            Intent intent,
+            String name
+    ) {
+
+        if (intent == null) {
+
+            return
+                    "الأمر غير متوفر.";
+        }
+
+        try {
+
+            intent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK
+            );
+
+            if (intent.resolveActivity(
+                    packageManager
+            ) == null) {
+
+                return
+                        "ما لقيتش طريقة نفتح "
+                                + safe(name)
+                                + ".";
+            }
+
+            context.startActivity(
+                    intent
+            );
+
+            return
+                    "فتحت "
+                            + safe(name)
+                            + " ✓";
+
+        } catch (Exception e) {
+
+            return
+                    "ما قدرتش نفتح "
+                            + safe(name)
+                            + " ⚠";
+        }
+    }
+
+    // =========================================================
+    // APP OR WEB FALLBACK
+    // =========================================================
+
+    private String openApplicationOrWeb(
+            String packageName,
+            String fallbackUrl,
+            String label
+    ) {
+
+        if (isApplicationInstalled(
+                packageName
+        )) {
+
+            String result =
+                    openApplication(
+                            packageName
+                    );
+
+            if (result.contains("✓")) {
+                return result;
+            }
+        }
+
+        return openWebPage(
+                fallbackUrl
+        );
+    }
+
+    // =========================================================
+    // HELPERS
+    // =========================================================
+
+    private String normalize(
+            String value
+    ) {
+
+        if (value == null) {
+            return "";
+        }
+
+        return value
+                .trim()
+                .toLowerCase(Locale.ROOT)
+                .replace("أ", "ا")
+                .replace("إ", "ا")
+                .replace("آ", "ا")
+                .replace("ة", "ه")
+                .replace("ى", "ي")
+                .replaceAll(
+                        "\\s+",
+                        " "
+                );
+    }
+
+    private boolean isEmpty(
+            String value
+    ) {
+
+        return value == null
+                || value.trim().isEmpty();
+    }
+
+    private String safe(
+            String value
+    ) {
+
+        return value == null
+                ? ""
+                : value.trim();
+    }
+}
