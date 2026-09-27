@@ -71,7 +71,6 @@ public class JarvisAccessibilityService
                 event.getPackageName();
 
         if (packageName != null) {
-
             lastPackageName =
                     packageName.toString();
         }
@@ -158,8 +157,8 @@ public class JarvisAccessibilityService
             root.recycle();
         }
 
-        if (lastScreenText == null ||
-                lastScreenText.trim().isEmpty()) {
+        if (lastScreenText == null
+                || lastScreenText.trim().isEmpty()) {
 
             return
                     "JARVIS: الشاشة الحالية ما فيهاش نص واضح.";
@@ -216,17 +215,14 @@ public class JarvisAccessibilityService
             int depth
     ) {
 
-        if (node == null ||
-                result == null ||
-                depth > MAX_TREE_DEPTH) {
+        if (node == null
+                || result == null
+                || depth > MAX_TREE_DEPTH) {
 
             return;
         }
 
-        for (int i = 0;
-             i < depth;
-             i++) {
-
+        for (int i = 0; i < depth; i++) {
             result.append("  ");
         }
 
@@ -276,6 +272,10 @@ public class JarvisAccessibilityService
 
         if (node.isEnabled()) {
             result.append("[ENABLED] ");
+        }
+
+        if (node.isFocused()) {
+            result.append("[FOCUSED] ");
         }
 
         result.append("\n");
@@ -366,9 +366,9 @@ public class JarvisAccessibilityService
             List<String> lines
     ) {
 
-        if (node == null ||
-                lines == null ||
-                lines.size() >= MAX_SCREEN_LINES) {
+        if (node == null
+                || lines == null
+                || lines.size() >= MAX_SCREEN_LINES) {
 
             return;
         }
@@ -438,8 +438,8 @@ public class JarvisAccessibilityService
             String line
     ) {
 
-        if (result == null ||
-                line == null) {
+        if (result == null
+                || line == null) {
 
             return false;
         }
@@ -466,8 +466,8 @@ public class JarvisAccessibilityService
             String target
     ) {
 
-        if (target == null ||
-                target.trim().isEmpty()) {
+        if (target == null
+                || target.trim().isEmpty()) {
 
             return false;
         }
@@ -497,8 +497,8 @@ public class JarvisAccessibilityService
             String target
     ) {
 
-        if (node == null ||
-                target == null) {
+        if (node == null
+                || target == null) {
 
             return false;
         }
@@ -517,8 +517,8 @@ public class JarvisAccessibilityService
                 target
         )) {
 
-            if (node.isEnabled() &&
-                    node.isClickable()) {
+            if (node.isEnabled()
+                    && node.isClickable()) {
 
                 if (node.performAction(
                         AccessibilityNodeInfo
@@ -536,8 +536,8 @@ public class JarvisAccessibilityService
 
                 try {
 
-                    if (parent.isEnabled() &&
-                            parent.isClickable()) {
+                    if (parent.isEnabled()
+                            && parent.isClickable()) {
 
                         if (parent.performAction(
                                 AccessibilityNodeInfo
@@ -596,8 +596,8 @@ public class JarvisAccessibilityService
             String target
     ) {
 
-        if (target == null ||
-                target.trim().isEmpty()) {
+        if (target == null
+                || target.trim().isEmpty()) {
 
             return
                     "JARVIS: خاصني النص اللي نقلب عليه.";
@@ -665,6 +665,9 @@ public class JarvisAccessibilityService
                     + "مفعل: "
                     + node.isEnabled()
                     + "\n"
+                    + "مركز: "
+                    + node.isFocused()
+                    + "\n"
                     + "الموقع: "
                     + bounds.toShortString();
 
@@ -678,13 +681,20 @@ public class JarvisAccessibilityService
         }
     }
 
+    /*
+     * IMPORTANT:
+     * This method returns an independent copy of the node.
+     * The caller owns that copy and must recycle it.
+     * This prevents the parent recursion from recycling
+     * the same object that was returned.
+     */
     private AccessibilityNodeInfo findNodeByText(
             AccessibilityNodeInfo node,
             String target
     ) {
 
-        if (node == null ||
-                target == null) {
+        if (node == null
+                || target == null) {
 
             return null;
         }
@@ -697,7 +707,7 @@ public class JarvisAccessibilityService
                 target
         )) {
 
-            return node;
+            return AccessibilityNodeInfo.obtain(node);
         }
 
         int childCount =
@@ -714,20 +724,24 @@ public class JarvisAccessibilityService
                 continue;
             }
 
-            AccessibilityNodeInfo found =
-                    findNodeByText(
-                            child,
-                            target
-                    );
+            AccessibilityNodeInfo found = null;
 
-            if (found != null) {
+            try {
+
+                found =
+                        findNodeByText(
+                                child,
+                                target
+                        );
+
+            } finally {
 
                 child.recycle();
-
-                return found;
             }
 
-            child.recycle();
+            if (found != null) {
+                return found;
+            }
         }
 
         return null;
@@ -757,8 +771,8 @@ public class JarvisAccessibilityService
 
         try {
 
-            if (target == null ||
-                    target.trim().isEmpty()) {
+            if (target == null
+                    || target.trim().isEmpty()) {
 
                 node =
                         findFocusedEditableNode(
@@ -778,8 +792,8 @@ public class JarvisAccessibilityService
                 return false;
             }
 
-            if (!node.isEnabled() ||
-                    !node.isEditable()) {
+            if (!node.isEnabled()
+                    || !node.isEditable()) {
 
                 return false;
             }
@@ -809,13 +823,16 @@ public class JarvisAccessibilityService
         }
     }
 
+    /*
+     * Returns an independent copy.
+     */
     private AccessibilityNodeInfo findEditableNode(
             AccessibilityNodeInfo node,
             String target
     ) {
 
-        if (node == null ||
-                target == null) {
+        if (node == null
+                || target == null) {
 
             return null;
         }
@@ -835,8 +852,8 @@ public class JarvisAccessibilityService
                     node.getHintText();
         }
 
-        if (node.isEditable() &&
-                node.isEnabled()) {
+        if (node.isEditable()
+                && node.isEnabled()) {
 
             if (matches(
                     nodeText,
@@ -849,7 +866,7 @@ public class JarvisAccessibilityService
                     target
             )) {
 
-                return node;
+                return AccessibilityNodeInfo.obtain(node);
             }
         }
 
@@ -867,25 +884,32 @@ public class JarvisAccessibilityService
                 continue;
             }
 
-            AccessibilityNodeInfo result =
-                    findEditableNode(
-                            child,
-                            target
-                    );
+            AccessibilityNodeInfo found = null;
 
-            if (result != null) {
+            try {
+
+                found =
+                        findEditableNode(
+                                child,
+                                target
+                        );
+
+            } finally {
 
                 child.recycle();
-
-                return result;
             }
 
-            child.recycle();
+            if (found != null) {
+                return found;
+            }
         }
 
         return null;
     }
 
+    /*
+     * Returns an independent copy.
+     */
     private AccessibilityNodeInfo
     findFocusedEditableNode(
             AccessibilityNodeInfo node
@@ -895,11 +919,11 @@ public class JarvisAccessibilityService
             return null;
         }
 
-        if (node.isEditable() &&
-                node.isEnabled() &&
-                node.isFocused()) {
+        if (node.isEditable()
+                && node.isEnabled()
+                && node.isFocused()) {
 
-            return node;
+            return AccessibilityNodeInfo.obtain(node);
         }
 
         int childCount =
@@ -916,19 +940,23 @@ public class JarvisAccessibilityService
                 continue;
             }
 
-            AccessibilityNodeInfo result =
-                    findFocusedEditableNode(
-                            child
-                    );
+            AccessibilityNodeInfo found = null;
 
-            if (result != null) {
+            try {
+
+                found =
+                        findFocusedEditableNode(
+                                child
+                        );
+
+            } finally {
 
                 child.recycle();
-
-                return result;
             }
 
-            child.recycle();
+            if (found != null) {
+                return found;
+            }
         }
 
         return null;
@@ -987,8 +1015,8 @@ public class JarvisAccessibilityService
             return false;
         }
 
-        if (node.isEnabled() &&
-                node.isScrollable()) {
+        if (node.isEnabled()
+                && node.isScrollable()) {
 
             if (node.performAction(action)) {
                 return true;
@@ -1096,8 +1124,8 @@ public class JarvisAccessibilityService
                 "Accessibility Service: ONLINE ✓\n"
                 + "التطبيق الحالي: "
                 + (
-                        lastPackageName == null ||
-                                lastPackageName.isEmpty()
+                        lastPackageName == null
+                                || lastPackageName.isEmpty()
                                 ? "غير معروف"
                                 : lastPackageName
                 );
@@ -1112,8 +1140,8 @@ public class JarvisAccessibilityService
             String target
     ) {
 
-        if (value == null ||
-                target == null) {
+        if (value == null
+                || target == null) {
 
             return false;
         }
@@ -1128,8 +1156,8 @@ public class JarvisAccessibilityService
                         target
                 );
 
-        if (current.isEmpty() ||
-                wanted.isEmpty()) {
+        if (current.isEmpty()
+                || wanted.isEmpty()) {
 
             return false;
         }
