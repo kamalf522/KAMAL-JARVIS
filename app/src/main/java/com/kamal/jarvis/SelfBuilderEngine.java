@@ -8,8 +8,6 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
@@ -21,50 +19,49 @@ import java.util.Locale;
 /**
  * JARVIS SELF BUILDER ENGINE
  *
- * محرك التطوير الذاتي الأساسي.
+ * المحرك المسؤول عن:
  *
- * المسؤوليات:
- * - Workspace
- * - قراءة وكتابة الملفات
- * - إنشاء ملفات
- * - Patch آمن
- * - Snapshot كامل
- * - Rollback كامل
- * - Backup
- * - Hash verification
- * - البحث في المشروع
- * - تسجيل History
- * - تسجيل Skills / Capabilities
+ * 1. Workspace داخلي
+ * 2. قراءة وكتابة Source
+ * 3. إنشاء الملفات
+ * 4. تعديل الملفات بشكل آمن
+ * 5. Snapshot
+ * 6. Backup
+ * 7. Rollback
+ * 8. Hash verification
+ * 9. البحث داخل المشروع
+ * 10. تتبع التطوير
+ * 11. Skills / Capabilities
  *
- * مهم:
- * هذا المحرك يعمل داخل Workspace الخاص بالتطبيق.
- * تغيير Java/XML الحقيقي يحتاج Build من بعد.
+ * هذا المحرك لا يعدل APK المثبت مباشرة.
+ * تعديل كود Android الحقيقي يحتاج Build/Update من بعد.
  */
 public class SelfBuilderEngine {
 
     private static final String WORKSPACE_NAME =
             "jarvis_workspace";
 
-    private static final String BACKUP_NAME =
+    private static final String BACKUPS_NAME =
             "backups";
 
-    private static final String SNAPSHOT_NAME =
+    private static final String SNAPSHOTS_NAME =
             "snapshots";
 
-    private static final String META_FILE =
+    private static final String HISTORY_FILE =
             "builder_history.json";
+
+    private static final int MAX_HISTORY = 150;
 
     private final Context context;
 
     private final MemoryManager memoryManager;
     private final SkillManager skillManager;
     private final CapabilityManager capabilityManager;
-    private final TaskManager taskManager;
 
     private final File workspace;
     private final File backups;
     private final File snapshots;
-    private final File historyFile;
+    private final File history;
 
     public SelfBuilderEngine(Context context) {
 
@@ -80,9 +77,6 @@ public class SelfBuilderEngine {
         capabilityManager =
                 new CapabilityManager(this.context);
 
-        taskManager =
-                new TaskManager(this.context);
-
         workspace =
                 new File(
                         this.context.getFilesDir(),
@@ -92,19 +86,19 @@ public class SelfBuilderEngine {
         backups =
                 new File(
                         workspace,
-                        BACKUP_NAME
+                        BACKUPS_NAME
                 );
 
         snapshots =
                 new File(
                         workspace,
-                        SNAPSHOT_NAME
+                        SNAPSHOTS_NAME
                 );
 
-        historyFile =
+        history =
                 new File(
                         workspace,
-                        META_FILE
+                        HISTORY_FILE
                 );
 
         initializeWorkspace();
@@ -130,8 +124,11 @@ public class SelfBuilderEngine {
                 snapshots.mkdirs();
             }
 
-            if (!historyFile.exists()) {
-                writeText(historyFile, "[]");
+            if (!history.exists()) {
+                writeFile(
+                        history,
+                        "[]"
+                );
             }
 
         } catch (Exception e) {
@@ -172,14 +169,17 @@ public class SelfBuilderEngine {
     ) {
 
         if (isBlank(systemName)) {
-            return "خاصك تحدد اسم النظام اللي بغيتي نطورو.";
+
+            return
+                    "خاصك تحدد اسم النظام اللي بغيتي نطورو.";
         }
 
-        String name = systemName.trim();
+        String name =
+                systemName.trim();
 
         String details =
                 isBlank(description)
-                        ? "System development target"
+                        ? "JARVIS development target"
                         : description.trim();
 
         memoryManager.saveMemory(
@@ -193,7 +193,7 @@ public class SelfBuilderEngine {
         );
 
         recordHistory(
-                "TARGET",
+                "DEVELOPMENT_TARGET",
                 name + " | " + details
         );
 
@@ -214,7 +214,9 @@ public class SelfBuilderEngine {
                 );
 
         if (isBlank(target)) {
-            return "ما كاين حتى هدف تطوير حالي.";
+
+            return
+                    "ما كاين حتى هدف تطوير حالي.";
         }
 
         return
@@ -234,51 +236,111 @@ public class SelfBuilderEngine {
             return "اسم النظام غير موجود.";
         }
 
-        String name = systemName.trim();
+        String name =
+                systemName.trim();
 
-        taskManager.addTask(
-                "تحليل كود " + name
+        JSONArray plan =
+                new JSONArray();
+
+        addPlanStep(
+                plan,
+                1,
+                "ANALYZE",
+                "تحليل النظام"
         );
 
-        taskManager.addTask(
-                "تحليل dependencies ديال " + name
+        addPlanStep(
+                plan,
+                2,
+                "DEPENDENCIES",
+                "تحليل dependencies"
         );
 
-        taskManager.addTask(
-                "تحديد الملفات اللي خاصها التعديل"
+        addPlanStep(
+                plan,
+                3,
+                "TARGET",
+                "تحديد الملفات المرتبطة"
         );
 
-        taskManager.addTask(
+        addPlanStep(
+                plan,
+                4,
+                "SNAPSHOT",
                 "إنشاء Snapshot"
         );
 
-        taskManager.addTask(
+        addPlanStep(
+                plan,
+                5,
+                "BACKUP",
                 "إنشاء Backup"
         );
 
-        taskManager.addTask(
-                "تطبيق التعديل"
+        addPlanStep(
+                plan,
+                6,
+                "MODIFY",
+                "تطبيق التغيير"
         );
 
-        taskManager.addTask(
-                "التحقق من التغيير"
+        addPlanStep(
+                plan,
+                7,
+                "VERIFY",
+                "التحقق من Hash والمحتوى"
         );
 
-        taskManager.addTask(
+        addPlanStep(
+                plan,
+                8,
+                "TEST",
                 "تشغيل الاختبارات"
         );
 
-        taskManager.addTask(
-                "Rollback إذا فشل"
+        addPlanStep(
+                plan,
+                9,
+                "ROLLBACK",
+                "التراجع إذا فشل"
         );
 
-        taskManager.addTask(
-                "حفظ التطور الناجح"
+        addPlanStep(
+                plan,
+                10,
+                "LEARN",
+                "حفظ النتيجة والتعلم"
         );
+
+        JSONObject result =
+                new JSONObject();
+
+        try {
+
+            result.put(
+                    "system",
+                    name
+            );
+
+            result.put(
+                    "created",
+                    now()
+            );
+
+            result.put(
+                    "steps",
+                    plan
+            );
+
+        } catch (Exception ignored) {
+        }
+
+        String output =
+                result.toString();
 
         memoryManager.saveMemory(
                 "__builder_plan__",
-                name
+                output
         );
 
         recordHistory(
@@ -286,12 +348,7 @@ public class SelfBuilderEngine {
                 name
         );
 
-        return
-                "تم إنشاء خطة التطوير ✓\n\n"
-                        + "النظام: "
-                        + name
-                        + "\n\n"
-                        + taskManager.getTasks();
+        return output;
     }
 
     // =========================================================
@@ -321,14 +378,10 @@ public class SelfBuilderEngine {
                             ? sha256File(target)
                             : "NONE";
 
-            String snapshot =
-                    createSnapshot(
-                            "قبل كتابة الملف: " + path
-                    );
-
-            if (target.exists()) {
-                createBackupAndReturn(path);
-            }
+            String backupId =
+                    target.exists()
+                            ? createBackupAndReturn(path)
+                            : "";
 
             atomicWrite(
                     target,
@@ -338,16 +391,18 @@ public class SelfBuilderEngine {
             String verified =
                     readText(target);
 
-            if (!verified.equals(content)) {
+            if (!content.equals(verified)) {
 
-                if (!"NONE".equals(oldHash)) {
-                    rollbackSnapshot(
-                            snapshotIdFromResult(snapshot)
+                if (!backupId.isEmpty()) {
+
+                    restoreBackup(
+                            path,
+                            backupId
                     );
                 }
 
                 return
-                        "فشل التحقق من كتابة الملف.\n"
+                        "فشل التحقق من الكتابة.\n"
                                 + "تم إيقاف العملية.";
             }
 
@@ -368,10 +423,17 @@ public class SelfBuilderEngine {
                     path
             );
 
+            memoryManager.saveMemory(
+                    "__last_written_hash__",
+                    newHash
+            );
+
             return
-                    "تم تعديل الملف ✓\n"
+                    "تم تعديل الملف ✓\n\n"
+                            + "File: "
                             + path
-                            + "\n\nSHA-256:\n"
+                            + "\n"
+                            + "SHA-256:\n"
                             + newHash;
 
         } catch (Exception e) {
@@ -383,7 +445,7 @@ public class SelfBuilderEngine {
     }
 
     // =========================================================
-    // TEXT PATCH
+    // PATCH
     // =========================================================
 
     public synchronized String applyTextPatch(
@@ -411,6 +473,7 @@ public class SelfBuilderEngine {
                     safeFile(path);
 
             if (!target.exists()) {
+
                 return
                         "الملف غير موجود:\n"
                                 + path;
@@ -423,6 +486,7 @@ public class SelfBuilderEngine {
                     source.indexOf(oldText);
 
             if (first < 0) {
+
                 return
                         "ما لقيتش النص المطلوب داخل الملف:\n"
                                 + path;
@@ -438,13 +502,14 @@ public class SelfBuilderEngine {
 
                 return
                         "رفض التعديل الآمن ⚠\n"
-                                + "النص المطلوب موجود أكثر من مرة.\n"
-                                + "خاص تحديد جزء أدق من الكود.";
+                                + "النص موجود أكثر من مرة.\n"
+                                + "خاص تحديد جزء أدق.";
             }
 
             String snapshot =
                     createSnapshot(
-                            "قبل Patch: " + safeText(reason)
+                            "قبل Patch: "
+                                    + safeText(reason)
                     );
 
             String backup =
@@ -468,7 +533,7 @@ public class SelfBuilderEngine {
             String verification =
                     readText(target);
 
-            if (!verification.equals(updated)) {
+            if (!updated.equals(verification)) {
 
                 restoreBackup(
                         path,
@@ -476,7 +541,7 @@ public class SelfBuilderEngine {
                 );
 
                 return
-                        "فشل التحقق من التعديل.\n"
+                        "فشل التحقق من Patch.\n"
                                 + "تم Rollback تلقائيا.";
             }
 
@@ -490,8 +555,6 @@ public class SelfBuilderEngine {
                             + safeText(reason)
                             + " | snapshot="
                             + snapshot
-                            + " | hash="
-                            + hash
             );
 
             memoryManager.saveMemory(
@@ -501,12 +564,12 @@ public class SelfBuilderEngine {
 
             memoryManager.saveMemory(
                     "__last_patch_snapshot__",
-                    snapshotIdFromResult(snapshot)
+                    snapshot
             );
 
             return
                     "تعديل الكود ناجح ✓\n\n"
-                            + "الملف: "
+                            + "File: "
                             + path
                             + "\n"
                             + "Snapshot: "
@@ -535,7 +598,9 @@ public class SelfBuilderEngine {
     ) {
 
         if (!validPath(path)) {
-            return "Evolution مرفوض: مسار غير صالح.";
+
+            return
+                    "Evolution مرفوض: مسار غير صالح.";
         }
 
         try {
@@ -544,6 +609,7 @@ public class SelfBuilderEngine {
                     safeFile(path);
 
             if (!target.exists()) {
+
                 return
                         "Evolution مرفوض: الملف غير موجود.";
             }
@@ -560,11 +626,6 @@ public class SelfBuilderEngine {
                                     + safeText(reason)
                     );
 
-            String snapshotId =
-                    snapshotIdFromResult(
-                            snapshot
-                    );
-
             String result =
                     applyTextPatch(
                             path,
@@ -573,10 +634,7 @@ public class SelfBuilderEngine {
                             reason
                     );
 
-            if (result == null ||
-                    !result.contains(
-                            "تعديل الكود ناجح"
-                    )) {
+            if (!isEvolutionSuccess(result)) {
 
                 recordHistory(
                         "EVOLUTION_FAILED",
@@ -589,7 +647,7 @@ public class SelfBuilderEngine {
                         "Evolution فشل ⚠\n\n"
                                 + result
                                 + "\n\nSnapshot:\n"
-                                + snapshotId;
+                                + snapshot;
             }
 
             String after =
@@ -600,11 +658,8 @@ public class SelfBuilderEngine {
 
             if (beforeHash.equals(afterHash)) {
 
-                rollback(snapshotId);
-
-                recordHistory(
-                        "EVOLUTION_FAILED",
-                        "Hash لم يتغير: " + path
+                rollback(
+                        snapshot
                 );
 
                 return
@@ -628,7 +683,7 @@ public class SelfBuilderEngine {
 
             memoryManager.saveMemory(
                     "__last_evolution_snapshot__",
-                    snapshotId
+                    snapshot
             );
 
             recordHistory(
@@ -654,7 +709,7 @@ public class SelfBuilderEngine {
                             + afterHash
                             + "\n\n"
                             + "Snapshot:\n"
-                            + snapshotId;
+                            + snapshot;
 
         } catch (Exception e) {
 
@@ -665,7 +720,7 @@ public class SelfBuilderEngine {
     }
 
     // =========================================================
-    // READ SOURCE
+    // READ
     // =========================================================
 
     public String readSourceFile(
@@ -682,8 +737,9 @@ public class SelfBuilderEngine {
                     safeFile(path);
 
             if (!file.exists()) {
+
                 return
-                        "الملف غير موجود في Workspace:\n"
+                        "الملف غير موجود:\n"
                                 + path;
             }
 
@@ -709,7 +765,7 @@ public class SelfBuilderEngine {
     }
 
     // =========================================================
-    // HASH / EXISTS
+    // HASH
     // =========================================================
 
     public String getFileHash(
@@ -782,18 +838,14 @@ public class SelfBuilderEngine {
 
             for (File file : files) {
 
-                if (isInternalFile(file)) {
-                    continue;
-                }
-
                 if (!isReadableTextFile(file)) {
                     continue;
                 }
 
-                String text =
+                String content =
                         readText(file);
 
-                if (text.toLowerCase(
+                if (content.toLowerCase(
                         Locale.ROOT
                 ).contains(search)) {
 
@@ -808,6 +860,7 @@ public class SelfBuilderEngine {
             }
 
             if (matches == 0) {
+
                 return
                         "ما لقيتش:\n"
                                 + query;
@@ -828,7 +881,7 @@ public class SelfBuilderEngine {
     }
 
     // =========================================================
-    // PROJECT FILES
+    // FILE LIST
     // =========================================================
 
     public String listProjectFiles() {
@@ -845,7 +898,7 @@ public class SelfBuilderEngine {
 
             for (File file : files) {
 
-                if (isInternalFile(file)) {
+                if (!isReadableTextFile(file)) {
                     continue;
                 }
 
@@ -872,7 +925,7 @@ public class SelfBuilderEngine {
         } catch (Exception e) {
 
             return
-                    "فشل قراءة ملفات المشروع:\n"
+                    "فشل قراءة المشروع:\n"
                             + safeError(e);
         }
     }
@@ -893,104 +946,67 @@ public class SelfBuilderEngine {
                     new SimpleDateFormat(
                             "yyyyMMdd_HHmmss_SSS",
                             Locale.US
-                    ).format(new Date());
+                    ).format(
+                            new Date()
+                    );
 
-            File snapshot =
+            File root =
                     new File(
                             snapshots,
                             id
                     );
 
-            if (!snapshot.mkdirs()) {
+            if (!root.mkdirs()) {
 
-                if (!snapshot.exists()) {
-                    return
-                            "فشل إنشاء Snapshot.";
-                }
+                return
+                        "فشل إنشاء Snapshot.";
             }
 
-            List<File> files =
-                    collectFiles(workspace);
+            copyDirectory(
+                    workspace,
+                    root,
+                    root
+            );
 
-            int copied = 0;
-
-            for (File file : files) {
-
-                if (isInternalFile(file)) {
-                    continue;
-                }
-
-                String relative =
-                        relativePath(file);
-
-                File destination =
-                        new File(
-                                snapshot,
-                                relative
-                        );
-
-                copyFile(
-                        file,
-                        destination
-                );
-
-                copied++;
-            }
-
-            JSONObject info =
+            JSONObject metadata =
                     new JSONObject();
 
-            info.put("id", id);
+            metadata.put(
+                    "id",
+                    id
+            );
 
-            info.put(
+            metadata.put(
                     "reason",
-                    reason == null
-                            ? "evolution"
-                            : reason
+                    safeText(reason)
             );
 
-            info.put(
-                    "files",
-                    copied
-            );
-
-            info.put(
+            metadata.put(
                     "created",
                     now()
             );
 
-            writeText(
+            writeFile(
                     new File(
-                            snapshot,
+                            root,
                             "snapshot.json"
                     ),
-                    info.toString()
-            );
-
-            memoryManager.saveMemory(
-                    "__last_snapshot__",
-                    id
+                    metadata.toString()
             );
 
             recordHistory(
-                    "SNAPSHOT",
+                    "SNAPSHOT_CREATED",
                     id
-                            + " | files="
-                            + copied
+                            + " | "
+                            + safeText(reason)
             );
 
-            return
-                    "Snapshot ناجح ✓\n"
-                            + "ID: "
-                            + id
-                            + "\n"
-                            + "Files: "
-                            + copied;
+            return id;
 
         } catch (Exception e) {
 
             return
-                    "فشل Snapshot:\n"
+                    "Snapshot فشل:\n"
                             + safeError(e);
         }
     }
@@ -1004,108 +1020,54 @@ public class SelfBuilderEngine {
     ) {
 
         if (isBlank(snapshotId)) {
-            return "خاصني ID ديال Snapshot.";
+            return "خاصك تحدد Snapshot.";
         }
-
-        return rollbackSnapshot(
-                snapshotId.trim()
-        );
-    }
-
-    private String rollbackSnapshot(
-            String snapshotId
-    ) {
 
         try {
 
             File snapshot =
                     new File(
                             snapshots,
-                            snapshotId
+                            snapshotId.trim()
                     );
 
             if (!snapshot.exists()) {
+
                 return
                         "Snapshot غير موجود:\n"
                                 + snapshotId;
             }
 
-            /*
-             * أولا:
-             * حذف الملفات الحالية اللي ما كانتش موجودة
-             * في Snapshot.
-             */
-            List<File> currentFiles =
+            List<File> current =
                     collectFiles(workspace);
 
-            int deleted = 0;
+            for (File file : current) {
 
-            for (File current : currentFiles) {
+                if (file.equals(history)
+                        || isInside(
+                        file,
+                        snapshots
+                )
+                        || isInside(
+                        file,
+                        backups
+                )) {
 
-                if (isInternalFile(current)) {
                     continue;
                 }
 
-                String relative =
-                        relativePath(current);
-
-                File original =
-                        new File(
-                                snapshot,
-                                relative
-                        );
-
-                if (!original.exists()) {
-
-                    if (current.delete()) {
-                        deleted++;
-                    }
-                }
+                file.delete();
             }
 
-            /*
-             * ثانيا:
-             * إعادة كل الملفات الموجودة في Snapshot.
-             */
-            List<File> snapshotFiles =
-                    collectFiles(snapshot);
-
-            int restored = 0;
-
-            for (File source : snapshotFiles) {
-
-                if (source.getName()
-                        .equals("snapshot.json")) {
-                    continue;
-                }
-
-                String relative =
-                        relativePathFrom(
-                                snapshot,
-                                source
-                        );
-
-                File destination =
-                        new File(
-                                workspace,
-                                relative
-                        );
-
-                copyFile(
-                        source,
-                        destination
-                );
-
-                restored++;
-            }
+            copyDirectory(
+                    snapshot,
+                    workspace,
+                    workspace
+            );
 
             recordHistory(
-                    "ROLLBACK",
+                    "ROLLBACK_SUCCESS",
                     snapshotId
-                            + " | restored="
-                            + restored
-                            + " | deleted="
-                            + deleted
             );
 
             memoryManager.saveMemory(
@@ -1116,204 +1078,102 @@ public class SelfBuilderEngine {
             return
                     "Rollback ناجح ✓\n"
                             + "Snapshot: "
-                            + snapshotId
-                            + "\n"
-                            + "Files restored: "
-                            + restored
-                            + "\n"
-                            + "New files removed: "
-                            + deleted;
+                            + snapshotId;
 
         } catch (Exception e) {
 
             return
-                    "فشل Rollback:\n"
+                    "Rollback فشل:\n"
                             + safeError(e);
         }
     }
 
     // =========================================================
-    // BACKUP
+    // SKILLS / CAPABILITIES
     // =========================================================
 
-    private String createBackupAndReturn(
-            String path
-    ) throws Exception {
-
-        File source =
-                safeFile(path);
-
-        if (!source.exists()) {
-            return "NONE";
-        }
-
-        String id =
-                new SimpleDateFormat(
-                        "yyyyMMdd_HHmmss_SSS",
-                        Locale.US
-                ).format(new Date());
-
-        File destination =
-                new File(
-                        backups,
-                        id
-                                + "_"
-                                + source.getName()
-                );
-
-        copyFile(
-                source,
-                destination
-        );
-
-        recordHistory(
-                "BACKUP",
-                path
-                        + " -> "
-                        + destination.getName()
-        );
-
-        return destination.getAbsolutePath();
-    }
-
-    private void restoreBackup(
-            String path,
-            String backupPath
-    ) {
-
-        try {
-
-            if (isBlank(backupPath)
-                    || backupPath.equals("NONE")) {
-                return;
-            }
-
-            File backup =
-                    new File(backupPath);
-
-            if (!backup.exists()) {
-                return;
-            }
-
-            File target =
-                    safeFile(path);
-
-            copyFile(
-                    backup,
-                    target
-            );
-
-            recordHistory(
-                    "BACKUP_RESTORE",
-                    path
-            );
-
-        } catch (Exception e) {
-
-            recordHistory(
-                    "RESTORE_ERROR",
-                    safeError(e)
-            );
-        }
-    }
-
-    // =========================================================
-    // CAPABILITIES
-    // =========================================================
-
-    public String registerCapability(
+    public void registerSkill(
             String name,
             String description
     ) {
 
-        if (isBlank(name)) {
-            return "خاصك تحدد اسم القدرة.";
-        }
+        if (!isBlank(name)) {
 
-        String cleanName =
-                name.trim();
-
-        String cleanDescription =
-                isBlank(description)
-                        ? "Capability created by Self Builder"
-                        : description.trim();
-
-        try {
-
-            boolean added =
-                    capabilityManager.addCapability(
-                            cleanName,
-                            cleanDescription
-                    );
-
-            if (!added) {
-                return "القدرة موجودة مسبقا.";
-            }
-
-            recordHistory(
-                    "CAPABILITY",
-                    cleanName
+            skillManager.addSkill(
+                    name.trim(),
+                    description
             );
-
-            return
-                    "تم تسجيل القدرة ✓\n\n"
-                            + cleanName;
-
-        } catch (Exception e) {
-
-            return
-                    "فشل تسجيل القدرة:\n"
-                            + safeError(e);
         }
     }
 
-    // =========================================================
-    // SKILLS
-    // =========================================================
-
-    public String registerSkill(
+    public void registerCapability(
             String name,
             String description
     ) {
 
-        if (isBlank(name)) {
-            return "خاصك تحدد اسم المهارة.";
+        if (!isBlank(name)) {
+
+            capabilityManager.addCapability(
+                    name.trim(),
+                    description
+            );
         }
+    }
 
-        String cleanName =
-                name.trim();
+    // =========================================================
+    // STATUS
+    // =========================================================
 
-        String cleanDescription =
-                isBlank(description)
-                        ? "Skill created by Self Builder"
-                        : description.trim();
+    public String getStatus() {
+
+        return
+                "JARVIS SELF BUILDER\n"
+                        + "============================\n"
+                        + "Workspace: "
+                        + (
+                        workspace.exists()
+                                ? "READY"
+                                : "ERROR"
+                )
+                        + "\n"
+                        + "Backups: "
+                        + (
+                        backups.exists()
+                                ? "READY"
+                                : "ERROR"
+                )
+                        + "\n"
+                        + "Snapshots: "
+                        + (
+                        snapshots.exists()
+                                ? "READY"
+                                : "ERROR"
+                )
+                        + "\n"
+                        + "History: "
+                        + (
+                        history.exists()
+                                ? "READY"
+                                : "ERROR"
+                )
+                        + "\n"
+                        + "Path:\n"
+                        + workspace.getAbsolutePath();
+    }
+
+    public boolean isHealthy() {
 
         try {
 
-            boolean added =
-                    skillManager.addSkill(
-                            cleanName,
-                            cleanDescription
-                    );
-
-            if (!added) {
-                return "المهارة موجودة مسبقا.";
-            }
-
-            recordHistory(
-                    "SKILL",
-                    cleanName
-            );
-
-            return
-                    "تم تسجيل المهارة ✓\n\n"
-                            + cleanName;
+            return workspace.exists()
+                    && workspace.isDirectory()
+                    && backups.exists()
+                    && snapshots.exists()
+                    && history.exists();
 
         } catch (Exception e) {
 
-            return
-                    "فشل تسجيل المهارة:\n"
-                            + safeError(e);
+            return false;
         }
     }
 
@@ -1323,14 +1183,14 @@ public class SelfBuilderEngine {
 
     private synchronized void recordHistory(
             String type,
-            String details
+            String message
     ) {
 
         try {
 
-            JSONArray history =
+            JSONArray array =
                     new JSONArray(
-                            readText(historyFile)
+                            readText(history)
                     );
 
             JSONObject item =
@@ -1338,14 +1198,12 @@ public class SelfBuilderEngine {
 
             item.put(
                     "type",
-                    type
+                    safeText(type)
             );
 
             item.put(
-                    "details",
-                    details == null
-                            ? ""
-                            : details
+                    "message",
+                    safeText(message)
             );
 
             item.put(
@@ -1353,125 +1211,147 @@ public class SelfBuilderEngine {
                     now()
             );
 
-            history.put(item);
+            array.put(item);
 
-            while (history.length() > 500) {
-                history.remove(0);
+            while (
+                    array.length()
+                            > MAX_HISTORY
+            ) {
+
+                array.remove(0);
             }
 
-            writeText(
-                    historyFile,
-                    history.toString()
+            writeFile(
+                    history,
+                    array.toString()
             );
 
         } catch (Exception ignored) {
         }
     }
 
-    public String getBuildHistory() {
-
-        try {
-            return readText(historyFile);
-
-        } catch (Exception e) {
-
-            return
-                    "تعذر قراءة سجل التطوير.";
-        }
-    }
-
     // =========================================================
-    // STATUS
+    // BACKUP
     // =========================================================
 
-    public String getBuildStatus() {
+    private synchronized String createBackupAndReturn(
+            String path
+    ) {
 
         try {
 
-            String target =
-                    memoryManager.getMemory(
-                            "__builder_target__"
+            File source =
+                    safeFile(path);
+
+            if (!source.exists()) {
+                return "";
+            }
+
+            String id =
+                    new SimpleDateFormat(
+                            "yyyyMMdd_HHmmss_SSS",
+                            Locale.US
+                    ).format(
+                            new Date()
                     );
 
-            return
-                    "SELF BUILDER: ONLINE ✓\n"
-                            + "Workspace: READY ✓\n"
-                            + "Files: "
-                            + countProjectFiles()
-                            + "\n"
-                            + "Target: "
-                            + (
-                            isBlank(target)
-                                    ? "NONE"
-                                    : target
-                    )
-                            + "\n"
-                            + "Backup: READY ✓\n"
-                            + "Snapshot: READY ✓\n"
-                            + "Rollback: READY ✓\n"
-                            + "Code Editing: READY ✓\n"
-                            + "Text Patch: READY ✓\n"
-                            + "Evolution Transaction: READY ✓";
+            File target =
+                    new File(
+                            backups,
+                            id
+                                    + "_"
+                                    + source.getName()
+                    );
+
+            copyFile(
+                    source,
+                    target
+            );
+
+            recordHistory(
+                    "BACKUP_CREATED",
+                    path + " -> " + id
+            );
+
+            return id;
 
         } catch (Exception e) {
 
-            return
-                    "Self Builder: ERROR ⚠\n"
-                            + safeError(e);
+            return "";
         }
     }
 
-    public String getStatus() {
+    private void restoreBackup(
+            String path,
+            String backupId
+    ) {
 
-        return isHealthy()
-                ? "Self Builder Engine: ONLINE ✓"
-                : "Self Builder Engine: NEEDS ATTENTION ⚠";
-    }
-
-    public boolean isHealthy() {
+        if (isBlank(backupId)) {
+            return;
+        }
 
         try {
 
-            initializeWorkspace();
+            File source =
+                    safeFile(path);
 
-            if (!workspace.exists()) {
-                return false;
+            File backup =
+                    findBackup(
+                            backupId,
+                            source.getName()
+                    );
+
+            if (backup != null
+                    && backup.exists()) {
+
+                copyFile(
+                        backup,
+                        source
+                );
             }
 
-            if (!backups.exists()) {
-                return false;
-            }
-
-            if (!snapshots.exists()) {
-                return false;
-            }
-
-            if (!historyFile.exists()) {
-                return false;
-            }
-
-            memoryManager.getMemoryCount();
-            skillManager.getSkillCount();
-            capabilityManager.getCount();
-            taskManager.getTaskCount();
-
-            return true;
-
-        } catch (Exception e) {
-
-            return false;
+        } catch (Exception ignored) {
         }
     }
 
+    private File findBackup(
+            String id,
+            String name
+    ) {
+
+        File[] files =
+                backups.listFiles();
+
+        if (files == null) {
+            return null;
+        }
+
+        String prefix =
+                id + "_" + name;
+
+        for (File file : files) {
+
+            if (file.getName()
+                    .startsWith(prefix)) {
+
+                return file;
+            }
+        }
+
+        return null;
+    }
+
     // =========================================================
-    // PATH SECURITY
+    // FILE SAFETY
     // =========================================================
 
     private boolean validPath(
             String path
     ) {
 
-        if (isBlank(path)) {
+        if (path == null
+                || path.trim().isEmpty()) {
+
             return false;
         }
 
@@ -1482,15 +1362,10 @@ public class SelfBuilderEngine {
                                 '/'
                         );
 
-        if (clean.startsWith("/")) {
-            return false;
-        }
+        if (clean.startsWith("/")
+                || clean.contains("..")
+                || clean.contains("\0")) {
 
-        if (clean.contains("..")) {
-            return false;
-        }
-
-        if (clean.contains("\0")) {
             return false;
         }
 
@@ -1501,212 +1376,190 @@ public class SelfBuilderEngine {
             String path
     ) throws Exception {
 
-        String clean =
-                path.trim()
-                        .replace(
+        File root =
+                workspace.getCanonicalFile();
+
+        File target =
+                new File(
+                        root,
+                        path.replace(
                                 '\\',
                                 '/'
-                        );
+                        )
+                ).getCanonicalFile();
 
-        File file =
-                new File(
-                        workspace,
-                        clean
-                );
-
-        String root =
-                workspace.getCanonicalPath();
-
-        String target =
-                file.getCanonicalPath();
-
-        if (!target.equals(root)
-                && !target.startsWith(
-                root + File.separator
-        )) {
+        if (!target.getPath()
+                .startsWith(
+                        root.getPath()
+                )) {
 
             throw new SecurityException(
-                    "Path خارج Workspace"
+                    "Invalid workspace path"
             );
         }
 
-        return file;
-    }
-
-    // =========================================================
-    // FILE COLLECTION
-    // =========================================================
-
-    private List<File> collectFiles(
-            File root
-    ) {
-
-        List<File> result =
-                new ArrayList<>();
-
-        if (root == null ||
-                !root.exists()) {
-            return result;
-        }
-
-        File[] children =
-                root.listFiles();
-
-        if (children == null) {
-            return result;
-        }
-
-        for (File child : children) {
-
-            if (child.isDirectory()) {
-
-                result.addAll(
-                        collectFiles(child)
-                );
-
-            } else {
-
-                result.add(child);
-            }
-        }
-
-        return result;
-    }
-
-    private int countProjectFiles()
-            throws Exception {
-
-        int count = 0;
-
-        for (File file :
-                collectFiles(workspace)) {
-
-            if (!isInternalFile(file)) {
-                count++;
-            }
-        }
-
-        return count;
-    }
-
-    private boolean isInternalFile(
-            File file
-    ) {
-
-        String path =
-                file.getAbsolutePath();
-
-        return path.startsWith(
-                backups.getAbsolutePath()
-        )
-                || path.startsWith(
-                snapshots.getAbsolutePath()
-        )
-                || file.equals(historyFile);
-    }
-
-    private boolean isReadableTextFile(
-            File file
-    ) {
-
-        String name =
-                file.getName()
-                        .toLowerCase(Locale.ROOT);
-
-        return name.endsWith(".java")
-                || name.endsWith(".xml")
-                || name.endsWith(".gradle")
-                || name.endsWith(".kts")
-                || name.endsWith(".properties")
-                || name.endsWith(".json")
-                || name.endsWith(".txt")
-                || name.endsWith(".md")
-                || name.endsWith(".pro")
-                || name.equals("manifest")
-                || name.equals("settings.gradle")
-                || name.equals("build.gradle");
-    }
-
-    // =========================================================
-    // PATH HELPERS
-    // =========================================================
-
-    private String relativePath(
-            File file
-    ) {
-
-        return relativePathFrom(
-                workspace,
-                file
-        );
-    }
-
-    private String relativePathFrom(
-            File root,
-            File file
-    ) {
-
-        try {
-
-            String rootPath =
-                    root.getCanonicalPath();
-
-            String filePath =
-                    file.getCanonicalPath();
-
-            if (filePath.startsWith(
-                    rootPath
-            )) {
-
-                String value =
-                        filePath.substring(
-                                rootPath.length()
-                        );
-
-                while (
-                        value.startsWith(
-                                File.separator
-                        )
-                ) {
-
-                    value =
-                            value.substring(1);
-                }
-
-                return value;
-            }
-
-        } catch (Exception ignored) {
-        }
-
-        return file.getName();
-    }
-
-    // =========================================================
-    // COPY
-    // =========================================================
-
-    private void copyFile(
-            File source,
-            File destination
-    ) throws Exception {
-
         File parent =
-                destination.getParentFile();
+                target.getParentFile();
 
-        if (parent != null &&
-                !parent.exists()) {
+        if (parent != null
+                && !parent.exists()) {
 
             parent.mkdirs();
         }
 
-        try (
-                InputStream input =
-                        new FileInputStream(source);
+        return target;
+    }
 
-                OutputStream output =
-                        new FileOutputStream(destination)
-        ) {
+    // =========================================================
+    // FILE UTILITIES
+    // =========================================================
+
+    private void atomicWrite(
+            File file,
+            String content
+    ) throws Exception {
+
+        File parent =
+                file.getParentFile();
+
+        if (parent != null
+                && !parent.exists()) {
+
+            parent.mkdirs();
+        }
+
+        File temp =
+                new File(
+                        file.getAbsolutePath()
+                                + ".tmp"
+                );
+
+        writeFile(
+                temp,
+                content
+        );
+
+        if (file.exists()
+                && !file.delete()) {
+
+            temp.delete();
+
+            throw new Exception(
+                    "تعذر استبدال الملف"
+            );
+        }
+
+        if (!temp.renameTo(file)) {
+
+            temp.delete();
+
+            throw new Exception(
+                    "تعذر إتمام الكتابة"
+            );
+        }
+    }
+
+    private void writeFile(
+            File file,
+            String content
+    ) throws Exception {
+
+        File parent =
+                file.getParentFile();
+
+        if (parent != null
+                && !parent.exists()) {
+
+            parent.mkdirs();
+        }
+
+        FileOutputStream output =
+                new FileOutputStream(file);
+
+        try {
+
+            output.write(
+                    content.getBytes(
+                            StandardCharsets.UTF_8
+                    )
+            );
+
+            output.flush();
+
+        } finally {
+
+            output.close();
+        }
+    }
+
+    private String readText(
+            File file
+    ) throws Exception {
+
+        FileInputStream input =
+                new FileInputStream(file);
+
+        try {
+
+            byte[] data =
+                    new byte[
+                            (int) Math.min(
+                                    file.length(),
+                                    Integer.MAX_VALUE
+                            )
+                    ];
+
+            int offset = 0;
+            int read;
+
+            while (
+                    offset < data.length
+                            && (
+                            read = input.read(
+                                    data,
+                                    offset,
+                                    data.length - offset
+                            )
+                    ) > 0
+            ) {
+
+                offset += read;
+            }
+
+            return new String(
+                    data,
+                    0,
+                    offset,
+                    StandardCharsets.UTF_8
+            );
+
+        } finally {
+
+            input.close();
+        }
+    }
+
+    private void copyFile(
+            File source,
+            File target
+    ) throws Exception {
+
+        File parent =
+                target.getParentFile();
+
+        if (parent != null
+                && !parent.exists()) {
+
+            parent.mkdirs();
+        }
+
+        FileInputStream input =
+                new FileInputStream(source);
+
+        FileOutputStream output =
+                new FileOutputStream(target);
+
+        try {
 
             byte[] buffer =
                     new byte[8192];
@@ -1727,161 +1580,234 @@ public class SelfBuilderEngine {
             }
 
             output.flush();
-        }
-    }
-
-    // =========================================================
-    // ATOMIC WRITE
-    // =========================================================
-
-    private void atomicWrite(
-            File target,
-            String text
-    ) throws Exception {
-
-        File parent =
-                target.getParentFile();
-
-        if (parent != null &&
-                !parent.exists()) {
-
-            parent.mkdirs();
-        }
-
-        File temp =
-                new File(
-                        target.getAbsolutePath()
-                                + ".tmp"
-                );
-
-        writeText(
-                temp,
-                text
-        );
-
-        if (target.exists()
-                && !target.delete()) {
-
-            temp.delete();
-
-            throw new IllegalStateException(
-                    "تعذر استبدال الملف القديم"
-            );
-        }
-
-        if (!temp.renameTo(target)) {
-
-            temp.delete();
-
-            throw new IllegalStateException(
-                    "تعذر إتمام الكتابة الآمنة"
-            );
-        }
-    }
-
-    // =========================================================
-    // TEXT IO
-    // =========================================================
-
-    private String readText(
-            File file
-    ) throws Exception {
-
-        FileInputStream input =
-                new FileInputStream(file);
-
-        try {
-
-            byte[] data =
-                    new byte[
-                            (int) file.length()
-                    ];
-
-            int offset = 0;
-
-            int read;
-
-            while (
-                    offset < data.length
-                            && (read =
-                            input.read(
-                                    data,
-                                    offset,
-                                    data.length - offset
-                            )) > 0
-            ) {
-
-                offset += read;
-            }
-
-            return new String(
-                    data,
-                    0,
-                    offset,
-                    StandardCharsets.UTF_8
-            );
 
         } finally {
 
             input.close();
+            output.close();
         }
     }
 
-    private void writeText(
-            File file,
-            String text
+    private void copyDirectory(
+            File source,
+            File target,
+            File excludedRoot
     ) throws Exception {
 
-        File parent =
-                file.getParentFile();
-
-        if (parent != null &&
-                !parent.exists()) {
-
-            parent.mkdirs();
+        if (!source.exists()) {
+            return;
         }
 
-        FileOutputStream output =
-                new FileOutputStream(file);
+        if (source.equals(excludedRoot)) {
+            return;
+        }
+
+        if (source.isFile()) {
+
+            copyFile(
+                    source,
+                    target
+            );
+
+            return;
+        }
+
+        if (!target.exists()) {
+            target.mkdirs();
+        }
+
+        File[] children =
+                source.listFiles();
+
+        if (children == null) {
+            return;
+        }
+
+        for (File child : children) {
+
+            if (child.equals(excludedRoot)) {
+                continue;
+            }
+
+            if (child.equals(
+                    snapshots
+            )) {
+                continue;
+            }
+
+            if (child.equals(
+                    backups
+            )) {
+                continue;
+            }
+
+            if (child.equals(
+                    history
+            )) {
+                continue;
+            }
+
+            File destination =
+                    new File(
+                            target,
+                            child.getName()
+                    );
+
+            if (child.isDirectory()) {
+
+                copyDirectory(
+                        child,
+                        destination,
+                        excludedRoot
+                );
+
+            } else {
+
+                copyFile(
+                        child,
+                        destination
+                );
+            }
+        }
+    }
+
+    private List<File> collectFiles(
+            File root
+    ) {
+
+        List<File> result =
+                new ArrayList<>();
+
+        if (root == null
+                || !root.exists()) {
+
+            return result;
+        }
+
+        if (root.isFile()) {
+
+            result.add(root);
+
+            return result;
+        }
+
+        File[] children =
+                root.listFiles();
+
+        if (children == null) {
+            return result;
+        }
+
+        for (File child : children) {
+
+            if (child.equals(
+                    backups
+            )
+                    || child.equals(
+                    snapshots
+            )) {
+
+                continue;
+            }
+
+            if (child.isDirectory()) {
+
+                result.addAll(
+                        collectFiles(child)
+                );
+
+            } else {
+
+                result.add(child);
+            }
+        }
+
+        return result;
+    }
+
+    private boolean isReadableTextFile(
+            File file
+    ) {
+
+        if (file == null
+                || !file.isFile()) {
+
+            return false;
+        }
+
+        String name =
+                file.getName()
+                        .toLowerCase(
+                                Locale.ROOT
+                        );
+
+        return name.endsWith(".java")
+                || name.endsWith(".kt")
+                || name.endsWith(".xml")
+                || name.endsWith(".gradle")
+                || name.endsWith(".properties")
+                || name.endsWith(".json")
+                || name.endsWith(".txt")
+                || name.endsWith(".md");
+    }
+
+    private boolean isInside(
+            File file,
+            File directory
+    ) {
 
         try {
 
-            output.write(
-                    text.getBytes(
-                            StandardCharsets.UTF_8
-                    )
+            String child =
+                    file.getCanonicalPath();
+
+            String parent =
+                    directory.getCanonicalPath();
+
+            return child.startsWith(
+                    parent
+                            + File.separator
             );
 
-            output.flush();
+        } catch (Exception e) {
 
-        } finally {
+            return false;
+        }
+    }
 
-            output.close();
+    private String relativePath(
+            File file
+    ) {
+
+        try {
+
+            String root =
+                    workspace.getCanonicalPath();
+
+            String path =
+                    file.getCanonicalPath();
+
+            if (path.startsWith(
+                    root
+            )) {
+
+                return path.substring(
+                        root.length()
+                                + 1
+                );
+            }
+
+            return file.getName();
+
+        } catch (Exception e) {
+
+            return file.getName();
         }
     }
 
     // =========================================================
     // HASH
     // =========================================================
-
-    private String sha256(
-            String value
-    ) throws Exception {
-
-        MessageDigest digest =
-                MessageDigest.getInstance(
-                        "SHA-256"
-                );
-
-        byte[] bytes =
-                digest.digest(
-                        value.getBytes(
-                                StandardCharsets.UTF_8
-                        )
-                );
-
-        return bytesToHex(bytes);
-    }
 
     private String sha256File(
             File file
@@ -1892,14 +1818,26 @@ public class SelfBuilderEngine {
         );
     }
 
-    private String bytesToHex(
-            byte[] bytes
-    ) {
+    private String sha256(
+            String value
+    ) throws Exception {
+
+        MessageDigest digest =
+                MessageDigest.getInstance(
+                        "SHA-256"
+                );
+
+        byte[] hash =
+                digest.digest(
+                        value.getBytes(
+                                StandardCharsets.UTF_8
+                        )
+                );
 
         StringBuilder result =
                 new StringBuilder();
 
-        for (byte b : bytes) {
+        for (byte b : hash) {
 
             result.append(
                     String.format(
@@ -1914,49 +1852,86 @@ public class SelfBuilderEngine {
     }
 
     // =========================================================
-    // SNAPSHOT ID
+    // PLAN
     // =========================================================
 
-    private String snapshotIdFromResult(
-            String result
+    private void addPlanStep(
+            JSONArray array,
+            int number,
+            String name,
+            String description
     ) {
 
-        if (result == null) {
-            return "";
+        try {
+
+            JSONObject item =
+                    new JSONObject();
+
+            item.put(
+                    "step",
+                    number
+            );
+
+            item.put(
+                    "name",
+                    name
+            );
+
+            item.put(
+                    "description",
+                    description
+            );
+
+            array.put(item);
+
+        } catch (Exception ignored) {
         }
-
-        String marker =
-                "ID: ";
-
-        int index =
-                result.indexOf(marker);
-
-        if (index < 0) {
-            return "";
-        }
-
-        String value =
-                result.substring(
-                        index + marker.length()
-                );
-
-        int end =
-                value.indexOf("\n");
-
-        if (end >= 0) {
-            value =
-                    value.substring(
-                            0,
-                            end
-                    );
-        }
-
-        return value.trim();
     }
 
     // =========================================================
-    // SAFE TEXT
+    // SUCCESS
     // =========================================================
+
+    private boolean isEvolutionSuccess(
+            String result
+    ) {
+
+        if (isBlank(result)) {
+            return false;
+        }
+
+        String lower =
+                result.toLowerCase(
+                        Locale.ROOT
+                );
+
+        if (lower.contains("فشل")
+                || lower.contains("failed")
+                || lower.contains("error")
+                || lower.contains("مرفوض")) {
+
+            return false;
+        }
+
+        return lower.contains(
+                "evolution success"
+        )
+                || lower.contains(
+                "تعديل الكود ناجح"
+        );
+    }
+
+    // =========================================================
+    // TEXT HELPERS
+    // =========================================================
+
+    private boolean isBlank(
+            String value
+    ) {
+
+        return value == null
+                || value.trim().isEmpty();
+    }
 
     private String safeText(
             String value
@@ -1968,33 +1943,6 @@ public class SelfBuilderEngine {
 
         return value.trim();
     }
-
-    private boolean isBlank(
-            String value
-    ) {
-
-        return value == null
-                || value.trim().isEmpty();
-    }
-
-    // =========================================================
-    // TIME
-    // =========================================================
-
-    private String now() {
-
-        return
-                new SimpleDateFormat(
-                        "yyyy-MM-dd HH:mm:ss",
-                        Locale.getDefault()
-                ).format(
-                        new Date()
-                );
-    }
-
-    // =========================================================
-    // ERROR
-    // =========================================================
 
     private String safeError(
             Exception e
@@ -2014,5 +1962,15 @@ public class SelfBuilderEngine {
         }
 
         return message;
+    }
+
+    private String now() {
+
+        return new SimpleDateFormat(
+                "yyyy-MM-dd HH:mm:ss",
+                Locale.getDefault()
+        ).format(
+                new Date()
+        );
     }
 }
