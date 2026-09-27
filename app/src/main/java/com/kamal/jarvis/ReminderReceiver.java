@@ -25,17 +25,64 @@ public class ReminderReceiver extends BroadcastReceiver {
     private static final String CHANNEL_DESCRIPTION =
             "تنبيهات وتذكيرات JARVIS";
 
+    private static final String ACTION_DISMISSED =
+            "com.kamal.jarvis.REMINDER_DISMISSED";
+
     @Override
     public void onReceive(
             Context context,
             Intent intent
     ) {
 
-        if (context == null) {
+        if (context == null ||
+                intent == null) {
+
             return;
         }
 
         try {
+
+            String action =
+                    intent.getAction();
+
+            int reminderId =
+                    intent.getIntExtra(
+                            "reminder_id",
+                            generateFallbackId()
+                    );
+
+            /*
+             * إلا المستخدم مسح الإشعار:
+             * ما نعاودوش نظهروه.
+             */
+            if (ACTION_DISMISSED.equals(
+                    action
+            )) {
+
+                NotificationManager manager =
+                        (NotificationManager)
+                                context.getSystemService(
+                                        Context.NOTIFICATION_SERVICE
+                                );
+
+                if (manager != null) {
+
+                    manager.cancel(
+                            reminderId
+                    );
+                }
+
+                ReminderEngine engine =
+                        new ReminderEngine(
+                                context.getApplicationContext()
+                        );
+
+                engine.completeReminder(
+                        reminderId
+                );
+
+                return;
+            }
 
             String title =
                     intent.getStringExtra(
@@ -49,13 +96,8 @@ public class ReminderReceiver extends BroadcastReceiver {
                         "عندك تذكير من JARVIS";
             }
 
-            title = title.trim();
-
-            int reminderId =
-                    intent.getIntExtra(
-                            "reminder_id",
-                            generateFallbackId()
-                    );
+            title =
+                    title.trim();
 
             long reminderTime =
                     intent.getLongExtra(
@@ -63,6 +105,11 @@ public class ReminderReceiver extends BroadcastReceiver {
                             System.currentTimeMillis()
                     );
 
+            /*
+             * التذكير وصل للوقت ديالو.
+             * نخليوه يظهر فالإشعارات،
+             * ولكن نسجلوه كـ fired بعد العرض.
+             */
             showNotification(
                     context.getApplicationContext(),
                     title,
@@ -70,8 +117,17 @@ public class ReminderReceiver extends BroadcastReceiver {
                     reminderTime
             );
 
+            ReminderEngine engine =
+                    new ReminderEngine(
+                            context.getApplicationContext()
+                    );
+
+            engine.completeReminder(
+                    reminderId
+            );
+
         } catch (Exception ignored) {
-            // ما نخليوش BroadcastReceiver يطيح بسبب التذكير
+            // ما نخليوش BroadcastReceiver يطيح
         }
     }
 
@@ -102,7 +158,6 @@ public class ReminderReceiver extends BroadcastReceiver {
 
         /*
          * Android 13+
-         * خاص صلاحية الإشعارات تكون مفعلة.
          */
         if (Build.VERSION.SDK_INT >=
                 Build.VERSION_CODES.TIRAMISU) {
@@ -115,7 +170,13 @@ public class ReminderReceiver extends BroadcastReceiver {
             }
         }
 
-        createChannel(manager);
+        createChannel(
+                manager
+        );
+
+        // =====================================================
+        // OPEN JARVIS
+        // =====================================================
 
         Intent openIntent =
                 new Intent(
@@ -148,6 +209,10 @@ public class ReminderReceiver extends BroadcastReceiver {
                                 | PendingIntent.FLAG_IMMUTABLE
                 );
 
+        // =====================================================
+        // DISMISS
+        // =====================================================
+
         Intent deleteIntent =
                 new Intent(
                         context,
@@ -155,7 +220,7 @@ public class ReminderReceiver extends BroadcastReceiver {
                 );
 
         deleteIntent.setAction(
-                "com.kamal.jarvis.REMINDER_DISMISSED"
+                ACTION_DISMISSED
         );
 
         deleteIntent.putExtra(
@@ -171,6 +236,10 @@ public class ReminderReceiver extends BroadcastReceiver {
                         PendingIntent.FLAG_UPDATE_CURRENT
                                 | PendingIntent.FLAG_IMMUTABLE
                 );
+
+        // =====================================================
+        // BUILDER
+        // =====================================================
 
         Notification.Builder builder;
 
@@ -254,7 +323,7 @@ public class ReminderReceiver extends BroadcastReceiver {
     }
 
     // =========================================================
-    // NOTIFICATION CHANNEL
+    // CHANNEL
     // =========================================================
 
     private void createChannel(
@@ -289,7 +358,9 @@ public class ReminderReceiver extends BroadcastReceiver {
                 CHANNEL_DESCRIPTION
         );
 
-        channel.enableVibration(true);
+        channel.enableVibration(
+                true
+        );
 
         channel.setVibrationPattern(
                 new long[]{
