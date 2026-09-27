@@ -696,8 +696,7 @@ public class AutonomousEvolutionEngine {
                             path.trim(),
                             content == null
                                     ? ""
-                                    : content,
-                            cleanReason
+                                    : content
                     );
 
             saveMemory(
