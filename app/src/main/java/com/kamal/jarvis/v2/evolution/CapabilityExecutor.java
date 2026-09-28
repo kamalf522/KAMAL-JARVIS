@@ -13,17 +13,20 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Executes CapabilityPlan through the JARVIS runtime.
+ * Executes a CapabilityPlan through the JARVIS runtime.
  *
- * This class:
- * - validates execution conditions
- * - checks permissions
- * - checks owner authorization requirements
- * - resolves tools
- * - synchronizes tools with the runtime when necessary
- * - executes through JarvisRuntime
+ * Responsibilities:
+ * - Validate execution conditions.
+ * - Check required permissions.
+ * - Resolve usable tools.
+ * - Synchronize selected tools with JarvisRuntime.
+ * - Execute tools through JarvisRuntime.
  *
- * It does not build capabilities and does not modify security.
+ * This class does not:
+ * - Build capabilities.
+ * - Modify source code.
+ * - Modify owner security.
+ * - Bypass Android permissions.
  */
 public final class CapabilityExecutor {
 
@@ -34,8 +37,8 @@ public final class CapabilityExecutor {
     public CapabilityExecutor(
             JarvisRuntime runtime,
             ToolRegistry toolRegistry,
-            PermissionManager permissionManager
-    ) {
+            PermissionManager permissionManager) {
+
         if (runtime == null) {
             throw new IllegalArgumentException(
                     "JarvisRuntime cannot be null."
@@ -59,10 +62,13 @@ public final class CapabilityExecutor {
         this.permissionManager = permissionManager;
     }
 
+    /**
+     * Executes a capability plan.
+     */
     public JarvisResult<ToolContract.ToolOutput> execute(
             CapabilityPlan plan,
-            ToolContract.ToolInput input
-    ) {
+            ToolContract.ToolInput input) {
+
         if (plan == null) {
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
@@ -87,7 +93,7 @@ public final class CapabilityExecutor {
             case BUILD_CAPABILITY:
                 return failure(
                         JarvisError.Type.EVOLUTION_FAILED,
-                        "This capability must be handled by EvolutionCore."
+                        "Capability building must be handled by EvolutionCore."
                 );
 
             case UNAVAILABLE:
@@ -99,10 +105,13 @@ public final class CapabilityExecutor {
         }
     }
 
+    /**
+     * Executes the first usable tool from the plan.
+     */
     private JarvisResult<ToolContract.ToolOutput> executeTool(
             CapabilityPlan plan,
-            ToolContract.ToolInput input
-    ) {
+            ToolContract.ToolInput input) {
+
         if (input == null) {
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
@@ -110,6 +119,14 @@ public final class CapabilityExecutor {
             );
         }
 
+        /*
+         * Owner authorization is intentionally not silently
+         * bypassed here.
+         *
+         * A future higher-level controller must provide the
+         * authorization decision before executing owner-protected
+         * capabilities.
+         */
         if (plan.requiresOwnerAuthorization()) {
             return failure(
                     JarvisError.Type.NOT_AUTHORIZED,
@@ -147,43 +164,96 @@ public final class CapabilityExecutor {
 
             String normalizedId = toolId.trim();
 
+            /*
+             * ToolRegistry is the capability catalogue.
+             */
             ToolContract tool =
-                    toolRegistry.get(normalizedId);
+                    findTool(normalizedId);
 
             if (tool == null) {
+                lastError = JarvisError.of(
+                        JarvisError.Type.TOOL_UNAVAILABLE,
+                        "Tool not found: " + normalizedId,
+                        "CapabilityExecutor"
+                );
                 continue;
             }
 
             if (!tool.isAvailable()) {
-                continue;
-            }
-
-            if (tool.requiresOwnerAuthorization(input)) {
                 lastError = JarvisError.of(
-                        JarvisError.Type.NOT_AUTHORIZED,
-                        "Tool requires owner authorization.",
+                        JarvisError.Type.TOOL_UNAVAILABLE,
+                        "Tool is unavailable: " + normalizedId,
                         "CapabilityExecutor"
                 );
                 continue;
             }
 
             /*
-             * ToolRegistry and JarvisRuntime are intentionally
-             * separate components.
-             *
-             * Before execution we make sure the selected tool
-             * also exists inside the runtime.
+             * A tool may independently require owner authorization.
+             * The executor does not bypass that requirement.
              */
-            JarvisResult<ToolContract> runtimeTool =
+            if (tool.requiresOwnerAuthorization(input)) {
+                lastError = JarvisError.of(
+                        JarvisError.Type.NOT_AUTHORIZED,
+                        "Tool requires owner authorization: "
+                                + normalizedId,
+                        "CapabilityExecutor"
+                );
+                continue;
+            }
+
+            /*
+             * JarvisRuntime stores the actual executable tool.
+             *
+             * IMPORTANT:
+             * JarvisRuntime.getTool() returns ToolContract directly,
+             * not JarvisResult.
+             */
+            ToolContract runtimeTool =
                     runtime.getTool(normalizedId);
 
-            if (!runtimeTool.isSuccess()) {
+            if (runtimeTool == null) {
 
-                JarvisResult<Void> registration =
+                JarvisResult<Boolean> registration =
                         runtime.registerTool(tool);
 
                 if (!registration.isSuccess()) {
                     lastError = registration.getError();
+                    continue;
+                }
+
+            } else if (runtimeTool != tool) {
+
+                /*
+                 * Registry and runtime may contain different
+                 * instances under the same ID.
+                 *
+                 * Replace the runtime instance so execution uses
+                 * the current registry definition.
+                 */
+                JarvisResult<Boolean> replacement =
+                        runtime.replaceTool(tool);
+
+                if (!replacement.isSuccess()) {
+                    lastError = replacement.getError();
+                    continue;
+                }
+            }
+
+            /*
+             * Runtime must be running before execution.
+             *
+             * Starting it here is intentional: the executor is
+             * responsible for making the execution route usable,
+             * but it does not bypass any Android security boundary.
+             */
+            if (!runtime.isRunning()) {
+
+                JarvisResult<Boolean> startResult =
+                        runtime.start();
+
+                if (!startResult.isSuccess()) {
+                    lastError = startResult.getError();
                     continue;
                 }
             }
@@ -194,11 +264,13 @@ public final class CapabilityExecutor {
                             input
                     );
 
-            if (result.isSuccess()) {
+            if (result != null && result.isSuccess()) {
                 return result;
             }
 
-            lastError = result.getError();
+            if (result != null) {
+                lastError = result.getError();
+            }
         }
 
         if (lastError != null) {
@@ -212,9 +284,33 @@ public final class CapabilityExecutor {
         );
     }
 
+    /**
+     * Finds a tool in the registry.
+     */
+    private ToolContract findTool(String toolId) {
+
+        if (toolId == null ||
+                toolId.trim().isEmpty()) {
+            return null;
+        }
+
+        JarvisResult<ToolContract> result =
+                toolRegistry.get(toolId.trim());
+
+        if (result == null ||
+                !result.isSuccess()) {
+            return null;
+        }
+
+        return result.getData();
+    }
+
+    /**
+     * Returns missing permissions from a plan.
+     */
     public Set<CapabilityPermission> getMissingPermissions(
-            CapabilityPlan plan
-    ) {
+            CapabilityPlan plan) {
+
         if (plan == null) {
             return Collections.emptySet();
         }
@@ -226,12 +322,15 @@ public final class CapabilityExecutor {
             return Collections.emptySet();
         }
 
-        return missing;
+        return Collections.unmodifiableSet(missing);
     }
 
+    /**
+     * Checks whether a plan can currently execute.
+     */
     public boolean canExecute(
-            CapabilityPlan plan
-    ) {
+            CapabilityPlan plan) {
+
         if (plan == null ||
                 !plan.shouldExecute()) {
             return false;
@@ -265,28 +364,34 @@ public final class CapabilityExecutor {
             }
 
             ToolContract tool =
-                    toolRegistry.get(
-                            toolId.trim()
-                    );
+                    findTool(toolId.trim());
 
             if (tool == null ||
                     !tool.isAvailable()) {
                 continue;
             }
 
-            if (tool.requiresOwnerAuthorization(null)) {
-                continue;
-            }
-
+            /*
+             * We deliberately do not call
+             * requiresOwnerAuthorization(null) here because
+             * individual tools may legitimately expect real input.
+             *
+             * The definitive authorization check occurs during
+             * executeTool(), with the actual ToolInput.
+             */
             return true;
         }
 
         return false;
     }
 
+    /**
+     * Checks whether all permissions required by a plan
+     * are currently represented as granted.
+     */
     public boolean hasRequiredPermissions(
-            CapabilityPlan plan
-    ) {
+            CapabilityPlan plan) {
+
         if (plan == null) {
             return false;
         }
@@ -312,8 +417,8 @@ public final class CapabilityExecutor {
 
     private JarvisResult<ToolContract.ToolOutput> failure(
             JarvisError.Type type,
-            String message
-    ) {
+            String message) {
+
         return JarvisResult.failure(
                 JarvisError.of(
                         type,
@@ -324,10 +429,11 @@ public final class CapabilityExecutor {
     }
 
     private String buildPermissionMessage(
-            Set<CapabilityPermission> permissions
-    ) {
+            Set<CapabilityPermission> permissions) {
+
         if (permissions == null ||
                 permissions.isEmpty()) {
+
             return "Required permission is missing.";
         }
 
@@ -345,11 +451,11 @@ public final class CapabilityExecutor {
                 builder.append(", ");
             }
 
-            builder.append(
-                    permission == null
-                            ? "UNKNOWN"
-                            : permission.getId()
-            );
+            if (permission != null) {
+                builder.append(permission.getId());
+            } else {
+                builder.append("UNKNOWN");
+            }
 
             first = false;
         }
