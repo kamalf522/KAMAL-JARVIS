@@ -13,11 +13,17 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Executes a CapabilityPlan through registered JARVIS tools.
+ * Executes CapabilityPlan through the JARVIS runtime.
  *
- * This class is intentionally focused on execution.
- * It does not build capabilities, grant Android permissions,
- * or modify the security boundary.
+ * This class:
+ * - validates execution conditions
+ * - checks permissions
+ * - checks owner authorization requirements
+ * - resolves tools
+ * - synchronizes tools with the runtime when necessary
+ * - executes through JarvisRuntime
+ *
+ * It does not build capabilities and does not modify security.
  */
 public final class CapabilityExecutor {
 
@@ -53,19 +59,14 @@ public final class CapabilityExecutor {
         this.permissionManager = permissionManager;
     }
 
-    /**
-     * Executes the supplied plan.
-     */
     public JarvisResult<ToolContract.ToolOutput> execute(
             CapabilityPlan plan,
             ToolContract.ToolInput input
     ) {
         if (plan == null) {
-            return JarvisResult.failure(
-                    JarvisError.of(
-                            JarvisError.Type.INVALID_REQUEST,
-                            "Capability plan cannot be null."
-                    )
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "Capability plan cannot be null."
             );
         }
 
@@ -76,47 +77,43 @@ public final class CapabilityExecutor {
                 return executeTool(plan, input);
 
             case REQUEST_PERMISSION:
-                return JarvisResult.failure(
-                        JarvisError.of(
-                                JarvisError.Type.NOT_AUTHORIZED,
-                                buildPermissionMessage(
-                                        plan.getMissingPermissions()
-                                )
+                return failure(
+                        JarvisError.Type.NOT_AUTHORIZED,
+                        buildPermissionMessage(
+                                plan.getMissingPermissions()
                         )
                 );
 
             case BUILD_CAPABILITY:
-                return JarvisResult.failure(
-                        JarvisError.of(
-                                JarvisError.Type.EVOLUTION_FAILED,
-                                "Capability must be handled by the evolution system."
-                        )
+                return failure(
+                        JarvisError.Type.EVOLUTION_FAILED,
+                        "This capability must be handled by EvolutionCore."
                 );
 
             case UNAVAILABLE:
             default:
-                return JarvisResult.failure(
-                        JarvisError.of(
-                                JarvisError.Type.TOOL_UNAVAILABLE,
-                                plan.getReason()
-                        )
+                return failure(
+                        JarvisError.Type.TOOL_UNAVAILABLE,
+                        plan.getReason()
                 );
         }
     }
 
-    /**
-     * Executes the first usable tool from the plan.
-     */
     private JarvisResult<ToolContract.ToolOutput> executeTool(
             CapabilityPlan plan,
             ToolContract.ToolInput input
     ) {
+        if (input == null) {
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "Tool input cannot be null."
+            );
+        }
+
         if (plan.requiresOwnerAuthorization()) {
-            return JarvisResult.failure(
-                    JarvisError.of(
-                            JarvisError.Type.NOT_AUTHORIZED,
-                            "Owner authorization is required."
-                    )
+            return failure(
+                    JarvisError.Type.NOT_AUTHORIZED,
+                    "Owner authorization is required."
             );
         }
 
@@ -124,73 +121,97 @@ public final class CapabilityExecutor {
                 plan.getMissingPermissions();
 
         if (missing != null && !missing.isEmpty()) {
-            return JarvisResult.failure(
-                    JarvisError.of(
-                            JarvisError.Type.NOT_AUTHORIZED,
-                            buildPermissionMessage(missing)
-                    )
+            return failure(
+                    JarvisError.Type.NOT_AUTHORIZED,
+                    buildPermissionMessage(missing)
             );
         }
 
         List<String> toolIds = plan.getToolIds();
 
         if (toolIds == null || toolIds.isEmpty()) {
-            return JarvisResult.failure(
-                    JarvisError.of(
-                            JarvisError.Type.TOOL_UNAVAILABLE,
-                            "No tool is available for this capability."
-                    )
+            return failure(
+                    JarvisError.Type.TOOL_UNAVAILABLE,
+                    "No tool is available for this capability."
             );
         }
 
+        JarvisError lastError = null;
+
         for (String toolId : toolIds) {
 
-            if (toolId == null || toolId.trim().isEmpty()) {
+            if (toolId == null ||
+                    toolId.trim().isEmpty()) {
                 continue;
             }
 
-            ToolContract tool = toolRegistry.get(toolId.trim());
+            String normalizedId = toolId.trim();
 
-            if (tool == null || !tool.isAvailable()) {
+            ToolContract tool =
+                    toolRegistry.get(normalizedId);
+
+            if (tool == null) {
+                continue;
+            }
+
+            if (!tool.isAvailable()) {
                 continue;
             }
 
             if (tool.requiresOwnerAuthorization(input)) {
-                return JarvisResult.failure(
-                        JarvisError.of(
-                                JarvisError.Type.NOT_AUTHORIZED,
-                                "Tool requires owner authorization."
-                        )
+                lastError = JarvisError.of(
+                        JarvisError.Type.NOT_AUTHORIZED,
+                        "Tool requires owner authorization.",
+                        "CapabilityExecutor"
                 );
+                continue;
             }
 
-            try {
-                return runtime.executeTool(
-                        tool.getId(),
-                        input
-                );
+            /*
+             * ToolRegistry and JarvisRuntime are intentionally
+             * separate components.
+             *
+             * Before execution we make sure the selected tool
+             * also exists inside the runtime.
+             */
+            JarvisResult<ToolContract> runtimeTool =
+                    runtime.getTool(normalizedId);
 
-            } catch (Exception exception) {
-                return JarvisResult.failure(
-                        JarvisError.fromException(
-                                JarvisError.Type.EXECUTION_FAILED,
-                                exception
-                        )
-                );
+            if (!runtimeTool.isSuccess()) {
+
+                JarvisResult<Void> registration =
+                        runtime.registerTool(tool);
+
+                if (!registration.isSuccess()) {
+                    lastError = registration.getError();
+                    continue;
+                }
             }
+
+            JarvisResult<ToolContract.ToolOutput> result =
+                    runtime.execute(
+                            normalizedId,
+                            input
+                    );
+
+            if (result.isSuccess()) {
+                return result;
+            }
+
+            lastError = result.getError();
         }
 
-        return JarvisResult.failure(
-                JarvisError.of(
-                        JarvisError.Type.TOOL_UNAVAILABLE,
-                        "No usable tool was found."
-                )
+        if (lastError != null) {
+            return JarvisResult.failure(lastError);
+        }
+
+        return failure(
+                JarvisError.Type.TOOL_UNAVAILABLE,
+                "No usable tool was found for capability: "
+                        + plan.getCapabilityId()
         );
     }
 
-    /**
-     * Returns permissions that the current plan still needs.
-     */
     public Set<CapabilityPermission> getMissingPermissions(
             CapabilityPlan plan
     ) {
@@ -198,17 +219,21 @@ public final class CapabilityExecutor {
             return Collections.emptySet();
         }
 
-        return plan.getMissingPermissions();
+        Set<CapabilityPermission> missing =
+                plan.getMissingPermissions();
+
+        if (missing == null) {
+            return Collections.emptySet();
+        }
+
+        return missing;
     }
 
-    /**
-     * Checks whether the plan has the basic conditions
-     * required for immediate execution.
-     */
     public boolean canExecute(
             CapabilityPlan plan
     ) {
-        if (plan == null || !plan.shouldExecute()) {
+        if (plan == null ||
+                !plan.shouldExecute()) {
             return false;
         }
 
@@ -219,40 +244,46 @@ public final class CapabilityExecutor {
         Set<CapabilityPermission> missing =
                 plan.getMissingPermissions();
 
-        if (missing != null && !missing.isEmpty()) {
+        if (missing != null &&
+                !missing.isEmpty()) {
             return false;
         }
 
-        List<String> toolIds = plan.getToolIds();
+        List<String> toolIds =
+                plan.getToolIds();
 
-        if (toolIds == null || toolIds.isEmpty()) {
+        if (toolIds == null ||
+                toolIds.isEmpty()) {
             return false;
         }
 
         for (String toolId : toolIds) {
 
-            if (toolId == null || toolId.trim().isEmpty()) {
+            if (toolId == null ||
+                    toolId.trim().isEmpty()) {
                 continue;
             }
 
             ToolContract tool =
-                    toolRegistry.get(toolId.trim());
+                    toolRegistry.get(
+                            toolId.trim()
+                    );
 
-            if (tool != null && tool.isAvailable()) {
-
-                if (!tool.requiresOwnerAuthorization(null)) {
-                    return true;
-                }
+            if (tool == null ||
+                    !tool.isAvailable()) {
+                continue;
             }
+
+            if (tool.requiresOwnerAuthorization(null)) {
+                continue;
+            }
+
+            return true;
         }
 
         return false;
     }
 
-    /**
-     * Checks whether at least one required permission
-     * is actually granted in the internal permission state.
-     */
     public boolean hasRequiredPermissions(
             CapabilityPlan plan
     ) {
@@ -263,36 +294,66 @@ public final class CapabilityExecutor {
         Set<CapabilityPermission> missing =
                 plan.getMissingPermissions();
 
-        return missing == null || missing.isEmpty();
+        return missing == null ||
+                missing.isEmpty();
+    }
+
+    public PermissionManager getPermissionManager() {
+        return permissionManager;
+    }
+
+    public JarvisRuntime getRuntime() {
+        return runtime;
+    }
+
+    public ToolRegistry getToolRegistry() {
+        return toolRegistry;
+    }
+
+    private JarvisResult<ToolContract.ToolOutput> failure(
+            JarvisError.Type type,
+            String message
+    ) {
+        return JarvisResult.failure(
+                JarvisError.of(
+                        type,
+                        message,
+                        "CapabilityExecutor"
+                )
+        );
     }
 
     private String buildPermissionMessage(
             Set<CapabilityPermission> permissions
     ) {
-        if (permissions == null || permissions.isEmpty()) {
-            return "Additional authorization or capability is required.";
+        if (permissions == null ||
+                permissions.isEmpty()) {
+            return "Required permission is missing.";
         }
 
-        StringBuilder message = new StringBuilder(
-                "Missing capabilities: "
-        );
+        StringBuilder builder =
+                new StringBuilder(
+                        "Required permissions are missing: "
+                );
 
         boolean first = true;
 
-        for (CapabilityPermission permission : permissions) {
-
-            if (permission == null) {
-                continue;
-            }
+        for (CapabilityPermission permission :
+                permissions) {
 
             if (!first) {
-                message.append(", ");
+                builder.append(", ");
             }
 
-            message.append(permission.getId());
+            builder.append(
+                    permission == null
+                            ? "UNKNOWN"
+                            : permission.getId()
+            );
+
             first = false;
         }
 
-        return message.toString();
+        return builder.toString();
     }
 }
