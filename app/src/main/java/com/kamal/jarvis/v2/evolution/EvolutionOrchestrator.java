@@ -4,6 +4,7 @@ import com.kamal.jarvis.v2.core.JarvisError;
 import com.kamal.jarvis.v2.core.JarvisResult;
 import com.kamal.jarvis.v2.security.OwnerSecurityBoundary;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -11,54 +12,116 @@ import java.util.List;
 /**
  * JARVIS V2 - Evolution Orchestrator
  *
- * مسؤول عن تشغيل دورة التطور كاملة:
+ * المنسق الرئيسي لدورة التطور.
  *
- * CapabilitySpec
- *      ↓
- * Preflight
- *      ↓
- * SelfBuilder
- *      ↓
- * SelfTestEngine
- *      ↓
- * SUCCESS ─────────────→ READY
- *      ↓
- * FAILURE
- *      ↓
- * RecoveryEngine
- *      ↓
- * RECOVERED / FAILED
+ * الدورة:
  *
- * هذا المكون لا يتجاوز Android Security،
- * ولا يعدل OwnerSecurityBoundary،
- * ولا يدعي تثبيت APK إذا لم يحدث ذلك فعلياً.
+ * 1. Preflight
+ * 2. SelfBuilder
+ * 3. CodeEvolutionEngine
+ * 4. BuildEngine
+ * 5. EvolutionVerificationEngine
+ * 6. SelfTestEngine
+ * 7. RecoveryEngine عند الفشل
+ * 8. حفظ نتيجة الدورة
+ *
+ * الهدف:
+ *
+ * JARVIS لا يقول "تطورت" فقط لأن ملفاً تم إنشاؤه.
+ *
+ * التطور الناجح يحتاج إلى دليل مناسب:
+ *
+ * - الملفات موجودة
+ * - الكود/الملفات تم تعديلها
+ * - Build نجح إذا كان مطلوباً
+ * - APK موجود إذا كان Build مطلوباً
+ * - Verification نجح
+ * - SelfTest نجح
+ *
+ * Security Boundary منفصل عن Evolution.
+ * Evolution لا يستطيع تعديل Owner/Security.
  */
 public final class EvolutionOrchestrator {
 
-    private static final String ORCHESTRATOR_ID =
+    private static final String ENGINE_ID =
             "v2.evolution_orchestrator";
 
-    private static final int MAX_HISTORY = 100;
-
+    private final OwnerSecurityBoundary securityBoundary;
     private final SelfBuilder selfBuilder;
     private final SelfTestEngine selfTestEngine;
     private final RecoveryEngine recoveryEngine;
-    private final OwnerSecurityBoundary securityBoundary;
+
+    private final CodeEvolutionEngine codeEvolutionEngine;
+    private final BuildEngine buildEngine;
+    private final EvolutionVerificationEngine verificationEngine;
 
     private final List<EvolutionRecord> history =
             new ArrayList<>();
 
-    private volatile EvolutionRecord lastRecord;
-
     private volatile EvolutionState state =
             EvolutionState.IDLE;
 
+    private volatile EvolutionRecord lastRecord;
+
+    private volatile boolean busy;
+
+    /**
+     * Constructor القديم/compatibility.
+     *
+     * يبقى موجوداً باش ما نكسرش أي ملف قديم
+     * مازال كيستعمل الـ4 dependencies الأساسية.
+     *
+     * إذا استعمل هذا constructor، المحرك سيستعمل
+     * دورة التحقق المتاحة بدون CodeEvolution/Build
+     * الخارجيين.
+     */
     public EvolutionOrchestrator(
+            OwnerSecurityBoundary securityBoundary,
+            SelfBuilder selfBuilder,
+            SelfTestEngine selfTestEngine,
+            RecoveryEngine recoveryEngine
+    ) {
+
+        this(
+                securityBoundary,
+                selfBuilder,
+                selfTestEngine,
+                recoveryEngine,
+                createCodeEvolutionEngine(
+                        selfBuilder,
+                        securityBoundary
+                ),
+                createBuildEngine(
+                        selfBuilder,
+                        securityBoundary
+                ),
+                createVerificationEngine(
+                        selfBuilder,
+                        securityBoundary
+                )
+        );
+    }
+
+    /**
+     * Constructor الكامل.
+     *
+     * هذا هو constructor المستهدف للمعمارية الجديدة.
+     */
+    public EvolutionOrchestrator(
+            OwnerSecurityBoundary securityBoundary,
             SelfBuilder selfBuilder,
             SelfTestEngine selfTestEngine,
             RecoveryEngine recoveryEngine,
-            OwnerSecurityBoundary securityBoundary
+            CodeEvolutionEngine codeEvolutionEngine,
+            BuildEngine buildEngine,
+            EvolutionVerificationEngine verificationEngine
     ) {
+
+        if (securityBoundary == null) {
+            throw new IllegalArgumentException(
+                    "securityBoundary cannot be null."
+            );
+        }
 
         if (selfBuilder == null) {
             throw new IllegalArgumentException(
@@ -78,387 +141,738 @@ public final class EvolutionOrchestrator {
             );
         }
 
-        if (securityBoundary == null) {
+        if (codeEvolutionEngine == null) {
             throw new IllegalArgumentException(
-                    "securityBoundary cannot be null."
+                    "codeEvolutionEngine cannot be null."
             );
         }
 
-        this.selfBuilder = selfBuilder;
-        this.selfTestEngine = selfTestEngine;
-        this.recoveryEngine = recoveryEngine;
-        this.securityBoundary = securityBoundary;
+        if (buildEngine == null) {
+            throw new IllegalArgumentException(
+                    "buildEngine cannot be null."
+            );
+        }
+
+        if (verificationEngine == null) {
+            throw new IllegalArgumentException(
+                    "verificationEngine cannot be null."
+            );
+        }
+
+        this.securityBoundary =
+                securityBoundary;
+
+        this.selfBuilder =
+                selfBuilder;
+
+        this.selfTestEngine =
+                selfTestEngine;
+
+        this.recoveryEngine =
+                recoveryEngine;
+
+        this.codeEvolutionEngine =
+                codeEvolutionEngine;
+
+        this.buildEngine =
+                buildEngine;
+
+        this.verificationEngine =
+                verificationEngine;
     }
 
     /**
-     * يشغل دورة Evolution كاملة.
+     * دورة التطور الكاملة.
      */
-    public synchronized JarvisResult<EvolutionRecord> evolve(
+    public synchronized JarvisResult<EvolutionRecord>
+    evolve(
             CapabilitySpec spec
     ) {
+
+        if (busy) {
+
+            return failure(
+                    JarvisError.Type.EVOLUTION_FAILED,
+                    "Another evolution cycle is already running."
+            );
+        }
+
+        busy = true;
 
         long startedAt =
                 System.currentTimeMillis();
 
-        if (spec == null) {
+        BuildResultHolder buildHolder =
+                new BuildResultHolder();
 
-            state = EvolutionState.FAILED;
+        try {
 
-            return failure(
-                    "CapabilitySpec cannot be null.",
-                    JarvisError.Type.INVALID_REQUEST,
-                    startedAt
-            );
-        }
+            state =
+                    EvolutionState.PREFLIGHT;
 
-        /*
-         * Preflight قبل أي عملية بناء.
-         */
-        JarvisResult<PreflightResult> preflightResult =
-                preflight(spec);
+            JarvisResult<PreflightResult>
+                    preflight =
+                    preflight(
+                            spec
+                    );
 
-        if (!preflightResult.isSuccess()) {
+            if (preflight == null ||
+                    !preflight.isSuccess()) {
 
-            state = EvolutionState.FAILED;
-
-            return failureFromError(
-                    preflightResult.getError(),
-                    preflightResult.getMessage(),
-                    spec.getCapabilityId(),
-                    startedAt
-            );
-        }
-
-        PreflightResult preflight =
-                preflightResult.getData();
-
-        if (preflight == null
-                || !preflight.isReady()) {
-
-            state = EvolutionState.FAILED;
-
-            String message =
-                    preflight == null
-                            ? "Evolution preflight failed."
-                            : preflight.buildProblemMessage();
-
-            return failure(
-                    message,
-                    JarvisError.Type.VALIDATION_FAILED,
-                    startedAt
-            );
-        }
-
-        /*
-         * المرحلة 1:
-         * تجهيز Builder.
-         */
-        state = EvolutionState.INITIALIZING;
-
-        JarvisResult<Boolean> initialization =
-                selfBuilder.initialize();
-
-        if (!initialization.isSuccess()) {
-
-            state = EvolutionState.FAILED;
-
-            return failureFromError(
-                    initialization.getError(),
-                    initialization.getMessage(),
-                    spec.getCapabilityId(),
-                    startedAt
-            );
-        }
-
-        /*
-         * المرحلة 2:
-         * Build.
-         */
-        state = EvolutionState.BUILDING;
-
-        JarvisResult<SelfBuilder.BuildResult> buildResult =
-                selfBuilder.build(spec);
-
-        if (!buildResult.isSuccess()) {
-
-            state = EvolutionState.FAILED;
-
-            return failureFromError(
-                    buildResult.getError(),
-                    buildResult.getMessage(),
-                    spec.getCapabilityId(),
-                    startedAt
-            );
-        }
-
-        SelfBuilder.BuildResult artifact =
-                buildResult.getData();
-
-        if (artifact == null) {
-
-            state = EvolutionState.FAILED;
-
-            return failure(
-                    "SelfBuilder returned an empty build result.",
-                    JarvisError.Type.BUILD_FAILED,
-                    startedAt
-            );
-        }
-
-        /*
-         * المرحلة 3:
-         * Self Test.
-         */
-        state = EvolutionState.TESTING;
-
-        JarvisResult<SelfTestEngine.TestReport> testResult =
-                selfTestEngine.test(
+                return finishFailure(
                         spec,
-                        artifact
+                        EvolutionOutcome.PREFLIGHT_FAILED,
+                        preflight == null
+                                ? "Preflight returned no result."
+                                : preflight.getMessage(),
+                        startedAt,
+                        null,
+                        null,
+                        null
                 );
+            }
 
-        SelfTestEngine.TestReport report =
-                testResult.getData();
+            /*
+             * -----------------------------------------
+             * 1. SelfBuilder
+             * -----------------------------------------
+             */
+            state =
+                    EvolutionState.BUILDING_CAPABILITY;
 
-        /*
-         * SUCCESS
-         */
-        if (testResult.isSuccess()
-                && report != null
-                && report.isPassed()) {
+            JarvisResult<SelfBuilder.BuildResult>
+                    builderResult =
+                    selfBuilder.build(
+                            spec
+                    );
 
-            state = EvolutionState.READY;
+            if (builderResult == null ||
+                    !builderResult.isSuccess()) {
+
+                return finishFailure(
+                        spec,
+                        EvolutionOutcome.BUILD_FAILED,
+                        builderResult == null
+                                ? "SelfBuilder returned no result."
+                                : builderResult.getMessage(),
+                        startedAt,
+                        null,
+                        null,
+                        null
+                );
+            }
+
+            SelfBuilder.BuildResult
+                    built =
+                    builderResult.getData();
+
+            /*
+             * -----------------------------------------
+             * 2. Verification of generated artifacts
+             * -----------------------------------------
+             */
+            state =
+                    EvolutionState.VERIFYING_ARTIFACTS;
+
+            JarvisResult<
+                    EvolutionVerificationEngine.VerificationReport
+                    > artifactVerification =
+                    verificationEngine.verify(
+                            spec,
+                            built
+                    );
+
+            if (artifactVerification == null ||
+                    !artifactVerification.isSuccess()) {
+
+                return recoverAfterFailure(
+                        spec,
+                        built,
+                        null,
+                        EvolutionOutcome.VERIFICATION_FAILED,
+                        artifactVerification == null
+                                ? "Artifact verification returned no result."
+                                : artifactVerification.getMessage(),
+                        startedAt
+                );
+            }
+
+            /*
+             * -----------------------------------------
+             * 3. Build حقيقي إذا كان مطلوباً
+             * -----------------------------------------
+             */
+            if (spec.requiresBuild()) {
+
+                state =
+                        EvolutionState.BUILDING_PROJECT;
+
+                JarvisResult<BuildEngine.BuildRecord>
+                        buildResult =
+                        buildEngine.buildDebug();
+
+                if (buildResult == null ||
+                        !buildResult.isSuccess()) {
+
+                    return recoverAfterFailure(
+                            spec,
+                            built,
+                            null,
+                            EvolutionOutcome.BUILD_FAILED,
+                            buildResult == null
+                                    ? "BuildEngine returned no result."
+                                    : buildResult.getMessage(),
+                            startedAt
+                    );
+                }
+
+                BuildEngine.BuildRecord
+                        buildRecord =
+                        buildResult.getData();
+
+                buildHolder.record =
+                        buildRecord;
+
+                /*
+                 * -------------------------------------
+                 * 4. Final verification مع Build evidence
+                 * -------------------------------------
+                 */
+                state =
+                        EvolutionState.VERIFYING_BUILD;
+
+                JarvisResult<
+                        EvolutionVerificationEngine.VerificationReport
+                        > finalVerification =
+                        verificationEngine.verifyWithBuild(
+                                spec,
+                                built,
+                                buildRecord
+                        );
+
+                if (finalVerification == null ||
+                        !finalVerification.isSuccess()) {
+
+                    return recoverAfterFailure(
+                            spec,
+                            built,
+                            buildRecord,
+                            EvolutionOutcome.VERIFICATION_FAILED,
+                            finalVerification == null
+                                    ? "Final verification returned no result."
+                                    : finalVerification.getMessage(),
+                            startedAt
+                    );
+                }
+            }
+
+            /*
+             * -----------------------------------------
+             * 5. SelfTest
+             * -----------------------------------------
+             */
+            if (spec.requiresTests()) {
+
+                state =
+                        EvolutionState.TESTING;
+
+                JarvisResult<SelfTestEngine.TestReport>
+                        testResult =
+                        selfTestEngine.test(
+                                spec,
+                                built
+                        );
+
+                if (testResult == null ||
+                        !testResult.isSuccess()) {
+
+                    return recoverAfterFailure(
+                            spec,
+                            built,
+                            buildHolder.record,
+                            EvolutionOutcome.TEST_FAILED,
+                            testResult == null
+                                    ? "SelfTestEngine returned no result."
+                                    : testResult.getMessage(),
+                            startedAt
+                    );
+                }
+
+                SelfTestEngine.TestReport
+                        testReport =
+                        testResult.getData();
+
+                if (testReport == null ||
+                        !testReport.isPassed()) {
+
+                    return recoverAfterFailure(
+                            spec,
+                            built,
+                            buildHolder.record,
+                            EvolutionOutcome.TEST_FAILED,
+                            testReport == null
+                                    ? "SelfTest did not produce a passing report."
+                                    : testReport.getSummary(),
+                            startedAt
+                    );
+                }
+            }
+
+            /*
+             * -----------------------------------------
+             * 6. نجاح كامل
+             * -----------------------------------------
+             */
+            state =
+                    EvolutionState.READY;
 
             EvolutionRecord record =
                     new EvolutionRecord(
                             spec.getCapabilityId(),
-                            EvolutionOutcome.READY,
-                            artifact,
-                            report,
-                            null,
-                            "Capability built and passed self-test.",
+                            EvolutionOutcome.SUCCESS,
+                            "Evolution completed successfully.",
                             startedAt,
-                            System.currentTimeMillis()
+                            System.currentTimeMillis(),
+                            built,
+                            buildHolder.record,
+                            null
                     );
 
-            saveRecord(record);
+            saveRecord(
+                    record
+            );
+
+            state =
+                    EvolutionState.COMPLETED;
 
             return JarvisResult.success(
                     record,
                     record.getMessage()
             );
-        }
 
-        /*
-         * TEST FAILURE
-         *
-         * حتى إذا test() نفسها فشلت وما رجعاتش Report،
-         * Recovery يبقى قادر يتعامل مع null.
-         */
-        state = EvolutionState.RECOVERING;
+        } catch (Exception e) {
 
-        JarvisResult<RecoveryEngine.RecoveryRecord>
-                recoveryResult =
-                recoveryEngine.recover(
-                        spec,
-                        artifact,
-                        report
-                );
-
-        RecoveryEngine.RecoveryRecord recovery =
-                recoveryResult.getData();
-
-        /*
-         * Recovery نجح.
-         */
-        if (recoveryResult.isSuccess()
-                && recovery != null
-                && recovery.isSuccessful()) {
-
-            state = EvolutionState.RECOVERED;
+            state =
+                    EvolutionState.FAILED;
 
             EvolutionRecord record =
                     new EvolutionRecord(
-                            spec.getCapabilityId(),
-                            EvolutionOutcome.RECOVERED,
-                            artifact,
-                            report,
-                            recovery,
-                            "Self-test failed and the capability was safely recovered.",
+                            spec == null
+                                    ? ""
+                                    : spec.getCapabilityId(),
+                            EvolutionOutcome.INTERNAL_ERROR,
+                            "Evolution crashed: "
+                                    + e.getMessage(),
                             startedAt,
-                            System.currentTimeMillis()
+                            System.currentTimeMillis(),
+                            null,
+                            buildHolder.record,
+                            e
                     );
 
-            saveRecord(record);
+            saveRecord(
+                    record
+            );
 
             return JarvisResult.failure(
-                    JarvisError.of(
-                            JarvisError.Type.TEST_FAILED,
+                    JarvisError.fromException(
+                            JarvisError.Type.EVOLUTION_FAILED,
                             record.getMessage(),
-                            ORCHESTRATOR_ID
+                            ENGINE_ID,
+                            e
                     )
             );
+
+        } finally {
+
+            busy =
+                    false;
         }
-
-        /*
-         * Recovery نفسه فشل.
-         */
-        state = EvolutionState.RECOVERY_FAILED;
-
-        String recoveryMessage;
-
-        if (recoveryResult.getError() != null) {
-
-            recoveryMessage =
-                    recoveryResult.getError()
-                            .getMessage();
-
-        } else {
-
-            recoveryMessage =
-                    "Self-test failed and recovery also failed.";
-        }
-
-        EvolutionRecord record =
-                new EvolutionRecord(
-                        spec.getCapabilityId(),
-                        EvolutionOutcome.RECOVERY_FAILED,
-                        artifact,
-                        report,
-                        recovery,
-                        recoveryMessage,
-                        startedAt,
-                        System.currentTimeMillis()
-                );
-
-        saveRecord(record);
-
-        return JarvisResult.failure(
-                JarvisError.of(
-                        JarvisError.Type.RECOVERY_FAILED,
-                        record.getMessage(),
-                        ORCHESTRATOR_ID
-                )
-        );
     }
 
     /**
-     * فحص مسبق قبل Evolution.
+     * Preflight قوي قبل أي تغيير.
      */
-    public synchronized JarvisResult<PreflightResult> preflight(
+    public synchronized JarvisResult<PreflightResult>
+    preflight(
             CapabilitySpec spec
     ) {
 
         if (spec == null) {
 
-            return JarvisResult.failure(
-                    JarvisError.of(
-                            JarvisError.Type.INVALID_REQUEST,
-                            "CapabilitySpec cannot be null.",
-                            ORCHESTRATOR_ID
-                    )
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "CapabilitySpec cannot be null."
             );
         }
 
-        List<String> problems =
-                new ArrayList<>();
+        if (!spec.isValid()) {
 
-        if (spec.getCapabilityId() == null
-                || spec.getCapabilityId()
-                .trim()
-                .isEmpty()) {
-
-            problems.add(
-                    "Capability ID is missing."
+            return failure(
+                    JarvisError.Type.VALIDATION_FAILED,
+                    "Capability specification is invalid."
             );
         }
 
-        if (spec.getName() == null
-                || spec.getName()
-                .trim()
-                .isEmpty()) {
+        if (!securityBoundary.isActive()) {
 
-            problems.add(
-                    "Capability name is missing."
+            return failure(
+                    JarvisError.Type.NOT_AUTHORIZED,
+                    "Owner security boundary is not active."
             );
         }
 
-        if (spec.getGoal() == null
-                || spec.getGoal()
-                .trim()
-                .isEmpty()) {
+        String capabilityId =
+                spec.getCapabilityId();
 
-            problems.add(
-                    "Capability goal is missing."
+        if (capabilityId == null ||
+                capabilityId.trim().isEmpty()) {
+
+            return failure(
+                    JarvisError.Type.VALIDATION_FAILED,
+                    "Capability ID cannot be empty."
             );
         }
 
-        if (spec.getSuccessCriteria() == null
-                || spec.getSuccessCriteria().isEmpty()) {
-
-            problems.add(
-                    "Success criteria are missing."
-            );
-        }
-
-        /*
-         * إذا كانت capability كتحتاج Owner Authorization،
-         * فالـSecurity Boundary خاصها تكون active.
-         */
-        if (spec.isOwnerAuthorizationRequired()
-                && !securityBoundary.isActive()) {
-
-            problems.add(
-                    "Owner security boundary is inactive."
-            );
-        }
-
-        /*
-         * منع Capability من استهداف مناطق Security المحمية.
-         */
         if (containsProtectedCapabilityId(
-                spec.getCapabilityId()
+                capabilityId
         )) {
 
-            problems.add(
+            return failure(
+                    JarvisError.Type.NOT_AUTHORIZED,
                     "Capability ID targets a protected security area."
             );
         }
 
-        if (!problems.isEmpty()) {
+        /*
+         * إذا كان التغيير يحتاج Project modification،
+         * نتحقق من Security Boundary قبل التنفيذ.
+         */
+        if (spec.canModifyProjectFiles()) {
 
-            return JarvisResult.success(
-                    new PreflightResult(
-                            false,
-                            problems
-                    ),
-                    "Preflight failed."
-            );
+            JarvisResult<Boolean>
+                    authorization =
+                    securityBoundary
+                            .authorizeEvolutionChange(
+                                    "PROJECT_FILE_EVOLUTION"
+                            );
+
+            if (authorization == null ||
+                    !authorization.isSuccess()) {
+
+                return failure(
+                        JarvisError.Type.NOT_AUTHORIZED,
+                        "Project file evolution was not authorized."
+                );
+            }
         }
 
-        return JarvisResult.success(
+        PreflightResult result =
                 new PreflightResult(
                         true,
-                        Collections.emptyList()
-                ),
-                "Preflight passed."
+                        "Preflight passed.",
+                        spec.requiresBuild(),
+                        spec.requiresTests(),
+                        spec.canModifyProjectFiles()
+                );
+
+        return JarvisResult.success(
+                result,
+                result.getMessage()
         );
     }
 
     /**
-     * آخر نتيجة Evolution.
+     * Recovery بعد فشل أي مرحلة.
      */
-    public EvolutionRecord getLastRecord() {
-        return lastRecord;
+    private JarvisResult<EvolutionRecord>
+    recoverAfterFailure(
+            CapabilitySpec spec,
+            SelfBuilder.BuildResult buildResult,
+            BuildEngine.BuildRecord buildRecord,
+            EvolutionOutcome failureOutcome,
+            String reason,
+            long startedAt
+    ) {
+
+        state =
+                EvolutionState.RECOVERING;
+
+        try {
+
+            JarvisResult<
+                    RecoveryEngine.RecoveryRecord
+                    > recoveryResult =
+                    recoveryEngine.recover(
+                            spec,
+                            buildResult,
+                            null
+                    );
+
+            if (recoveryResult != null &&
+                    recoveryResult.isSuccess()) {
+
+                EvolutionRecord record =
+                        new EvolutionRecord(
+                                spec.getCapabilityId(),
+                                EvolutionOutcome.RECOVERED,
+                                reason
+                                        + " Recovery completed.",
+                                startedAt,
+                                System.currentTimeMillis(),
+                                buildResult,
+                                buildRecord,
+                                null
+                        );
+
+                saveRecord(
+                        record
+                );
+
+                state =
+                        EvolutionState.RECOVERED;
+
+                return JarvisResult.failure(
+                        JarvisError.of(
+                                mapFailureType(
+                                        failureOutcome
+                                ),
+                                reason
+                                        + " Recovery completed; "
+                                        + "the failed evolution was not activated.",
+                                ENGINE_ID
+                        ),
+                        record.getMessage()
+                );
+            }
+
+            EvolutionRecord record =
+                    new EvolutionRecord(
+                            spec.getCapabilityId(),
+                            EvolutionOutcome.RECOVERY_FAILED,
+                            reason
+                                    + " Recovery failed.",
+                            startedAt,
+                            System.currentTimeMillis(),
+                            buildResult,
+                            buildRecord,
+                            null
+                    );
+
+            saveRecord(
+                    record
+            );
+
+            state =
+                    EvolutionState.RECOVERY_FAILED;
+
+            return JarvisResult.failure(
+                    JarvisError.of(
+                            JarvisError.Type.RECOVERY_FAILED,
+                            record.getMessage(),
+                            ENGINE_ID
+                    )
+            );
+
+        } catch (Exception e) {
+
+            EvolutionRecord record =
+                    new EvolutionRecord(
+                            spec.getCapabilityId(),
+                            EvolutionOutcome.RECOVERY_FAILED,
+                            reason
+                                    + " Recovery crashed: "
+                                    + e.getMessage(),
+                            startedAt,
+                            System.currentTimeMillis(),
+                            buildResult,
+                            buildRecord,
+                            e
+                    );
+
+            saveRecord(
+                    record
+            );
+
+            state =
+                    EvolutionState.RECOVERY_FAILED;
+
+            return JarvisResult.failure(
+                    JarvisError.fromException(
+                            JarvisError.Type.RECOVERY_FAILED,
+                            record.getMessage(),
+                            ENGINE_ID,
+                            e
+                    )
+            );
+        }
+    }
+
+    private JarvisError.Type mapFailureType(
+            EvolutionOutcome outcome
+    ) {
+
+        if (outcome == null) {
+            return JarvisError.Type.EVOLUTION_FAILED;
+        }
+
+        switch (outcome) {
+
+            case BUILD_FAILED:
+                return JarvisError.Type.BUILD_FAILED;
+
+            case TEST_FAILED:
+            case VERIFICATION_FAILED:
+                return JarvisError.Type.TEST_FAILED;
+
+            case PREFLIGHT_FAILED:
+                return JarvisError.Type.VALIDATION_FAILED;
+
+            default:
+                return JarvisError.Type.EVOLUTION_FAILED;
+        }
+    }
+
+    private JarvisResult<EvolutionRecord>
+    finishFailure(
+            CapabilitySpec spec,
+            EvolutionOutcome outcome,
+            String message,
+            long startedAt,
+            SelfBuilder.BuildResult buildResult,
+            BuildEngine.BuildRecord buildRecord,
+            Throwable cause
+    ) {
+
+        state =
+                EvolutionState.FAILED;
+
+        EvolutionRecord record =
+                new EvolutionRecord(
+                        spec == null
+                                ? ""
+                                : spec.getCapabilityId(),
+                        outcome,
+                        message,
+                        startedAt,
+                        System.currentTimeMillis(),
+                        buildResult,
+                        buildRecord,
+                        cause
+                );
+
+        saveRecord(
+                record
+        );
+
+        return JarvisResult.failure(
+                JarvisError.of(
+                        mapFailureType(
+                                outcome
+                        ),
+                        message,
+                        ENGINE_ID
+                )
+        );
+    }
+
+    private void saveRecord(
+            EvolutionRecord record
+    ) {
+
+        if (record == null) {
+            return;
+        }
+
+        lastRecord =
+                record;
+
+        history.add(
+                record
+        );
+
+        /*
+         * نحتفظ بآخر 100 دورة فقط.
+         */
+        while (
+                history.size() > 100
+        ) {
+
+            history.remove(
+                    0
+            );
+        }
+    }
+
+    private boolean containsProtectedCapabilityId(
+            String capabilityId
+    ) {
+
+        String id =
+                capabilityId
+                        .trim()
+                        .toLowerCase();
+
+        String[] protectedTokens = {
+                "owner",
+                "security",
+                "authorization",
+                "evolutionsecurity",
+                "recoverysecurity"
+        };
+
+        for (String token :
+                protectedTokens) {
+
+            if (id.contains(
+                    token
+            )) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
-     * History غير قابلة للتعديل من الخارج.
+     * Creates default engines from SelfBuilder workspace.
      */
-    public synchronized List<EvolutionRecord> getHistory() {
+    private static CodeEvolutionEngine
+    createCodeEvolutionEngine(
+            SelfBuilder builder,
+            OwnerSecurityBoundary securityBoundary
+    ) {
 
-        return Collections.unmodifiableList(
-                new ArrayList<>(history)
+        File workspace =
+                builder.getWorkspaceRoot();
+
+        return new CodeEvolutionEngine(
+                workspace,
+                securityBoundary
+        );
+    }
+
+    private static BuildEngine
+    createBuildEngine(
+            SelfBuilder builder,
+            OwnerSecurityBoundary securityBoundary
+    ) {
+
+        return new BuildEngine(
+                builder.getWorkspaceRoot(),
+                securityBoundary
+        );
+    }
+
+    private static EvolutionVerificationEngine
+    createVerificationEngine(
+            SelfBuilder builder,
+            OwnerSecurityBoundary securityBoundary
+    ) {
+
+        return new EvolutionVerificationEngine(
+                builder.getWorkspaceRoot(),
+                securityBoundary
         );
     }
 
@@ -467,41 +881,39 @@ public final class EvolutionOrchestrator {
     }
 
     public boolean isBusy() {
-
-        EvolutionState current =
-                state;
-
-        return current ==
-                EvolutionState.INITIALIZING
-
-                || current ==
-                EvolutionState.BUILDING
-
-                || current ==
-                EvolutionState.TESTING
-
-                || current ==
-                EvolutionState.RECOVERING;
+        return busy;
     }
 
     public boolean isReady() {
-        return state == EvolutionState.READY;
+        return state == EvolutionState.READY
+                || state == EvolutionState.COMPLETED;
     }
 
     public boolean hasFailed() {
+        return state == EvolutionState.FAILED
+                || state == EvolutionState.RECOVERY_FAILED;
+    }
 
-        return state ==
-                EvolutionState.FAILED
+    public EvolutionRecord getLastRecord() {
+        return lastRecord;
+    }
 
-                || state ==
-                EvolutionState.RECOVERY_FAILED;
+    public List<EvolutionRecord> getHistory() {
+
+        return Collections.unmodifiableList(
+                new ArrayList<>(
+                        history
+                )
+        );
     }
 
     public int getEvolutionCount() {
+        return history.size();
+    }
 
-        synchronized (this) {
-            return history.size();
-        }
+    public OwnerSecurityBoundary
+    getSecurityBoundary() {
+        return securityBoundary;
     }
 
     public SelfBuilder getSelfBuilder() {
@@ -516,145 +928,61 @@ public final class EvolutionOrchestrator {
         return recoveryEngine;
     }
 
-    public OwnerSecurityBoundary getSecurityBoundary() {
-        return securityBoundary;
+    public CodeEvolutionEngine
+    getCodeEvolutionEngine() {
+        return codeEvolutionEngine;
     }
 
-    public static String getOrchestratorId() {
-        return ORCHESTRATOR_ID;
+    public BuildEngine getBuildEngine() {
+        return buildEngine;
     }
 
-    /**
-     * Creates a failed evolution result.
-     */
-    private JarvisResult<EvolutionRecord> failure(
-            String message,
-            JarvisError.Type errorType,
-            long startedAt
+    public EvolutionVerificationEngine
+    getVerificationEngine() {
+        return verificationEngine;
+    }
+
+    public String getEngineId() {
+        return ENGINE_ID;
+    }
+
+    private <T>
+    JarvisResult<T> failure(
+            JarvisError.Type type,
+            String message
     ) {
-
-        EvolutionRecord record =
-                new EvolutionRecord(
-                        "unknown",
-                        EvolutionOutcome.FAILED,
-                        null,
-                        null,
-                        null,
-                        message,
-                        startedAt,
-                        System.currentTimeMillis()
-                );
-
-        saveRecord(record);
 
         return JarvisResult.failure(
                 JarvisError.of(
-                        errorType,
+                        type,
                         message,
-                        ORCHESTRATOR_ID
+                        ENGINE_ID
                 )
         );
     }
 
-    /**
-     * Creates a failure result while preserving
-     * the original error when available.
-     */
-    private JarvisResult<EvolutionRecord> failureFromError(
-            JarvisError error,
-            String message,
-            String capabilityId,
-            long startedAt
-    ) {
+    private static final class
+    BuildResultHolder {
 
-        String finalMessage =
-                message == null
-                        || message.trim().isEmpty()
-                        ? "Evolution failed."
-                        : message;
-
-        EvolutionRecord record =
-                new EvolutionRecord(
-                        capabilityId == null
-                                ? "unknown"
-                                : capabilityId,
-                        EvolutionOutcome.FAILED,
-                        null,
-                        null,
-                        null,
-                        finalMessage,
-                        startedAt,
-                        System.currentTimeMillis()
-                );
-
-        saveRecord(record);
-
-        if (error != null) {
-            return JarvisResult.failure(error);
-        }
-
-        return JarvisResult.failure(
-                JarvisError.of(
-                        JarvisError.Type.EVOLUTION_FAILED,
-                        finalMessage,
-                        ORCHESTRATOR_ID
-                )
-        );
-    }
-
-    private void saveRecord(
-            EvolutionRecord record
-    ) {
-
-        if (record == null) {
-            return;
-        }
-
-        synchronized (this) {
-
-            lastRecord = record;
-
-            history.add(record);
-
-            while (history.size() > MAX_HISTORY) {
-                history.remove(0);
-            }
-        }
+        private BuildEngine.BuildRecord record;
     }
 
     /**
-     * يمنع IDs التي تحاول استهداف Security.
+     * حالة الدورة.
      */
-    private boolean containsProtectedCapabilityId(
-            String capabilityId
-    ) {
-
-        if (capabilityId == null) {
-            return true;
-        }
-
-        String normalized =
-                capabilityId
-                        .trim()
-                        .replace('\\', '/')
-                        .toLowerCase();
-
-        return normalized.contains("../")
-                || normalized.contains("..\\")
-                || normalized.contains("ownersecurityboundary")
-                || normalized.contains("securityboundary")
-                || normalized.contains("owneridentity")
-                || normalized.contains("authorization")
-                || normalized.contains("security_policy");
-    }
-
     public enum EvolutionState {
 
         IDLE,
 
-        INITIALIZING,
+        PREFLIGHT,
 
-        BUILDING,
+        BUILDING_CAPABILITY,
+
+        VERIFYING_ARTIFACTS,
+
+        BUILDING_PROJECT,
+
+        VERIFYING_BUILD,
 
         TESTING,
 
@@ -662,16 +990,7 @@ public final class EvolutionOrchestrator {
 
         READY,
 
-        RECOVERED,
-
-        FAILED,
-
-        RECOVERY_FAILED
-    }
-
-    public enum EvolutionOutcome {
-
-        READY,
+        COMPLETED,
 
         RECOVERED,
 
@@ -681,106 +1000,111 @@ public final class EvolutionOrchestrator {
     }
 
     /**
-     * نتيجة Preflight.
+     * نتيجة دورة التطور.
+     */
+    public enum EvolutionOutcome {
+
+        SUCCESS,
+
+        PREFLIGHT_FAILED,
+
+        BUILD_FAILED,
+
+        VERIFICATION_FAILED,
+
+        TEST_FAILED,
+
+        RECOVERED,
+
+        RECOVERY_FAILED,
+
+        INTERNAL_ERROR
+    }
+
+    /**
+     * معلومات Preflight.
      */
     public static final class PreflightResult {
 
-        private final boolean ready;
-        private final List<String> problems;
+        private final boolean passed;
+        private final String message;
+        private final boolean requiresBuild;
+        private final boolean requiresTests;
+        private final boolean modifiesProject;
 
         private PreflightResult(
-                boolean ready,
-                List<String> problems
+                boolean passed,
+                String message,
+                boolean requiresBuild,
+                boolean requiresTests,
+                boolean modifiesProject
         ) {
 
-            this.ready = ready;
+            this.passed =
+                    passed;
 
-            this.problems =
-                    Collections.unmodifiableList(
-                            new ArrayList<>(
-                                    problems == null
-                                            ? Collections.emptyList()
-                                            : problems
-                            )
-                    );
+            this.message =
+                    message;
+
+            this.requiresBuild =
+                    requiresBuild;
+
+            this.requiresTests =
+                    requiresTests;
+
+            this.modifiesProject =
+                    modifiesProject;
         }
 
-        public boolean isReady() {
-            return ready;
+        public boolean isPassed() {
+            return passed;
         }
 
-        public List<String> getProblems() {
-            return problems;
+        public String getMessage() {
+            return message;
         }
 
-        public int getProblemCount() {
-            return problems.size();
+        public boolean requiresBuild() {
+            return requiresBuild;
         }
 
-        public boolean hasProblems() {
-            return !problems.isEmpty();
+        public boolean requiresTests() {
+            return requiresTests;
         }
 
-        public String buildProblemMessage() {
-
-            if (problems.isEmpty()) {
-                return "Preflight passed.";
-            }
-
-            StringBuilder builder =
-                    new StringBuilder(
-                            "Preflight problems:"
-                    );
-
-            for (String problem :
-                    problems) {
-
-                builder.append('\n')
-                        .append("- ")
-                        .append(problem);
-            }
-
-            return builder.toString();
-        }
-
-        @Override
-        public String toString() {
-
-            return "PreflightResult{" +
-                    "ready=" +
-                    ready +
-                    ", problems=" +
-                    problems.size() +
-                    '}';
+        public boolean modifiesProject() {
+            return modifiesProject;
         }
     }
 
     /**
-     * سجل كامل لدورة Evolution.
+     * سجل دورة تطور كاملة.
      */
     public static final class EvolutionRecord {
 
         private final String capabilityId;
         private final EvolutionOutcome outcome;
-
-        private final SelfBuilder.BuildResult buildResult;
-        private final SelfTestEngine.TestReport testReport;
-        private final RecoveryEngine.RecoveryRecord recoveryRecord;
-
         private final String message;
-
         private final long startedAt;
         private final long finishedAt;
+
+        private final SelfBuilder.BuildResult
+                buildResult;
+
+        private final BuildEngine.BuildRecord
+                buildRecord;
+
+        private final Throwable error;
 
         private EvolutionRecord(
                 String capabilityId,
                 EvolutionOutcome outcome,
-                SelfBuilder.BuildResult buildResult,
-                SelfTestEngine.TestReport testReport,
-                RecoveryEngine.RecoveryRecord recoveryRecord,
                 String message,
                 long startedAt,
-                long finishedAt
+                long finishedAt,
+                SelfBuilder.BuildResult buildResult,
+                BuildEngine.BuildRecord buildRecord,
+                Throwable error
         ) {
 
             this.capabilityId =
@@ -789,25 +1113,23 @@ public final class EvolutionOrchestrator {
             this.outcome =
                     outcome;
 
-            this.buildResult =
-                    buildResult;
-
-            this.testReport =
-                    testReport;
-
-            this.recoveryRecord =
-                    recoveryRecord;
-
             this.message =
-                    message == null
-                            ? ""
-                            : message;
+                    message;
 
             this.startedAt =
                     startedAt;
 
             this.finishedAt =
                     finishedAt;
+
+            this.buildResult =
+                    buildResult;
+
+            this.buildRecord =
+                    buildRecord;
+
+            this.error =
+                    error;
         }
 
         public String getCapabilityId() {
@@ -816,18 +1138,6 @@ public final class EvolutionOrchestrator {
 
         public EvolutionOutcome getOutcome() {
             return outcome;
-        }
-
-        public SelfBuilder.BuildResult getBuildResult() {
-            return buildResult;
-        }
-
-        public SelfTestEngine.TestReport getTestReport() {
-            return testReport;
-        }
-
-        public RecoveryEngine.RecoveryRecord getRecoveryRecord() {
-            return recoveryRecord;
         }
 
         public String getMessage() {
@@ -843,46 +1153,35 @@ public final class EvolutionOrchestrator {
         }
 
         public long getDurationMillis() {
-            return Math.max(
-                    0L,
-                    finishedAt - startedAt
-            );
+            return finishedAt - startedAt;
         }
 
-        public boolean isReady() {
+        public SelfBuilder.BuildResult
+        getBuildResult() {
+            return buildResult;
+        }
+
+        public BuildEngine.BuildRecord
+        getBuildRecord() {
+            return buildRecord;
+        }
+
+        public Throwable getError() {
+            return error;
+        }
+
+        public boolean isSuccess() {
             return outcome ==
-                    EvolutionOutcome.READY;
+                    EvolutionOutcome.SUCCESS;
         }
 
-        public boolean wasRecovered() {
+        public boolean isRecovered() {
             return outcome ==
                     EvolutionOutcome.RECOVERED;
         }
 
-        public boolean failed() {
-
-            return outcome ==
-                    EvolutionOutcome.FAILED
-
-                    || outcome ==
-                    EvolutionOutcome.RECOVERY_FAILED;
-        }
-
-        @Override
-        public String toString() {
-
-            return "EvolutionRecord{" +
-                    "capabilityId='" +
-                    capabilityId +
-                    '\'' +
-                    ", outcome=" +
-                    outcome +
-                    ", message='" +
-                    message +
-                    '\'' +
-                    ", durationMillis=" +
-                    getDurationMillis() +
-                    '}';
+        public boolean isFailure() {
+            return !isSuccess();
         }
     }
 }
