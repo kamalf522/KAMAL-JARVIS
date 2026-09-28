@@ -3,19 +3,14 @@ package com.kamal.jarvis.v2.permissions;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
-
-import androidx.core.content.ContextCompat;
-
-import java.util.EnumSet;
-import java.util.Set;
+import android.os.Build;
 
 /**
- * Bridge between JARVIS permission system and Android OS permissions.
+ * Connects JARVIS capability permissions with the real
+ * Android permission state.
  *
- * This class only READS the real Android permission state.
- * It does not bypass Android security and does not secretly grant permissions.
- *
- * Permission requests themselves will be handled later by the Android/UI layer.
+ * This class NEVER grants or bypasses permissions.
+ * It only checks what Android has actually granted.
  */
 public final class AndroidPermissionBridge {
 
@@ -24,7 +19,7 @@ public final class AndroidPermissionBridge {
     public AndroidPermissionBridge(Context context) {
         if (context == null) {
             throw new IllegalArgumentException(
-                    "Context cannot be null"
+                    "Context cannot be null."
             );
         }
 
@@ -32,33 +27,34 @@ public final class AndroidPermissionBridge {
     }
 
     /**
-     * Checks whether a specific JARVIS capability permission
-     * is actually available from Android.
+     * Checks a JARVIS capability against the real Android state.
      */
-    public boolean isGranted(CapabilityPermission permission) {
+    public boolean isGranted(
+            CapabilityPermission permission
+    ) {
         if (permission == null) {
             return false;
         }
 
-        String androidPermission = mapToAndroidPermission(permission);
+        String androidPermission =
+                mapToAndroidPermission(permission);
 
-        // Some capabilities do not correspond to one normal
-        // dangerous Android permission.
-        if (androidPermission == null) {
-            return isSpecialCapabilityAvailable(permission);
+        if (androidPermission != null) {
+            return context.checkSelfPermission(
+                    androidPermission
+            ) == PackageManager.PERMISSION_GRANTED;
         }
 
-        return ContextCompat.checkSelfPermission(
-                context,
-                androidPermission
-        ) == PackageManager.PERMISSION_GRANTED;
+        return isSpecialCapabilityAvailable(permission);
     }
 
     /**
-     * Synchronizes the real Android permission state into
-     * the internal PermissionManager.
+     * Synchronizes Android's actual state with JARVIS'
+     * internal PermissionManager.
      */
-    public void synchronize(PermissionManager permissionManager) {
+    public void synchronize(
+            PermissionManager permissionManager
+    ) {
         if (permissionManager == null) {
             return;
         }
@@ -75,53 +71,8 @@ public final class AndroidPermissionBridge {
     }
 
     /**
-     * Returns all capability permissions currently available
-     * according to Android.
-     */
-    public Set<CapabilityPermission> getGrantedPermissions() {
-
-        EnumSet<CapabilityPermission> granted =
-                EnumSet.noneOf(CapabilityPermission.class);
-
-        for (CapabilityPermission permission
-                : CapabilityPermission.values()) {
-
-            if (isGranted(permission)) {
-                granted.add(permission);
-            }
-        }
-
-        return granted;
-    }
-
-    /**
-     * Returns all permissions from the requested set that
-     * are not currently available on Android.
-     */
-    public Set<CapabilityPermission> getMissingPermissions(
-            Set<CapabilityPermission> required
-    ) {
-        EnumSet<CapabilityPermission> missing =
-                EnumSet.noneOf(CapabilityPermission.class);
-
-        if (required == null) {
-            return missing;
-        }
-
-        for (CapabilityPermission permission : required) {
-            if (!isGranted(permission)) {
-                missing.add(permission);
-            }
-        }
-
-        return missing;
-    }
-
-    /**
-     * Maps JARVIS capabilities to real Android permissions.
-     *
-     * Only permissions that have a direct Android equivalent
-     * are mapped here.
+     * Converts JARVIS permissions to normal Android
+     * runtime permissions where a direct mapping exists.
      */
     private String mapToAndroidPermission(
             CapabilityPermission permission
@@ -133,59 +84,17 @@ public final class AndroidPermissionBridge {
                 return Manifest.permission.RECORD_AUDIO;
 
             case NOTIFICATIONS:
-                if (android.os.Build.VERSION.SDK_INT >= 33) {
+                if (Build.VERSION.SDK_INT >= 33) {
                     return Manifest.permission.POST_NOTIFICATIONS;
                 }
                 return null;
 
             case NETWORK:
-                return Manifest.permission.INTERNET;
-
-            case FILE_READ:
                 /*
-                 * Modern Android storage access is not represented
-                 * by one universal permission.
-                 *
-                 * JARVIS will later use the appropriate Storage
-                 * Access Framework / MediaStore route.
+                 * INTERNET is a normal manifest permission and
+                 * does not require a runtime permission dialog.
                  */
-                return null;
-
-            case FILE_WRITE:
-                return null;
-
-            case FILE_DELETE:
-                return null;
-
-            case FILE_MOVE:
-                return null;
-
-            case NOTIFICATION_ACCESS:
-                return null;
-
-            case ACCESSIBILITY:
-                return null;
-
-            case BACKGROUND_EXECUTION:
-                return null;
-
-            case PROJECT_READ:
-                return null;
-
-            case PROJECT_WRITE:
-                return null;
-
-            case BUILD_PROJECT:
-                return null;
-
-            case RUN_TESTS:
-                return null;
-
-            case EVOLUTION:
-                return null;
-
-            case OWNER_AUTHORIZATION:
-                return null;
+                return Manifest.permission.INTERNET;
 
             default:
                 return null;
@@ -193,11 +102,8 @@ public final class AndroidPermissionBridge {
     }
 
     /**
-     * Checks capabilities that require a special Android mechanism
-     * rather than a normal runtime permission.
-     *
-     * For now these return false until their dedicated Android
-     * bridges are implemented.
+     * Handles capabilities that are controlled through
+     * Android services, storage APIs, or JARVIS internal systems.
      */
     private boolean isSpecialCapabilityAvailable(
             CapabilityPermission permission
@@ -205,16 +111,10 @@ public final class AndroidPermissionBridge {
 
         switch (permission) {
 
-            case NOTIFICATION_ACCESS:
-                return false;
-
-            case ACCESSIBILITY:
-                return false;
-
             case BACKGROUND_EXECUTION:
                 /*
-                 * Background execution is controlled by Android
-                 * service/lifecycle rules, not a single permission.
+                 * This is controlled by Android lifecycle/service
+                 * rules rather than one runtime permission.
                  */
                 return true;
 
@@ -223,9 +123,9 @@ public final class AndroidPermissionBridge {
             case FILE_DELETE:
             case FILE_MOVE:
                 /*
-                 * These will be handled through Android's
-                 * Storage Access Framework / app-private storage
-                 * instead of pretending a normal permission exists.
+                 * These must later use the appropriate Android
+                 * storage mechanism instead of pretending that
+                 * one universal storage permission exists.
                  */
                 return true;
 
@@ -235,17 +135,16 @@ public final class AndroidPermissionBridge {
             case RUN_TESTS:
             case EVOLUTION:
                 /*
-                 * These are JARVIS internal capabilities.
-                 * They will be controlled by the tool/evolution
-                 * system rather than Android runtime permissions.
+                 * These are JARVIS capabilities, not Android
+                 * runtime permissions.
                  */
                 return true;
 
+            case NOTIFICATION_ACCESS:
+            case ACCESSIBILITY:
             case OWNER_AUTHORIZATION:
                 /*
-                 * Owner authorization is handled by the
-                 * OwnerSecurityBoundary and later Android
-                 * authentication mechanisms.
+                 * These require their dedicated systems.
                  */
                 return false;
 
@@ -255,13 +154,13 @@ public final class AndroidPermissionBridge {
     }
 
     /**
-     * Gives a human-readable explanation of why a capability
-     * may not be directly represented by a runtime permission.
+     * Provides a clear explanation when a capability is unavailable.
      */
-    public String explain(CapabilityPermission permission) {
-
+    public String explain(
+            CapabilityPermission permission
+    ) {
         if (permission == null) {
-            return "Unknown permission.";
+            return "Unknown capability.";
         }
 
         if (isGranted(permission)) {
@@ -270,48 +169,41 @@ public final class AndroidPermissionBridge {
 
         switch (permission) {
 
+            case MICROPHONE:
+                return "Microphone permission is not granted.";
+
+            case NOTIFICATIONS:
+                return "Notification permission is not granted.";
+
+            case NETWORK:
+                return "Network access is not available.";
+
             case NOTIFICATION_ACCESS:
-                return "Requires Android Notification Listener access.";
+                return "Notification Listener access is required.";
 
             case ACCESSIBILITY:
-                return "Requires Android Accessibility Service access.";
+                return "Accessibility Service access is required.";
 
             case FILE_READ:
             case FILE_WRITE:
             case FILE_DELETE:
             case FILE_MOVE:
-                return "Requires an appropriate Android storage route.";
-
-            case BACKGROUND_EXECUTION:
-                return "Controlled by Android service and lifecycle rules.";
-
-            case PROJECT_READ:
-            case PROJECT_WRITE:
-                return "Controlled by JARVIS project tools.";
+                return "An appropriate Android storage route is required.";
 
             case BUILD_PROJECT:
-                return "Requires a valid project build environment.";
+                return "A valid project build environment is required.";
 
             case RUN_TESTS:
-                return "Requires a test execution environment.";
+                return "A test execution environment is required.";
 
             case EVOLUTION:
-                return "Controlled by the JARVIS evolution system.";
+                return "The JARVIS evolution system must provide this capability.";
 
             case OWNER_AUTHORIZATION:
-                return "Requires successful owner authorization.";
-
-            case MICROPHONE:
-                return "Android microphone permission is not currently granted.";
-
-            case NOTIFICATIONS:
-                return "Android notification permission is not currently granted.";
-
-            case NETWORK:
-                return "Android network permission is not currently available.";
+                return "Owner authorization is required.";
 
             default:
-                return "Required capability is not currently available.";
+                return "The required capability is not currently available.";
         }
     }
 }
