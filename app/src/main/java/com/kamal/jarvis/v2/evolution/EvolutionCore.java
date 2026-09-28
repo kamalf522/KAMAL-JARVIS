@@ -2,32 +2,41 @@ package com.kamal.jarvis.v2.evolution;
 
 import com.kamal.jarvis.v2.core.JarvisError;
 import com.kamal.jarvis.v2.core.JarvisResult;
+import com.kamal.jarvis.v2.core.ToolContract;
+import com.kamal.jarvis.v2.permissions.CapabilityPermission;
+import com.kamal.jarvis.v2.permissions.CapabilityRequirement;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * JARVIS V2 - Evolution Core
  *
- * المستوى الأعلى لمنظومة Evolution.
+ * العقل المركزي لمنظومة Evolution.
  *
  * المسؤوليات:
  *
- * 1. استقبال CapabilityRequirement.
- * 2. تحليل القدرة المطلوبة.
- * 3. تحديد هل التنفيذ المباشر ممكن.
- * 4. إذا كانت Capability ناقصة:
- *      - إنشاء CapabilitySpec
- *      - إطلاق EvolutionOrchestrator
- * 5. بناء Capability.
- * 6. اختبارها.
- * 7. Recovery عند الفشل.
- * 8. حفظ نتيجة كل Evolution.
+ * 1. استقبال الهدف المطلوب.
+ * 2. تحليل القدرات الموجودة.
+ * 3. اختيار مسار التنفيذ.
+ * 4. اختيار البديل عند توفره.
+ * 5. تحديد الصلاحيات الناقصة.
+ * 6. إنشاء CapabilitySpec عند الحاجة.
+ * 7. إطلاق EvolutionOrchestrator.
+ * 8. استقبال نتيجة Build/Test/Recovery.
+ * 9. تسجيل نتائج Evolution.
  *
- * EvolutionCore لا يتجاوز OwnerSecurityBoundary.
+ * ملاحظة مهمة:
+ *
+ * EvolutionCore لا يمنح Android permissions بنفسه،
+ * ولا يغير OwnerSecurityBoundary.
+ *
+ * هو العقل الذي يقرر المسار،
+ * بينما كل مكون مسؤول عن اختصاصه.
  */
 public final class EvolutionCore {
 
@@ -75,7 +84,7 @@ public final class EvolutionCore {
     }
 
     /**
-     * يحلل Requirement فقط بدون تنفيذ.
+     * يحلل CapabilityRequirement بدون تنفيذ.
      */
     public synchronized JarvisResult<EvolutionAnalysis> analyze(
             CapabilityRequirement requirement
@@ -83,11 +92,9 @@ public final class EvolutionCore {
         if (requirement == null) {
             state = EvolutionState.FAILED;
 
-            return JarvisResult.failure(
-                    JarvisError.of(
-                            JarvisError.Type.INVALID_REQUEST,
-                            "CapabilityRequirement cannot be null."
-                    )
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "CapabilityRequirement cannot be null."
             );
         }
 
@@ -108,10 +115,28 @@ public final class EvolutionCore {
         CapabilityDiscovery.DiscoveryResult discovered =
                 discoveryResult.getData();
 
+        if (discovered == null) {
+            state = EvolutionState.FAILED;
+
+            return failure(
+                    JarvisError.Type.EVOLUTION_FAILED,
+                    "Capability discovery returned no result."
+            );
+        }
+
         CapabilityPlan plan =
                 CapabilityPlan.fromDiscovery(
                         discovered
                 );
+
+        if (plan == null) {
+            state = EvolutionState.FAILED;
+
+            return failure(
+                    JarvisError.Type.EVOLUTION_FAILED,
+                    "Capability plan could not be created."
+            );
+        }
 
         EvolutionAnalysis analysis =
                 new EvolutionAnalysis(
@@ -123,24 +148,25 @@ public final class EvolutionCore {
         switch (plan.getAction()) {
 
             case EXECUTE_DIRECT:
-                state = EvolutionState.READY_TO_EXECUTE;
-                break;
-
             case EXECUTE_ALTERNATIVE:
-                state = EvolutionState.READY_TO_EXECUTE;
+                state =
+                        EvolutionState.READY_TO_EXECUTE;
                 break;
 
             case REQUEST_PERMISSION:
-                state = EvolutionState.WAITING_FOR_PERMISSION;
+                state =
+                        EvolutionState.WAITING_FOR_PERMISSION;
                 break;
 
             case BUILD_CAPABILITY:
-                state = EvolutionState.BUILD_REQUIRED;
+                state =
+                        EvolutionState.BUILD_REQUIRED;
                 break;
 
             case UNAVAILABLE:
             default:
-                state = EvolutionState.FAILED;
+                state =
+                        EvolutionState.FAILED;
                 break;
         }
 
@@ -151,26 +177,44 @@ public final class EvolutionCore {
     }
 
     /**
-     * ينفذ Requirement.
+     * ينفذ CapabilityRequirement.
      *
-     * إذا كانت Capability موجودة:
-     *     execute مباشرة.
+     * المسارات:
      *
-     * إذا كانت ناقصة:
-     *     يبنيها عبر EvolutionOrchestrator.
+     * موجودة مباشرة
+     *      ↓
+     * تنفيذ
+     *
+     * بديل موجود
+     *      ↓
+     * تنفيذ البديل
+     *
+     * Permission ناقصة
+     *      ↓
+     * يرجع المتطلبات للنظام الأعلى
+     *
+     * Capability ناقصة
+     *      ↓
+     * CapabilitySpec
+     *      ↓
+     * EvolutionOrchestrator
+     *      ↓
+     * Build
+     *      ↓
+     * Test
+     *      ↓
+     * Recovery عند الفشل
      */
     public synchronized JarvisResult<EvolutionExecutionResult> execute(
             CapabilityRequirement requirement,
-            com.kamal.jarvis.v2.core.ToolContract.ToolInput input
+            ToolContract.ToolInput input
     ) {
         if (requirement == null) {
             state = EvolutionState.FAILED;
 
-            return JarvisResult.failure(
-                    JarvisError.of(
-                            JarvisError.Type.INVALID_REQUEST,
-                            "CapabilityRequirement cannot be null."
-                    )
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "CapabilityRequirement cannot be null."
             );
         }
 
@@ -186,63 +230,83 @@ public final class EvolutionCore {
         EvolutionAnalysis analysis =
                 analysisResult.getData();
 
+        if (analysis == null) {
+            state = EvolutionState.FAILED;
+
+            return failure(
+                    JarvisError.Type.EVOLUTION_FAILED,
+                    "Evolution analysis returned no data."
+            );
+        }
+
         CapabilityPlan plan =
                 analysis.getPlan();
 
+        if (plan == null) {
+            state = EvolutionState.FAILED;
+
+            return failure(
+                    JarvisError.Type.EVOLUTION_FAILED,
+                    "Evolution analysis contains no plan."
+            );
+        }
+
         /*
-         * Capability موجودة أصلاً.
+         * =========================================================
+         * 1. DIRECT / ALTERNATIVE EXECUTION
+         * =========================================================
          */
         if (plan.getAction()
                 == CapabilityPlan.Action.EXECUTE_DIRECT
                 || plan.getAction()
                 == CapabilityPlan.Action.EXECUTE_ALTERNATIVE) {
 
-            state = EvolutionState.EXECUTING;
+            state =
+                    EvolutionState.EXECUTING;
 
-            JarvisResult<
-                    com.kamal.jarvis.v2.core.ToolContract.ToolOutput
-                    > result =
+            JarvisResult<ToolContract.ToolOutput>
+                    executionResult =
                     executor.execute(
                             plan,
                             input
                     );
 
-            if (result.isSuccess()) {
+            if (!executionResult.isSuccess()) {
 
-                state = EvolutionState.COMPLETED;
+                state =
+                        EvolutionState.FAILED;
 
-                EvolutionExecutionResult execution =
-                        EvolutionExecutionResult.executed(
-                                plan,
-                                result.getData(),
-                                result.getMessage()
-                        );
-
-                return JarvisResult.success(
-                        execution,
-                        result.getMessage()
+                return JarvisResult.failure(
+                        executionResult.getError()
                 );
             }
 
-            state = EvolutionState.FAILED;
+            state =
+                    EvolutionState.COMPLETED;
 
-            return JarvisResult.failure(
-                    result.getError()
+            EvolutionExecutionResult result =
+                    EvolutionExecutionResult.executed(
+                            plan,
+                            executionResult.getData(),
+                            executionResult.getMessage()
+                    );
+
+            return JarvisResult.success(
+                    result,
+                    result.getMessage()
             );
         }
 
         /*
-         * Permission ناقصة.
-         *
-         * ما غاديش نزورو ونقولو "مايمكنش".
-         * هنا كنرجعو Requirement واضح للنظام الأعلى
-         * باش PermissionManager / AndroidPermissionBridge
-         * يتصرفو بالطريقة المشروعة.
+         * =========================================================
+         * 2. PERMISSION REQUIRED
+         * =========================================================
          */
         if (plan.getAction()
                 == CapabilityPlan.Action.REQUEST_PERMISSION) {
 
-            state = EvolutionState.WAITING_FOR_PERMISSION;
+            state =
+                    EvolutionState.WAITING_FOR_PERMISSION;
 
             EvolutionExecutionResult waiting =
                     EvolutionExecutionResult.permissionRequired(
@@ -252,33 +316,43 @@ public final class EvolutionCore {
 
             return JarvisResult.success(
                     waiting,
-                    "Additional permission is required."
+                    "Additional permission or capability is required."
             );
         }
 
         /*
-         * Capability ناقصة:
-         *
-         * هنا ندخل فعلياً إلى:
-         *
-         * CapabilitySpec
-         *      ↓
-         * SelfBuilder
-         *      ↓
-         * SelfTest
-         *      ↓
-         * Recovery
+         * =========================================================
+         * 3. CAPABILITY MUST BE BUILT
+         * =========================================================
          */
         if (plan.getAction()
                 == CapabilityPlan.Action.BUILD_CAPABILITY) {
 
-            state = EvolutionState.BUILDING;
+            state =
+                    EvolutionState.BUILDING;
 
-            CapabilitySpec spec =
-                    createCapabilitySpec(
-                            requirement,
-                            plan
-                    );
+            CapabilitySpec spec;
+
+            try {
+                spec =
+                        createCapabilitySpec(
+                                requirement,
+                                plan
+                        );
+            } catch (Exception exception) {
+
+                state =
+                        EvolutionState.FAILED;
+
+                return JarvisResult.failure(
+                        JarvisError.fromException(
+                                JarvisError.Type.EVOLUTION_FAILED,
+                                "Failed to create CapabilitySpec.",
+                                "EvolutionCore",
+                                exception
+                        )
+                );
+            }
 
             JarvisResult<
                     EvolutionOrchestrator.EvolutionRecord
@@ -287,14 +361,9 @@ public final class EvolutionCore {
 
             if (!evolutionResult.isSuccess()) {
 
-                state = EvolutionState.FAILED;
+                state =
+                        EvolutionState.FAILED;
 
-                /*
-                 * إذا رجع Orchestrator نتيجة
-                 * فشل الاختبار أو Recovery، نحافظ
-                 * على الحقيقة ولا نقول بأن Capability
-                 * أصبحت جاهزة.
-                 */
                 return JarvisResult.failure(
                         evolutionResult.getError()
                 );
@@ -304,32 +373,46 @@ public final class EvolutionCore {
                     evolutionRecord =
                     evolutionResult.getData();
 
-            if (evolutionRecord == null
-                    || !evolutionRecord.isReady()) {
+            if (evolutionRecord == null) {
 
-                state = EvolutionState.FAILED;
+                state =
+                        EvolutionState.FAILED;
 
-                return JarvisResult.failure(
-                        JarvisError.of(
-                                JarvisError.Type.EVOLUTION_FAILED,
-                                "Evolution did not produce a ready capability."
-                        )
+                return failure(
+                        JarvisError.Type.EVOLUTION_FAILED,
+                        "Evolution returned no record."
                 );
             }
 
-            state = EvolutionState.COMPLETED;
+            /*
+             * لا نعتبر Capability جاهزة
+             * إلا إذا قال Orchestrator أنها جاهزة فعلاً.
+             */
+            if (!evolutionRecord.isReady()) {
 
-            EvolutionExecutionResult built =
-                    EvolutionExecutionResult.built(
-                            plan,
-                            evolutionRecord,
-                            "Capability was built and passed self-test."
-                    );
+                state =
+                        EvolutionState.FAILED;
+
+                return failure(
+                        JarvisError.Type.EVOLUTION_FAILED,
+                        "Evolution completed without producing a ready capability."
+                );
+            }
+
+            state =
+                    EvolutionState.COMPLETED;
 
             saveRecord(
                     requirement.getCapabilityId(),
                     evolutionRecord
             );
+
+            EvolutionExecutionResult built =
+                    EvolutionExecutionResult.built(
+                            plan,
+                            evolutionRecord,
+                            "Capability was built and passed the current evolution checks."
+                    );
 
             return JarvisResult.success(
                     built,
@@ -337,21 +420,23 @@ public final class EvolutionCore {
             );
         }
 
-        state = EvolutionState.FAILED;
+        /*
+         * =========================================================
+         * 4. UNAVAILABLE
+         * =========================================================
+         */
+        state =
+                EvolutionState.FAILED;
 
-        return JarvisResult.failure(
-                JarvisError.of(
-                        JarvisError.Type.EVOLUTION_FAILED,
-                        "Capability is unavailable."
-                )
+        return failure(
+                JarvisError.Type.TOOL_UNAVAILABLE,
+                "No valid execution or evolution path is available for capability: "
+                        + requirement.getCapabilityId()
         );
     }
 
     /**
-     * يبني CapabilitySpec من Requirement + Plan.
-     *
-     * هنا كنحوّلو الحاجة المجردة إلى مواصفات
-     * يستطيع SelfBuilder العمل عليها.
+     * يحول Requirement إلى CapabilitySpec كاملة.
      */
     private CapabilitySpec createCapabilitySpec(
             CapabilityRequirement requirement,
@@ -363,19 +448,34 @@ public final class EvolutionCore {
                         requirement.getCapabilityId()
                 );
 
+        /*
+         * الهدف الحقيقي.
+         */
         builder.goal(
                 requirement.getDescription()
         );
 
+        /*
+         * وصف داخلي.
+         */
         builder.description(
                 "Capability generated by JARVIS Evolution Core."
         );
 
-        if (requirement.getRequiredPermissions()
-                != null) {
+        /*
+         * الصلاحيات المطلوبة.
+         *
+         * CapabilityPermission هي Enum،
+         * لذلك لا نحولها إلى String.
+         */
+        Set<CapabilityPermission>
+                requiredPermissions =
+                requirement.getRequiredPermissions();
 
-            for (String permission :
-                    requirement.getRequiredPermissions()) {
+        if (requiredPermissions != null) {
+
+            for (CapabilityPermission permission :
+                    requiredPermissions) {
 
                 builder.requirePermission(
                         permission
@@ -383,41 +483,83 @@ public final class EvolutionCore {
             }
         }
 
-        if (requirement.getPreferredToolIds()
-                != null) {
+        /*
+         * الأدوات المفضلة.
+         */
+        List<String> preferredTools =
+                requirement.getPreferredToolIds();
 
-            for (String tool :
-                    requirement.getPreferredToolIds()) {
+        if (preferredTools != null) {
 
-                builder.preferTool(tool);
+            for (String toolId :
+                    preferredTools) {
+
+                builder.preferTool(
+                        toolId
+                );
             }
         }
 
-        if (requirement.getAlternativeToolIds()
-                != null) {
+        /*
+         * الأدوات البديلة.
+         */
+        List<String> alternativeTools =
+                requirement.getAlternativeToolIds();
 
-            for (String tool :
-                    requirement.getAlternativeToolIds()) {
+        if (alternativeTools != null) {
 
-                builder.alternativeTool(tool);
+            for (String toolId :
+                    alternativeTools) {
+
+                builder.alternativeTool(
+                        toolId
+                );
             }
         }
 
+        /*
+         * أدوات التنفيذ الحالية تعتبر
+         * أيضاً متطلبات مفيدة للـCapability.
+         */
+        if (plan != null &&
+                plan.getToolIds() != null) {
+
+            for (String toolId :
+                    plan.getToolIds()) {
+
+                builder.requireTool(
+                        toolId
+                );
+            }
+        }
+
+        /*
+         * Owner authorization.
+         */
         if (requirement.isOwnerAuthorizationRequired()) {
+
             builder.requireOwnerAuthorization();
         }
 
         /*
-         * Capability الجديدة مسموح لها بالبناء
-         * إذا Requirement سمح بذلك.
+         * إذا سمح Requirement ببناء بديل،
+         * نسمح للـSelfBuilder بتعديل ملفات المشروع
+         * داخل الحدود الأمنية المسموح بها.
          */
         if (requirement.canBuildAlternative()) {
+
             builder.allowProjectModification();
         }
 
         /*
-         * كل Capability يتم بناؤها يجب أن يكون
-         * عندها معيار نجاح واضح.
+         * أي Capability جديدة يجب أن تدخل
+         * Build/Test pipeline.
+         */
+        builder.requireBuild();
+        builder.requireTests();
+
+        /*
+         * معايير النجاح الأساسية.
          */
         builder.successCriterion(
                 "Generated capability specification exists."
@@ -438,7 +580,9 @@ public final class EvolutionCore {
             String capabilityId,
             EvolutionOrchestrator.EvolutionRecord record
     ) {
-        if (capabilityId == null || record == null) {
+        if (capabilityId == null ||
+                capabilityId.trim().isEmpty() ||
+                record == null) {
             return;
         }
 
@@ -453,7 +597,21 @@ public final class EvolutionCore {
                 wrapper
         );
 
-        lastRecord = wrapper;
+        lastRecord =
+                wrapper;
+    }
+
+    private <T> JarvisResult<T> failure(
+            JarvisError.Type type,
+            String message
+    ) {
+        return JarvisResult.failure(
+                JarvisError.of(
+                        type,
+                        message,
+                        "EvolutionCore"
+                )
+        );
     }
 
     public EvolutionRecord getRecord(
@@ -463,7 +621,9 @@ public final class EvolutionCore {
             return null;
         }
 
-        return records.get(capabilityId);
+        return records.get(
+                capabilityId
+        );
     }
 
     public EvolutionRecord getLastRecord() {
@@ -483,14 +643,19 @@ public final class EvolutionCore {
     }
 
     public boolean isBusy() {
-        return state == EvolutionState.ANALYZING
-                || state == EvolutionState.EXECUTING
-                || state == EvolutionState.BUILDING;
+        return state ==
+                EvolutionState.ANALYZING
+                || state ==
+                EvolutionState.EXECUTING
+                || state ==
+                EvolutionState.BUILDING;
     }
 
     public boolean isReady() {
-        return state == EvolutionState.READY_TO_EXECUTE
-                || state == EvolutionState.COMPLETED;
+        return state ==
+                EvolutionState.READY_TO_EXECUTE
+                || state ==
+                EvolutionState.COMPLETED;
     }
 
     public CapabilityDiscovery getDiscovery() {
@@ -510,14 +675,23 @@ public final class EvolutionCore {
     }
 
     public enum EvolutionState {
+
         IDLE,
+
         ANALYZING,
+
         READY_TO_EXECUTE,
+
         WAITING_FOR_PERMISSION,
+
         BUILD_REQUIRED,
+
         BUILDING,
+
         EXECUTING,
+
         COMPLETED,
+
         FAILED
     }
 
@@ -527,7 +701,10 @@ public final class EvolutionCore {
     public static final class EvolutionAnalysis {
 
         private final CapabilityRequirement requirement;
-        private final CapabilityDiscovery.DiscoveryResult discovery;
+
+        private final CapabilityDiscovery.DiscoveryResult
+                discovery;
+
         private final CapabilityPlan plan;
 
         private EvolutionAnalysis(
@@ -535,12 +712,18 @@ public final class EvolutionCore {
                 CapabilityDiscovery.DiscoveryResult discovery,
                 CapabilityPlan plan
         ) {
-            this.requirement = requirement;
-            this.discovery = discovery;
-            this.plan = plan;
+            this.requirement =
+                    requirement;
+
+            this.discovery =
+                    discovery;
+
+            this.plan =
+                    plan;
         }
 
-        public CapabilityRequirement getRequirement() {
+        public CapabilityRequirement
+        getRequirement() {
             return requirement;
         }
 
@@ -554,18 +737,33 @@ public final class EvolutionCore {
         }
 
         public boolean requiresBuild() {
-            return plan.getAction()
+            return plan != null
+                    && plan.getAction()
                     == CapabilityPlan.Action.BUILD_CAPABILITY;
         }
 
         public boolean canExecuteDirectly() {
-            return plan.getAction()
+            return plan != null
+                    && plan.getAction()
                     == CapabilityPlan.Action.EXECUTE_DIRECT;
         }
 
+        public boolean usesAlternative() {
+            return plan != null
+                    && plan.getAction()
+                    == CapabilityPlan.Action.EXECUTE_ALTERNATIVE;
+        }
+
         public boolean needsPermission() {
-            return plan.getAction()
+            return plan != null
+                    && plan.getAction()
                     == CapabilityPlan.Action.REQUEST_PERMISSION;
+        }
+
+        public boolean isUnavailable() {
+            return plan == null
+                    || plan.getAction()
+                    == CapabilityPlan.Action.UNAVAILABLE;
         }
 
         @Override
@@ -575,7 +773,9 @@ public final class EvolutionCore {
                     requirement.getCapabilityId() +
                     '\'' +
                     ", action=" +
-                    plan.getAction() +
+                    (plan == null
+                            ? "null"
+                            : plan.getAction()) +
                     '}';
         }
     }
@@ -586,40 +786,50 @@ public final class EvolutionCore {
     public static final class EvolutionExecutionResult {
 
         private final ExecutionOutcome outcome;
+
         private final CapabilityPlan plan;
 
-        private final com.kamal.jarvis.v2.core.ToolContract.ToolOutput
+        private final ToolContract.ToolOutput
                 toolOutput;
 
         private final EvolutionOrchestrator.EvolutionRecord
                 evolutionRecord;
 
-        private final List<String> missingPermissions;
+        private final List<CapabilityPermission>
+                missingPermissions;
 
         private final String message;
 
         private EvolutionExecutionResult(
                 ExecutionOutcome outcome,
                 CapabilityPlan plan,
-                com.kamal.jarvis.v2.core.ToolContract.ToolOutput
-                        toolOutput,
-                EvolutionOrchestrator.EvolutionRecord
-                        evolutionRecord,
-                List<String> missingPermissions,
+                ToolContract.ToolOutput toolOutput,
+                EvolutionOrchestrator.EvolutionRecord evolutionRecord,
+                List<CapabilityPermission> missingPermissions,
                 String message
         ) {
-            this.outcome = outcome;
-            this.plan = plan;
-            this.toolOutput = toolOutput;
-            this.evolutionRecord = evolutionRecord;
+            this.outcome =
+                    outcome;
+
+            this.plan =
+                    plan;
+
+            this.toolOutput =
+                    toolOutput;
+
+            this.evolutionRecord =
+                    evolutionRecord;
+
+            List<CapabilityPermission> copy =
+                    missingPermissions == null
+                            ? Collections.emptyList()
+                            : new ArrayList<>(
+                                    missingPermissions
+                            );
 
             this.missingPermissions =
                     Collections.unmodifiableList(
-                            new ArrayList<>(
-                                    missingPermissions == null
-                                            ? Collections.emptyList()
-                                            : missingPermissions
-                            )
+                            copy
                     );
 
             this.message =
@@ -630,7 +840,7 @@ public final class EvolutionCore {
 
         private static EvolutionExecutionResult executed(
                 CapabilityPlan plan,
-                com.kamal.jarvis.v2.core.ToolContract.ToolOutput output,
+                ToolContract.ToolOutput output,
                 String message
         ) {
             return new EvolutionExecutionResult(
@@ -646,15 +856,23 @@ public final class EvolutionCore {
         private static EvolutionExecutionResult
         permissionRequired(
                 CapabilityPlan plan,
-                List<String> missingPermissions
+                Set<CapabilityPermission>
+                        missingPermissions
         ) {
+            List<CapabilityPermission> list =
+                    missingPermissions == null
+                            ? Collections.emptyList()
+                            : new ArrayList<>(
+                                    missingPermissions
+                            );
+
             return new EvolutionExecutionResult(
                     ExecutionOutcome.PERMISSION_REQUIRED,
                     plan,
                     null,
                     null,
-                    missingPermissions,
-                    "Permission required."
+                    list,
+                    "Permission or capability is required."
             );
         }
 
@@ -681,7 +899,7 @@ public final class EvolutionCore {
             return plan;
         }
 
-        public com.kamal.jarvis.v2.core.ToolContract.ToolOutput
+        public ToolContract.ToolOutput
         getToolOutput() {
             return toolOutput;
         }
@@ -691,7 +909,8 @@ public final class EvolutionCore {
             return evolutionRecord;
         }
 
-        public List<String> getMissingPermissions() {
+        public List<CapabilityPermission>
+        getMissingPermissions() {
             return missingPermissions;
         }
 
@@ -720,23 +939,28 @@ public final class EvolutionCore {
                     "outcome=" +
                     outcome +
                     ", message='" +
-                    message + '\'' +
+                    message +
+                    '\'' +
                     '}';
         }
     }
 
     public enum ExecutionOutcome {
+
         EXECUTED,
+
         BUILT,
+
         PERMISSION_REQUIRED
     }
 
     /**
-     * سجل Evolution مختصر داخل Core.
+     * سجل Evolution داخل Core.
      */
     public static final class EvolutionRecord {
 
         private final String capabilityId;
+
         private final EvolutionOrchestrator.EvolutionRecord
                 orchestratorRecord;
 
@@ -745,7 +969,9 @@ public final class EvolutionCore {
                 EvolutionOrchestrator.EvolutionRecord
                         orchestratorRecord
         ) {
-            this.capabilityId = capabilityId;
+            this.capabilityId =
+                    capabilityId;
+
             this.orchestratorRecord =
                     orchestratorRecord;
         }
@@ -778,7 +1004,8 @@ public final class EvolutionCore {
         public String toString() {
             return "EvolutionRecord{" +
                     "capabilityId='" +
-                    capabilityId + '\'' +
+                    capabilityId +
+                    '\'' +
                     ", ready=" +
                     isReady() +
                     '}';
