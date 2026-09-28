@@ -10,169 +10,163 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Central registry of JARVIS capabilities/tools.
+ *
+ * Responsibilities:
+ * - Register tools
+ * - Replace tools safely
+ * - Remove tools
+ * - Find tools
+ * - Check availability
+ * - Provide stable snapshots
+ *
+ * This class does not execute tools.
+ * Execution is handled by JarvisRuntime.
+ */
 public final class ToolRegistry {
 
     private final Map<String, ToolContract> tools =
             new LinkedHashMap<>();
 
-    public synchronized JarvisResult<Void> register(
-            ToolContract tool
-    ) {
+    public synchronized JarvisResult<ToolContract> register(
+            ToolContract tool) {
+
         if (tool == null) {
-            return JarvisResult.failure(
-                    JarvisError.of(
-                            JarvisError.Type.INVALID_REQUEST,
-                            "Tool cannot be null.",
-                            "ToolRegistry"
-                    )
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "Tool cannot be null"
             );
         }
 
-        String id = normalize(tool.getId());
+        String id = normalizeId(tool.getId());
 
         if (id.isEmpty()) {
-            return JarvisResult.failure(
-                    JarvisError.of(
-                            JarvisError.Type.VALIDATION_FAILED,
-                            "Tool ID cannot be empty.",
-                            "ToolRegistry"
-                    )
+            return failure(
+                    JarvisError.Type.VALIDATION_FAILED,
+                    "Tool id cannot be empty"
             );
         }
 
         if (tools.containsKey(id)) {
-            return JarvisResult.failure(
-                    JarvisError.of(
-                            JarvisError.Type.VALIDATION_FAILED,
-                            "Tool already registered: " + id,
-                            "ToolRegistry"
-                    )
+            return failure(
+                    JarvisError.Type.VALIDATION_FAILED,
+                    "Tool already exists: " + id
             );
         }
 
         tools.put(id, tool);
 
         return JarvisResult.success(
-                null,
-                "Tool registered: " + id
+                tool,
+                "Tool registered successfully"
         );
     }
 
-    public synchronized JarvisResult<Void> replace(
-            ToolContract tool
-    ) {
+    public synchronized JarvisResult<ToolContract> replace(
+            ToolContract tool) {
+
         if (tool == null) {
-            return JarvisResult.failure(
-                    JarvisError.of(
-                            JarvisError.Type.INVALID_REQUEST,
-                            "Tool cannot be null.",
-                            "ToolRegistry"
-                    )
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "Tool cannot be null"
             );
         }
 
-        String id = normalize(tool.getId());
+        String id = normalizeId(tool.getId());
 
         if (id.isEmpty()) {
-            return JarvisResult.failure(
-                    JarvisError.of(
-                            JarvisError.Type.VALIDATION_FAILED,
-                            "Tool ID cannot be empty.",
-                            "ToolRegistry"
-                    )
+            return failure(
+                    JarvisError.Type.VALIDATION_FAILED,
+                    "Tool id cannot be empty"
             );
         }
 
         tools.put(id, tool);
 
         return JarvisResult.success(
-                null,
-                "Tool registered or replaced: " + id
+                tool,
+                "Tool registered or replaced successfully"
         );
     }
 
     public synchronized JarvisResult<ToolContract> get(
-            String toolId
-    ) {
-        String id = normalize(toolId);
+            String toolId) {
+
+        String id = normalizeId(toolId);
 
         if (id.isEmpty()) {
-            return JarvisResult.failure(
-                    JarvisError.of(
-                            JarvisError.Type.INVALID_REQUEST,
-                            "Tool ID cannot be empty.",
-                            "ToolRegistry"
-                    )
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "Tool id cannot be empty"
             );
         }
 
         ToolContract tool = tools.get(id);
 
         if (tool == null) {
-            return JarvisResult.failure(
-                    JarvisError.of(
-                            JarvisError.Type.NOT_FOUND,
-                            "Tool not found: " + id,
-                            "ToolRegistry"
-                    )
+            return failure(
+                    JarvisError.Type.NOT_FOUND,
+                    "Tool not found: " + id
             );
         }
 
         return JarvisResult.success(
                 tool,
-                "Tool found: " + id
+                "Tool found"
         );
     }
 
-    public synchronized JarvisResult<Void> remove(
-            String toolId
-    ) {
-        String id = normalize(toolId);
+    public synchronized JarvisResult<ToolContract> remove(
+            String toolId) {
+
+        String id = normalizeId(toolId);
 
         if (id.isEmpty()) {
-            return JarvisResult.failure(
-                    JarvisError.of(
-                            JarvisError.Type.INVALID_REQUEST,
-                            "Tool ID cannot be empty.",
-                            "ToolRegistry"
-                    )
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "Tool id cannot be empty"
             );
         }
 
-        if (!tools.containsKey(id)) {
-            return JarvisResult.failure(
-                    JarvisError.of(
-                            JarvisError.Type.NOT_FOUND,
-                            "Tool not found: " + id,
-                            "ToolRegistry"
-                    )
+        ToolContract removed = tools.remove(id);
+
+        if (removed == null) {
+            return failure(
+                    JarvisError.Type.NOT_FOUND,
+                    "Tool not found: " + id
             );
         }
-
-        tools.remove(id);
 
         return JarvisResult.success(
-                null,
-                "Tool removed: " + id
+                removed,
+                "Tool removed successfully"
         );
     }
 
-    public synchronized boolean contains(
-            String toolId
-    ) {
-        String id = normalize(toolId);
-
+    public synchronized boolean contains(String toolId) {
+        String id = normalizeId(toolId);
         return !id.isEmpty() && tools.containsKey(id);
     }
 
-    public synchronized boolean isAvailable(
-            String toolId
-    ) {
-        String id = normalize(toolId);
+    public synchronized boolean isAvailable(String toolId) {
+        String id = normalizeId(toolId);
+
+        if (id.isEmpty()) {
+            return false;
+        }
 
         ToolContract tool = tools.get(id);
 
         return tool != null && tool.isAvailable();
+    }
+
+    public synchronized int size() {
+        return tools.size();
+    }
+
+    public synchronized boolean isEmpty() {
+        return tools.isEmpty();
     }
 
     public synchronized List<String> getToolIds() {
@@ -181,35 +175,51 @@ public final class ToolRegistry {
         );
     }
 
-    public synchronized List<String> getAvailableToolIds() {
-        List<String> available = new ArrayList<>();
+    public synchronized List<ToolContract> getTools() {
+        return Collections.unmodifiableList(
+                new ArrayList<>(tools.values())
+        );
+    }
 
-        for (Map.Entry<String, ToolContract> entry
-                : tools.entrySet()) {
+    public synchronized List<String> getAvailableToolIds() {
+
+        List<String> result = new ArrayList<>();
+
+        for (Map.Entry<String, ToolContract> entry : tools.entrySet()) {
 
             ToolContract tool = entry.getValue();
 
             if (tool != null && tool.isAvailable()) {
-                available.add(entry.getKey());
+                result.add(entry.getKey());
             }
         }
 
-        return Collections.unmodifiableList(available);
-    }
-
-    public synchronized int size() {
-        return tools.size();
+        return Collections.unmodifiableList(result);
     }
 
     public synchronized void clear() {
         tools.clear();
     }
 
-    private String normalize(String value) {
+    private static String normalizeId(String value) {
+
         if (value == null) {
             return "";
         }
 
-        return value.trim().toLowerCase();
+        return value.trim();
+    }
+
+    private static <T> JarvisResult<T> failure(
+            JarvisError.Type type,
+            String message) {
+
+        return JarvisResult.failure(
+                JarvisError.of(
+                        type,
+                        message,
+                        "ToolRegistry"
+                )
+        );
     }
 }
