@@ -3,33 +3,50 @@ package com.kamal.jarvis.v2.evolution;
 import com.kamal.jarvis.v2.core.JarvisError;
 import com.kamal.jarvis.v2.core.JarvisResult;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * SourceEvolutionEngine
+ * JARVIS V2 - Source Evolution Engine
  *
- * مسؤول عن تنفيذ مجموعة تغييرات منظمة على ملفات المشروع.
+ * طبقة تنفيذ تغييرات منظمة فوق CodeEvolutionEngine.
  *
- * لا يقوم بتوليد كود عشوائي، ولا يتجاوز OwnerSecurityBoundary.
- * يستعمل CodeEvolutionEngine لتنفيذ عمليات الملفات مع النسخ الاحتياطي
- * والـ rollback.
+ * المسؤوليات:
+ *
+ * 1. استقبال ChangeSet من نظام التطور.
+ * 2. التحقق من صحة جميع التغييرات قبل التنفيذ.
+ * 3. منع تكرار نفس الملف داخل ChangeSet واحد.
+ * 4. تنفيذ التغييرات بالترتيب.
+ * 5. الاعتماد على CodeEvolutionEngine للـ backup والحماية.
+ * 6. Rollback للتغييرات التي تمت إذا فشلت العملية.
+ * 7. عدم لمس ملفات Owner/Security المحمية.
+ *
+ * ملاحظة:
+ * هذا المحرك لا "يخترع" الكود من نفسه.
+ * هو ينفذ ChangeSet موثوق ومحدد من طبقة التخطيط/التطور.
  */
 public final class SourceEvolutionEngine {
+
+    private static final String ENGINE_ID =
+            "v2.source_evolution_engine";
 
     private final CodeEvolutionEngine codeEvolutionEngine;
 
     private boolean initialized;
+
     private ChangeSet lastAppliedChangeSet;
 
-    public SourceEvolutionEngine(CodeEvolutionEngine codeEvolutionEngine) {
+    public SourceEvolutionEngine(
+            CodeEvolutionEngine codeEvolutionEngine
+    ) {
         if (codeEvolutionEngine == null) {
             throw new IllegalArgumentException(
-                    "codeEvolutionEngine cannot be null"
+                    "codeEvolutionEngine cannot be null."
             );
         }
 
@@ -41,39 +58,51 @@ public final class SourceEvolutionEngine {
      * تهيئة المحرك.
      */
     public synchronized JarvisResult<Boolean> initialize() {
-        try {
-            JarvisResult<Boolean> result = codeEvolutionEngine.initialize();
 
-            if (result == null || !result.isSuccess()) {
-                if (result != null) {
-                    return JarvisResult.failure(
-                            result.getError(),
-                            "Source evolution initialization failed: "
-                                    + result.getMessage()
-                    );
-                }
+        if (initialized) {
+            return JarvisResult.success(
+                    true,
+                    "Source evolution engine is already initialized."
+            );
+        }
+
+        try {
+
+            JarvisResult<Boolean> result =
+                    codeEvolutionEngine.initialize();
+
+            if (result == null) {
 
                 return failure(
                         JarvisError.Type.EVOLUTION_FAILED,
-                        "Code evolution engine returned no initialization result"
+                        "Code evolution engine returned no initialization result."
+                );
+            }
+
+            if (!result.isSuccess()) {
+
+                return JarvisResult.failure(
+                        result.getError(),
+                        result.getMessage()
                 );
             }
 
             initialized = true;
 
             return JarvisResult.success(
-                    Boolean.TRUE,
-                    "Source evolution engine initialized"
+                    true,
+                    "Source evolution engine initialized."
             );
 
         } catch (Exception e) {
+
             initialized = false;
 
             return JarvisResult.failure(
                     JarvisError.fromException(
                             JarvisError.Type.EVOLUTION_FAILED,
-                            "Failed to initialize source evolution engine",
-                            "SourceEvolutionEngine.initialize",
+                            "Source evolution initialization failed.",
+                            ENGINE_ID,
                             e
                     )
             );
@@ -81,78 +110,87 @@ public final class SourceEvolutionEngine {
     }
 
     /**
-     * تطبيق مجموعة تغييرات كاملة.
+     * تطبيق ChangeSet كامل.
      *
-     * إذا فشل تغيير واحد، يتم تنفيذ rollback لجميع التغييرات
-     * التي تم تنفيذها داخل هذه العملية.
+     * إذا فشل أي تغيير:
+     * - لا نكمل التغييرات اللاحقة.
+     * - نحاول rollback لكل التغييرات التي نجحت.
      */
     public synchronized JarvisResult<ChangeResult> apply(
             ChangeSet changeSet
     ) {
+
         if (changeSet == null) {
+
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
-                    "ChangeSet cannot be null"
+                    "ChangeSet cannot be null."
             );
         }
 
-        if (!changeSet.isValid()) {
-            return failure(
-                    JarvisError.Type.VALIDATION_FAILED,
-                    "ChangeSet is invalid"
+        JarvisResult<Boolean> validation =
+                validateChangeSet(changeSet);
+
+        if (!validation.isSuccess()) {
+
+            return JarvisResult.failure(
+                    validation.getError(),
+                    validation.getMessage()
             );
         }
 
         if (!initialized) {
-            JarvisResult<Boolean> init = initialize();
+
+            JarvisResult<Boolean> init =
+                    initialize();
 
             if (!init.isSuccess()) {
-                return failure(
+
+                return JarvisResult.failure(
                         init.getError(),
                         init.getMessage()
                 );
             }
         }
 
-        long startedAt = System.currentTimeMillis();
+        long startedAt =
+                System.currentTimeMillis();
 
-        List<AppliedChange> appliedChanges = new ArrayList<>();
-        List<String> errors = new ArrayList<>();
+        List<AppliedChange> appliedChanges =
+                new ArrayList<>();
 
-        for (FileChange change : changeSet.getChanges()) {
+        List<String> errors =
+                new ArrayList<>();
 
-            if (change == null || !change.isValid()) {
-                errors.add("Invalid file change");
+        for (FileChange change :
+                changeSet.getChanges()) {
 
-                JarvisResult<ChangeResult> recovery =
-                        rollbackAppliedChanges(
-                                changeSet,
-                                appliedChanges,
-                                startedAt,
-                                errors
-                        );
+            JarvisResult<Boolean> result =
+                    applySingleChange(change);
 
-                return recovery;
-            }
+            if (result == null ||
+                    !result.isSuccess()) {
 
-            JarvisResult<Boolean> operation =
-                    applyChange(change);
+                String message =
+                        result == null
+                                ? "Source change returned no result."
+                                : result.getMessage();
 
-            if (!operation.isSuccess()) {
+                if (message == null ||
+                        message.trim().isEmpty()) {
 
-                String message = operation.getMessage();
-
-                if (message == null || message.trim().isEmpty()) {
-                    message = "Unknown source modification failure";
+                    message =
+                            "Source change failed for: "
+                                    + change.getPath();
                 }
 
                 errors.add(message);
 
-                return rollbackAppliedChanges(
+                return failAndRollback(
                         changeSet,
                         appliedChanges,
-                        startedAt,
-                        errors
+                        errors,
+                        startedAt
                 );
             }
 
@@ -164,51 +202,73 @@ public final class SourceEvolutionEngine {
             );
         }
 
-        lastAppliedChangeSet = changeSet;
+        lastAppliedChangeSet =
+                changeSet;
 
-        ChangeResult result = new ChangeResult(
-                true,
-                false,
-                changeSet.getId(),
-                appliedChanges,
-                errors,
-                System.currentTimeMillis() - startedAt,
-                "Source changes applied successfully"
-        );
+        ChangeResult result =
+                new ChangeResult(
+                        true,
+                        true,
+                        changeSet.getId(),
+                        appliedChanges,
+                        errors,
+                        System.currentTimeMillis()
+                                - startedAt,
+                        "All source changes were applied successfully."
+                );
 
         return JarvisResult.success(
                 result,
-                "Source evolution completed successfully"
+                result.getMessage()
         );
     }
 
     /**
-     * تطبيق تغيير واحد.
+     * تنفيذ تغيير واحد.
      */
-    private JarvisResult<Boolean> applyChange(
+    private JarvisResult<Boolean> applySingleChange(
             FileChange change
     ) {
+
+        if (change == null ||
+                !change.isValid()) {
+
+            return failure(
+                    JarvisError.Type.VALIDATION_FAILED,
+                    "Invalid file change."
+            );
+        }
+
         try {
+
             switch (change.getOperation()) {
 
                 case CREATE:
-                    return codeEvolutionEngine.createFile(
-                            change.getPath(),
-                            change.getContent()
+
+                    return convertToBoolean(
+                            codeEvolutionEngine.createFile(
+                                    change.getPath(),
+                                    change.getContent()
+                            )
                     );
 
                 case WRITE:
-                    return codeEvolutionEngine.writeFile(
-                            change.getPath(),
-                            change.getContent()
+
+                    return convertToBoolean(
+                            codeEvolutionEngine.writeFile(
+                                    change.getPath(),
+                                    change.getContent()
+                            )
                     );
 
                 case DELETE:
+
                     return codeEvolutionEngine.deleteFile(
                             change.getPath()
                     );
 
                 default:
+
                     return failure(
                             JarvisError.Type.INVALID_REQUEST,
                             "Unsupported source operation: "
@@ -217,12 +277,13 @@ public final class SourceEvolutionEngine {
             }
 
         } catch (Exception e) {
+
             return JarvisResult.failure(
                     JarvisError.fromException(
                             JarvisError.Type.FILE_OPERATION_FAILED,
-                            "Source change failed for: "
+                            "Source modification failed for: "
                                     + change.getPath(),
-                            "SourceEvolutionEngine.applyChange",
+                            ENGINE_ID,
                             e
                     )
             );
@@ -230,175 +291,231 @@ public final class SourceEvolutionEngine {
     }
 
     /**
-     * Rollback لكل التغييرات التي نجحت قبل الفشل.
+     * Rollback للتغييرات التي نجحت.
+     *
+     * مهم:
+     * نستعمل rollback(String) الحقيقي الموجود
+     * داخل CodeEvolutionEngine.
      */
-    private JarvisResult<ChangeResult> rollbackAppliedChanges(
+    private JarvisResult<ChangeResult> failAndRollback(
             ChangeSet changeSet,
             List<AppliedChange> appliedChanges,
-            long startedAt,
-            List<String> errors
+            List<String> errors,
+            long startedAt
     ) {
-        boolean rollbackSuccessful = false;
 
-        try {
-            if (!appliedChanges.isEmpty()) {
+        boolean rollbackSuccessful =
+                true;
 
-                CodeEvolutionEngine.RollbackReport report =
-                        codeEvolutionEngine.rollback();
+        /*
+         * نرجع التغييرات بالعكس:
+         *
+         * A
+         * B
+         * C
+         *
+         * تصبح:
+         *
+         * C
+         * B
+         * A
+         */
+        for (int i =
+                appliedChanges.size() - 1;
+                i >= 0;
+                i--) {
+
+            AppliedChange applied =
+                    appliedChanges.get(i);
+
+            JarvisResult<Boolean> rollback =
+                    codeEvolutionEngine.rollback(
+                            applied.getPath()
+                    );
+
+            if (rollback == null ||
+                    !rollback.isSuccess()) {
 
                 rollbackSuccessful =
-                        report != null
-                                && report.isSuccessful();
+                        false;
 
-                if (!rollbackSuccessful) {
-                    errors.add(
-                            "Automatic rollback was not fully successful"
-                    );
+                String message =
+                        rollback == null
+                                ? "Rollback returned no result for: "
+                                    + applied.getPath()
+                                : rollback.getMessage();
+
+                if (message == null ||
+                        message.trim().isEmpty()) {
+
+                    message =
+                            "Rollback failed for: "
+                                    + applied.getPath();
                 }
-            } else {
-                rollbackSuccessful = true;
-            }
 
-        } catch (Exception e) {
-            errors.add(
-                    "Rollback exception: " + e.getMessage()
-            );
+                errors.add(message);
+            }
         }
 
-        ChangeResult result = new ChangeResult(
-                false,
-                rollbackSuccessful,
-                changeSet.getId(),
-                appliedChanges,
-                errors,
-                System.currentTimeMillis() - startedAt,
-                rollbackSuccessful
-                        ? "Source evolution failed and was rolled back"
-                        : "Source evolution failed and rollback was incomplete"
-        );
+        String message;
+
+        if (rollbackSuccessful) {
+
+            message =
+                    "Source evolution failed and all applied changes were rolled back.";
+
+        } else {
+
+            message =
+                    "Source evolution failed and rollback was incomplete.";
+        }
+
+        ChangeResult result =
+                new ChangeResult(
+                        false,
+                        rollbackSuccessful,
+                        changeSet.getId(),
+                        appliedChanges,
+                        errors,
+                        System.currentTimeMillis()
+                                - startedAt,
+                        message
+                );
 
         return JarvisResult.failure(
                 JarvisError.of(
-                        JarvisError.Type.EVOLUTION_FAILED,
-                        result.getMessage(),
-                        "SourceEvolutionEngine.apply"
+                        rollbackSuccessful
+                                ? JarvisError.Type.EVOLUTION_FAILED
+                                : JarvisError.Type.RECOVERY_FAILED,
+                        message,
+                        ENGINE_ID
                 ),
-                result.getMessage()
+                message
         );
     }
 
     /**
-     * Rollback مباشر لآخر عملية.
+     * التحقق الكامل من ChangeSet قبل لمس أي ملف.
      */
-    public synchronized JarvisResult<CodeEvolutionEngine.RollbackReport>
-    rollbackLast() {
+    public synchronized JarvisResult<Boolean>
+    validateChangeSet(
+            ChangeSet changeSet
+    ) {
 
-        if (!initialized) {
+        if (changeSet == null) {
+
             return failure(
-                    JarvisError.Type.EVOLUTION_FAILED,
-                    "Source evolution engine is not initialized"
+                    JarvisError.Type.INVALID_REQUEST,
+                    "ChangeSet cannot be null."
             );
         }
 
-        try {
-            CodeEvolutionEngine.RollbackReport report =
-                    codeEvolutionEngine.rollback();
+        if (!changeSet.isValid()) {
 
-            if (report == null) {
+            return failure(
+                    JarvisError.Type.VALIDATION_FAILED,
+                    "ChangeSet is invalid."
+            );
+        }
+
+        Set<String> paths =
+                new HashSet<>();
+
+        for (FileChange change :
+                changeSet.getChanges()) {
+
+            if (change == null ||
+                    !change.isValid()) {
+
                 return failure(
-                        JarvisError.Type.RECOVERY_FAILED,
-                        "Rollback returned no report"
+                        JarvisError.Type.VALIDATION_FAILED,
+                        "ChangeSet contains an invalid file change."
                 );
             }
 
-            if (!report.isSuccessful()) {
-                return JarvisResult.failure(
-                        JarvisError.of(
-                                JarvisError.Type.RECOVERY_FAILED,
-                                "Rollback was not fully successful",
-                                "SourceEvolutionEngine.rollbackLast"
-                        )
+            String path =
+                    normalizePath(
+                            change.getPath()
+                    );
+
+            if (path.isEmpty()) {
+
+                return failure(
+                        JarvisError.Type.VALIDATION_FAILED,
+                        "Change path cannot be empty."
                 );
             }
 
-            return JarvisResult.success(
-                    report,
-                    "Last source evolution rolled back successfully"
-            );
+            /*
+             * نفس الملف لا يمكن تغييره مرتين
+             * داخل نفس ChangeSet.
+             *
+             * هذا يمنع مشاكل الـ backup/rollback.
+             */
+            if (!paths.add(path)) {
 
-        } catch (Exception e) {
-            return JarvisResult.failure(
-                    JarvisError.fromException(
-                            JarvisError.Type.RECOVERY_FAILED,
-                            "Failed to rollback source evolution",
-                            "SourceEvolutionEngine.rollbackLast",
-                            e
-                    )
-            );
+                return failure(
+                        JarvisError.Type.VALIDATION_FAILED,
+                        "The same file appears more than once in the same ChangeSet: "
+                                + path
+                );
+            }
+
+            if (!codeEvolutionEngine.isModifiable(
+                    path
+            )) {
+
+                return failure(
+                        JarvisError.Type.NOT_AUTHORIZED,
+                        "File is not modifiable: "
+                                + path
+                );
+            }
+
+            /*
+             * CREATE:
+             * خاص الملف ما يكونش موجود.
+             */
+            if (change.getOperation() ==
+                    FileChange.Operation.CREATE) {
+
+                JarvisResult<String> existing =
+                        codeEvolutionEngine.readFile(
+                                path
+                        );
+
+                if (existing != null &&
+                        existing.isSuccess()) {
+
+                    return failure(
+                            JarvisError.Type.VALIDATION_FAILED,
+                            "CREATE requested for an existing file: "
+                                    + path
+                    );
+                }
+            }
         }
+
+        return JarvisResult.success(
+                true,
+                "ChangeSet validation passed."
+        );
     }
 
     /**
-     * Rollback لجميع التغييرات المسجلة.
-     */
-    public synchronized JarvisResult<CodeEvolutionEngine.RollbackReport>
-    rollbackAll() {
-
-        if (!initialized) {
-            return failure(
-                    JarvisError.Type.RECOVERY_FAILED,
-                    "Source evolution engine is not initialized"
-            );
-        }
-
-        try {
-            CodeEvolutionEngine.RollbackReport report =
-                    codeEvolutionEngine.rollbackAll();
-
-            if (report == null) {
-                return failure(
-                        JarvisError.Type.RECOVERY_FAILED,
-                        "Rollback returned no report"
-                );
-            }
-
-            if (!report.isSuccessful()) {
-                return JarvisResult.failure(
-                        JarvisError.of(
-                                JarvisError.Type.RECOVERY_FAILED,
-                                "Full rollback was not successful",
-                                "SourceEvolutionEngine.rollbackAll"
-                        )
-                );
-            }
-
-            return JarvisResult.success(
-                    report,
-                    "All source evolution changes rolled back"
-            );
-
-        } catch (Exception e) {
-            return JarvisResult.failure(
-                    JarvisError.fromException(
-                            JarvisError.Type.RECOVERY_FAILED,
-                            "Failed to rollback all source changes",
-                            "SourceEvolutionEngine.rollbackAll",
-                            e
-                    )
-            );
-        }
-    }
-
-    /**
-     * قراءة ملف من المشروع.
+     * قراءة ملف.
      */
     public synchronized JarvisResult<String> read(
             String path
     ) {
+
         if (!initialized) {
-            JarvisResult<Boolean> init = initialize();
+
+            JarvisResult<Boolean> init =
+                    initialize();
 
             if (!init.isSuccess()) {
+
                 return JarvisResult.failure(
                         init.getError(),
                         init.getMessage()
@@ -406,61 +523,176 @@ public final class SourceEvolutionEngine {
             }
         }
 
-        return codeEvolutionEngine.readFile(path);
+        return codeEvolutionEngine.readFile(
+                path
+        );
     }
 
     /**
-     * التأكد واش الملف قابل للتعديل.
+     * هل الملف قابل للتعديل؟
      */
     public synchronized boolean canModify(
             String path
     ) {
+
         if (!initialized) {
+
             return false;
         }
 
-        return codeEvolutionEngine.isModifiable(path);
+        return codeEvolutionEngine.isModifiable(
+                path
+        );
+    }
+
+    /**
+     * Rollback لملف محدد.
+     */
+    public synchronized JarvisResult<Boolean>
+    rollbackFile(
+            String path
+    ) {
+
+        if (!initialized) {
+
+            JarvisResult<Boolean> init =
+                    initialize();
+
+            if (!init.isSuccess()) {
+
+                return JarvisResult.failure(
+                        init.getError(),
+                        init.getMessage()
+                );
+            }
+        }
+
+        return codeEvolutionEngine.rollback(
+                path
+        );
+    }
+
+    /**
+     * Rollback كامل.
+     */
+    public synchronized JarvisResult<
+            CodeEvolutionEngine.RollbackReport>
+    rollbackAll() {
+
+        if (!initialized) {
+
+            JarvisResult<Boolean> init =
+                    initialize();
+
+            if (!init.isSuccess()) {
+
+                return JarvisResult.failure(
+                        init.getError(),
+                        init.getMessage()
+                );
+            }
+        }
+
+        return codeEvolutionEngine.rollbackAll();
+    }
+
+    /**
+     * ملفات الـworkspace.
+     */
+    public synchronized JarvisResult<List<String>>
+    listFiles() {
+
+        if (!initialized) {
+
+            JarvisResult<Boolean> init =
+                    initialize();
+
+            if (!init.isSuccess()) {
+
+                return JarvisResult.failure(
+                        init.getError(),
+                        init.getMessage()
+                );
+            }
+        }
+
+        return codeEvolutionEngine.listFiles();
     }
 
     public synchronized boolean isInitialized() {
         return initialized;
     }
 
-    public synchronized ChangeSet getLastAppliedChangeSet() {
+    public synchronized ChangeSet
+    getLastAppliedChangeSet() {
         return lastAppliedChangeSet;
     }
 
-    public synchronized CodeEvolutionEngine getCodeEvolutionEngine() {
+    public CodeEvolutionEngine
+    getCodeEvolutionEngine() {
         return codeEvolutionEngine;
     }
 
-    private static <T> JarvisResult<T> failure(
+    /**
+     * تحويل نتيجة تغيير الملف إلى نتيجة Boolean.
+     */
+    private JarvisResult<Boolean> convertToBoolean(
+            JarvisResult<?> result
+    ) {
+
+        if (result == null) {
+
+            return failure(
+                    JarvisError.Type.FILE_OPERATION_FAILED,
+                    "Code evolution returned no result."
+            );
+        }
+
+        if (!result.isSuccess()) {
+
+            return JarvisResult.failure(
+                    result.getError(),
+                    result.getMessage()
+            );
+        }
+
+        return JarvisResult.success(
+                true,
+                result.getMessage()
+        );
+    }
+
+    private String normalizePath(
+            String path
+    ) {
+
+        if (path == null) {
+            return "";
+        }
+
+        return path
+                .trim()
+                .replace(
+                        '\\',
+                        '/'
+                )
+                .replaceAll(
+                        "/+",
+                        "/"
+                );
+    }
+
+    private <T> JarvisResult<T> failure(
             JarvisError.Type type,
             String message
     ) {
+
         return JarvisResult.failure(
                 JarvisError.of(
                         type,
                         message,
-                        "SourceEvolutionEngine"
+                        ENGINE_ID
                 ),
-                message
-        );
-    }
-
-    private static <T> JarvisResult<T> failure(
-            JarvisError error,
-            String message
-    ) {
-        if (error == null) {
-            return failure(
-                    JarvisError.Type.INTERNAL_ERROR,
-                    message
-            );
-        }
-
-        return JarvisResult.failure(
-                error,
                 message
         );
     }
@@ -486,15 +718,26 @@ public final class SourceEvolutionEngine {
                 Operation operation,
                 String content
         ) {
-            this.path = normalize(path);
-            this.operation = operation;
-            this.content = content == null ? "" : content;
+
+            this.path =
+                    normalize(
+                            path
+                    );
+
+            this.operation =
+                    operation;
+
+            this.content =
+                    content == null
+                            ? ""
+                            : content;
         }
 
         public static FileChange create(
                 String path,
                 String content
         ) {
+
             return new FileChange(
                     path,
                     Operation.CREATE,
@@ -506,6 +749,7 @@ public final class SourceEvolutionEngine {
                 String path,
                 String content
         ) {
+
             return new FileChange(
                     path,
                     Operation.WRITE,
@@ -516,6 +760,7 @@ public final class SourceEvolutionEngine {
         public static FileChange delete(
                 String path
         ) {
+
             return new FileChange(
                     path,
                     Operation.DELETE,
@@ -536,15 +781,19 @@ public final class SourceEvolutionEngine {
         }
 
         public boolean isValid() {
-            if (path == null || path.isEmpty()) {
+
+            if (path == null ||
+                    path.isEmpty()) {
+
                 return false;
             }
 
-            if (path.startsWith("/")
-                    || path.startsWith("\\")
-                    || path.contains("../")
-                    || path.contains("..\\")
-                    || path.contains("\0")) {
+            if (path.startsWith("/") ||
+                    path.startsWith("\\") ||
+                    path.contains("../") ||
+                    path.contains("..\\") ||
+                    path.contains("\0")) {
+
                 return false;
             }
 
@@ -552,23 +801,32 @@ public final class SourceEvolutionEngine {
                 return false;
             }
 
-            if ((operation == Operation.CREATE
-                    || operation == Operation.WRITE)
-                    && content == null) {
+            if ((operation ==
+                    Operation.CREATE ||
+                    operation ==
+                    Operation.WRITE) &&
+                    content == null) {
+
                 return false;
             }
 
             return true;
         }
 
-        private static String normalize(String value) {
+        private static String normalize(
+                String value
+        ) {
+
             if (value == null) {
                 return "";
             }
 
             return value
                     .trim()
-                    .replace('\\', '/');
+                    .replace(
+                            '\\',
+                            '/'
+                    );
         }
     }
 
@@ -589,23 +847,41 @@ public final class SourceEvolutionEngine {
                 List<FileChange> changes,
                 Map<String, String> metadata
         ) {
-            this.id = id;
-            this.reason = reason == null ? "" : reason;
 
-            this.changes = Collections.unmodifiableList(
-                    new ArrayList<>(changes)
-            );
+            this.id =
+                    id == null
+                            ? ""
+                            : id.trim();
 
-            this.metadata = Collections.unmodifiableMap(
-                    new LinkedHashMap<>(metadata)
-            );
+            this.reason =
+                    reason == null
+                            ? ""
+                            : reason.trim();
+
+            this.changes =
+                    Collections.unmodifiableList(
+                            new ArrayList<>(
+                                    changes
+                            )
+                    );
+
+            this.metadata =
+                    Collections.unmodifiableMap(
+                            new LinkedHashMap<>(
+                                    metadata
+                            )
+                    );
         }
 
         public static Builder builder(
                 String id,
                 String reason
         ) {
-            return new Builder(id, reason);
+
+            return new Builder(
+                    id,
+                    reason
+            );
         }
 
         public String getId() {
@@ -616,16 +892,19 @@ public final class SourceEvolutionEngine {
             return reason;
         }
 
-        public List<FileChange> getChanges() {
+        public List<FileChange>
+        getChanges() {
             return changes;
         }
 
-        public Map<String, String> getMetadata() {
+        public Map<String, String>
+        getMetadata() {
             return metadata;
         }
 
         public boolean isValid() {
-            if (id == null || id.trim().isEmpty()) {
+
+            if (id.isEmpty()) {
                 return false;
             }
 
@@ -633,8 +912,26 @@ public final class SourceEvolutionEngine {
                 return false;
             }
 
-            for (FileChange change : changes) {
-                if (change == null || !change.isValid()) {
+            Set<String> paths =
+                    new HashSet<>();
+
+            for (FileChange change :
+                    changes) {
+
+                if (change == null ||
+                        !change.isValid()) {
+
+                    return false;
+                }
+
+                String path =
+                        normalize(
+                                change.getPath()
+                        );
+
+                if (path.isEmpty() ||
+                        !paths.add(path)) {
+
                     return false;
                 }
             }
@@ -642,20 +939,44 @@ public final class SourceEvolutionEngine {
             return true;
         }
 
+        private static String normalize(
+                String path
+        ) {
+
+            if (path == null) {
+                return "";
+            }
+
+            return path
+                    .trim()
+                    .replace(
+                            '\\',
+                            '/'
+                    )
+                    .replaceAll(
+                            "/+",
+                            "/"
+                    );
+        }
+
         public static final class Builder {
 
             private final String id;
             private final String reason;
-            private final List<FileChange> changes =
+
+            private final List<FileChange>
+                    changes =
                     new ArrayList<>();
 
-            private final Map<String, String> metadata =
+            private final Map<String, String>
+                    metadata =
                     new LinkedHashMap<>();
 
             private Builder(
                     String id,
                     String reason
             ) {
+
                 this.id = id;
                 this.reason = reason;
             }
@@ -663,6 +984,7 @@ public final class SourceEvolutionEngine {
             public Builder add(
                     FileChange change
             ) {
+
                 if (change != null) {
                     changes.add(change);
                 }
@@ -674,8 +996,12 @@ public final class SourceEvolutionEngine {
                     String path,
                     String content
             ) {
+
                 changes.add(
-                        FileChange.create(path, content)
+                        FileChange.create(
+                                path,
+                                content
+                        )
                 );
 
                 return this;
@@ -685,8 +1011,12 @@ public final class SourceEvolutionEngine {
                     String path,
                     String content
             ) {
+
                 changes.add(
-                        FileChange.write(path, content)
+                        FileChange.write(
+                                path,
+                                content
+                        )
                 );
 
                 return this;
@@ -695,8 +1025,11 @@ public final class SourceEvolutionEngine {
             public Builder delete(
                     String path
             ) {
+
                 changes.add(
-                        FileChange.delete(path)
+                        FileChange.delete(
+                                path
+                        )
                 );
 
                 return this;
@@ -706,10 +1039,15 @@ public final class SourceEvolutionEngine {
                     String key,
                     String value
             ) {
-                if (key != null && !key.trim().isEmpty()) {
+
+                if (key != null &&
+                        !key.trim().isEmpty()) {
+
                     metadata.put(
                             key.trim(),
-                            value == null ? "" : value
+                            value == null
+                                    ? ""
+                                    : value
                     );
                 }
 
@@ -717,6 +1055,7 @@ public final class SourceEvolutionEngine {
             }
 
             public ChangeSet build() {
+
                 return new ChangeSet(
                         id,
                         reason,
@@ -736,10 +1075,11 @@ public final class SourceEvolutionEngine {
         private final String path;
         private final FileChange.Operation operation;
 
-        public AppliedChange(
+        private AppliedChange(
                 String path,
                 FileChange.Operation operation
         ) {
+
             this.path = path;
             this.operation = operation;
         }
@@ -748,7 +1088,8 @@ public final class SourceEvolutionEngine {
             return path;
         }
 
-        public FileChange.Operation getOperation() {
+        public FileChange.Operation
+        getOperation() {
             return operation;
         }
     }
@@ -760,59 +1101,77 @@ public final class SourceEvolutionEngine {
     public static final class ChangeResult {
 
         private final boolean success;
-        private final boolean rolledBack;
+        private final boolean rollbackSuccessful;
         private final String changeSetId;
-        private final List<AppliedChange> appliedChanges;
+        private final List<AppliedChange>
+                appliedChanges;
         private final List<String> errors;
         private final long durationMs;
         private final String message;
 
-        public ChangeResult(
+        private ChangeResult(
                 boolean success,
-                boolean rolledBack,
+                boolean rollbackSuccessful,
                 String changeSetId,
                 List<AppliedChange> appliedChanges,
                 List<String> errors,
                 long durationMs,
                 String message
         ) {
+
             this.success = success;
-            this.rolledBack = rolledBack;
-            this.changeSetId = changeSetId;
 
-            this.appliedChanges = Collections.unmodifiableList(
-                    new ArrayList<>(
-                            appliedChanges == null
-                                    ? Collections.<AppliedChange>emptyList()
-                                    : appliedChanges
-                    )
-            );
+            this.rollbackSuccessful =
+                    rollbackSuccessful;
 
-            this.errors = Collections.unmodifiableList(
-                    new ArrayList<>(
-                            errors == null
-                                    ? Collections.<String>emptyList()
-                                    : errors
-                    )
-            );
+            this.changeSetId =
+                    changeSetId;
 
-            this.durationMs = durationMs;
-            this.message = message == null ? "" : message;
+            this.appliedChanges =
+                    Collections.unmodifiableList(
+                            new ArrayList<>(
+                                    appliedChanges == null
+                                            ? Collections
+                                                    .<AppliedChange>
+                                                    emptyList()
+                                            : appliedChanges
+                            )
+                    );
+
+            this.errors =
+                    Collections.unmodifiableList(
+                            new ArrayList<>(
+                                    errors == null
+                                            ? Collections
+                                                    .<String>
+                                                    emptyList()
+                                            : errors
+                            )
+                    );
+
+            this.durationMs =
+                    durationMs;
+
+            this.message =
+                    message == null
+                            ? ""
+                            : message;
         }
 
         public boolean isSuccess() {
             return success;
         }
 
-        public boolean isRolledBack() {
-            return rolledBack;
+        public boolean isRollbackSuccessful() {
+            return rollbackSuccessful;
         }
 
         public String getChangeSetId() {
             return changeSetId;
         }
 
-        public List<AppliedChange> getAppliedChanges() {
+        public List<AppliedChange>
+        getAppliedChanges() {
             return appliedChanges;
         }
 
