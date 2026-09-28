@@ -1,85 +1,91 @@
 package com.kamal.jarvis.v2.permissions;
 
+/**
+ * Permissions/capabilities that JARVIS may need in order to complete goals.
+ *
+ * These are JARVIS-level capabilities, not all of them map directly
+ * to Android runtime permissions.
+ */
 public enum CapabilityPermission {
 
     FILE_READ(
-            "FILE_READ",
-            "Read files that Android has granted JARVIS access to."
+            "file_read",
+            "Read files and project data"
     ),
 
     FILE_WRITE(
-            "FILE_WRITE",
-            "Create or modify files that Android has granted JARVIS access to."
+            "file_write",
+            "Create or modify files"
     ),
 
     FILE_DELETE(
-            "FILE_DELETE",
-            "Delete files that Android has granted JARVIS access to."
+            "file_delete",
+            "Delete files when explicitly allowed"
     ),
 
     FILE_MOVE(
-            "FILE_MOVE",
-            "Move or rename files that Android has granted JARVIS access to."
+            "file_move",
+            "Move or reorganize files"
     ),
 
     MICROPHONE(
-            "MICROPHONE",
-            "Use the device microphone."
+            "microphone",
+            "Use the device microphone"
     ),
 
     NOTIFICATIONS(
-            "NOTIFICATIONS",
-            "Send notifications to the user."
+            "notifications",
+            "Post notifications"
     ),
 
     NOTIFICATION_ACCESS(
-            "NOTIFICATION_ACCESS",
-            "Access notifications through Android's notification listener permission."
+            "notification_access",
+            "Read permitted notification data"
     ),
 
     ACCESSIBILITY(
-            "ACCESSIBILITY",
-            "Use Android accessibility capabilities after the user explicitly enables the service."
+            "accessibility",
+            "Use Android accessibility capabilities"
     ),
 
     NETWORK(
-            "NETWORK",
-            "Use network connectivity."
+            "network",
+            "Access network resources"
     ),
 
     BACKGROUND_EXECUTION(
-            "BACKGROUND_EXECUTION",
-            "Run supported long-running tasks through Android background mechanisms."
+            "background_execution",
+            "Execute permitted background work"
     ),
 
     PROJECT_READ(
-            "PROJECT_READ",
-            "Read files belonging to an authorized development project."
+            "project_read",
+            "Read JARVIS project/workspace files"
     ),
 
     PROJECT_WRITE(
-            "PROJECT_WRITE",
-            "Modify files belonging to an authorized development project."
+            "project_write",
+            "Modify permitted JARVIS project files"
     ),
 
     BUILD_PROJECT(
-            "BUILD_PROJECT",
-            "Run an authorized project build operation."
+            "build_project",
+            "Build a project or generated capability"
     ),
 
     RUN_TESTS(
-            "RUN_TESTS",
-            "Run authorized tests."
+            "run_tests",
+            "Run automated tests"
     ),
 
     EVOLUTION(
-            "EVOLUTION",
-            "Use the JARVIS evolution system."
+            "evolution",
+            "Use JARVIS evolution mechanisms"
     ),
 
     OWNER_AUTHORIZATION(
-            "OWNER_AUTHORIZATION",
-            "Perform an operation that requires verified owner authorization."
+            "owner_authorization",
+            "Require verified owner authorization"
     );
 
     private final String id;
@@ -99,6 +105,24 @@ public enum CapabilityPermission {
 
     public String getDescription() {
         return description;
+    }
+
+    public static CapabilityPermission fromId(String id) {
+
+        if (id == null) {
+            return null;
+        }
+
+        String normalized = id.trim();
+
+        for (CapabilityPermission permission : values()) {
+
+            if (permission.id.equalsIgnoreCase(normalized)) {
+                return permission;
+            }
+        }
+
+        return null;
     }
 
     @Override
