@@ -1,0 +1,366 @@
+package com.kamal.jarvis.v2.core;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+public final class JarvisRuntime {
+
+    public interface EventListener {
+        void onEvent(JarvisEvent event);
+    }
+
+    private final Map<String, ToolContract> tools =
+            new LinkedHashMap<>();
+
+    private final List<JarvisEvent> eventHistory =
+            new ArrayList<>();
+
+    private final List<EventListener> listeners =
+            new ArrayList<>();
+
+    private boolean started = false;
+
+    public synchronized JarvisResult<Void> start() {
+        if (started) {
+            return JarvisResult.success(
+                    null,
+                    "JARVIS Runtime is already running."
+            );
+        }
+
+        started = true;
+
+        publishEvent(
+                new JarvisEvent(
+                        JarvisEvent.Type.SYSTEM_STARTED,
+                        "JarvisRuntime",
+                        "JARVIS Runtime started."
+                )
+        );
+
+        return JarvisResult.success(
+                null,
+                "JARVIS Runtime started."
+        );
+    }
+
+    public synchronized JarvisResult<Void> stop() {
+        if (!started) {
+            return JarvisResult.success(
+                    null,
+                    "JARVIS Runtime is already stopped."
+            );
+        }
+
+        started = false;
+
+        publishEvent(
+                new JarvisEvent(
+                        JarvisEvent.Type.SYSTEM_STOPPED,
+                        "JarvisRuntime",
+                        "JARVIS Runtime stopped."
+                )
+        );
+
+        return JarvisResult.success(
+                null,
+                "JARVIS Runtime stopped."
+        );
+    }
+
+    public synchronized boolean isRunning() {
+        return started;
+    }
+
+    public synchronized JarvisResult<Void> registerTool(
+            ToolContract tool
+    ) {
+        if (tool == null) {
+            return JarvisResult.failure(
+                    JarvisError.of(
+                            JarvisError.Type.INVALID_REQUEST,
+                            "Tool cannot be null.",
+                            "JarvisRuntime"
+                    )
+            );
+        }
+
+        String id = normalizeId(tool.getId());
+
+        if (id.isEmpty()) {
+            return JarvisResult.failure(
+                    JarvisError.of(
+                            JarvisError.Type.VALIDATION_FAILED,
+                            "Tool ID cannot be empty.",
+                            "JarvisRuntime"
+                    )
+            );
+        }
+
+        if (tools.containsKey(id)) {
+            return JarvisResult.failure(
+                    JarvisError.of(
+                            JarvisError.Type.VALIDATION_FAILED,
+                            "A tool with this ID is already registered: " + id,
+                            "JarvisRuntime"
+                    )
+            );
+        }
+
+        tools.put(id, tool);
+
+        return JarvisResult.success(
+                null,
+                "Tool registered: " + id
+        );
+    }
+
+    public synchronized JarvisResult<Void> unregisterTool(
+            String toolId
+    ) {
+        String id = normalizeId(toolId);
+
+        if (id.isEmpty()) {
+            return JarvisResult.failure(
+                    JarvisError.of(
+                            JarvisError.Type.INVALID_REQUEST,
+                            "Tool ID cannot be empty.",
+                            "JarvisRuntime"
+                    )
+            );
+        }
+
+        if (!tools.containsKey(id)) {
+            return JarvisResult.failure(
+                    JarvisError.of(
+                            JarvisError.Type.NOT_FOUND,
+                            "Tool not found: " + id,
+                            "JarvisRuntime"
+                    )
+            );
+        }
+
+        tools.remove(id);
+
+        return JarvisResult.success(
+                null,
+                "Tool unregistered: " + id
+        );
+    }
+
+    public synchronized JarvisResult<ToolContract> getTool(
+            String toolId
+    ) {
+        String id = normalizeId(toolId);
+
+        ToolContract tool = tools.get(id);
+
+        if (tool == null) {
+            return JarvisResult.failure(
+                    JarvisError.of(
+                            JarvisError.Type.NOT_FOUND,
+                            "Tool not found: " + id,
+                            "JarvisRuntime"
+                    )
+            );
+        }
+
+        return JarvisResult.success(
+                tool,
+                "Tool found: " + id
+        );
+    }
+
+    public synchronized JarvisResult<List<String>> getToolIds() {
+        return JarvisResult.success(
+                Collections.unmodifiableList(
+                        new ArrayList<>(tools.keySet())
+                ),
+                "Registered tools retrieved."
+        );
+    }
+
+    public synchronized JarvisResult<ToolContract.ToolOutput> execute(
+            String toolId,
+            ToolContract.ToolInput input
+    ) {
+        if (!started) {
+            return JarvisResult.failure(
+                    JarvisError.of(
+                            JarvisError.Type.EXECUTION_FAILED,
+                            "JARVIS Runtime is not running.",
+                            "JarvisRuntime"
+                    )
+            );
+        }
+
+        if (input == null) {
+            return JarvisResult.failure(
+                    JarvisError.of(
+                            JarvisError.Type.INVALID_REQUEST,
+                            "Tool input cannot be null.",
+                            "JarvisRuntime"
+                    )
+            );
+        }
+
+        String id = normalizeId(toolId);
+        ToolContract tool = tools.get(id);
+
+        if (tool == null) {
+            return JarvisResult.failure(
+                    JarvisError.of(
+                            JarvisError.Type.NOT_FOUND,
+                            "Tool not found: " + id,
+                            "JarvisRuntime"
+                    )
+            );
+        }
+
+        if (!tool.isAvailable()) {
+            publishEvent(
+                    new JarvisEvent(
+                            JarvisEvent.Type.TOOL_FAILED,
+                            "JarvisRuntime",
+                            "Tool is unavailable: " + id
+                    ).withData("toolId", id)
+            );
+
+            return JarvisResult.failure(
+                    JarvisError.of(
+                            JarvisError.Type.TOOL_UNAVAILABLE,
+                            "Tool is currently unavailable: " + id,
+                            "JarvisRuntime"
+                    )
+            );
+        }
+
+        publishEvent(
+                new JarvisEvent(
+                        JarvisEvent.Type.TOOL_STARTED,
+                        "JarvisRuntime",
+                        "Tool execution started: " + id
+                ).withData("toolId", id)
+        );
+
+        try {
+            JarvisResult<ToolContract.ToolOutput> result =
+                    tool.execute(input);
+
+            if (result == null) {
+                JarvisError error = JarvisError.of(
+                        JarvisError.Type.EXECUTION_FAILED,
+                        "Tool returned a null result: " + id,
+                        "JarvisRuntime"
+                );
+
+                publishEvent(
+                        new JarvisEvent(
+                                JarvisEvent.Type.TOOL_FAILED,
+                                "JarvisRuntime",
+                                error.getMessage()
+                        ).withData("toolId", id)
+                );
+
+                return JarvisResult.failure(error);
+            }
+
+            if (result.isSuccess()) {
+                publishEvent(
+                        new JarvisEvent(
+                                JarvisEvent.Type.TOOL_COMPLETED,
+                                "JarvisRuntime",
+                                "Tool execution completed: " + id
+                        ).withData("toolId", id)
+                );
+            } else {
+                publishEvent(
+                        new JarvisEvent(
+                                JarvisEvent.Type.TOOL_FAILED,
+                                "JarvisRuntime",
+                                "Tool execution failed: " + id
+                        )
+                                .withData("toolId", id)
+                                .withData("error", result.getMessage())
+                );
+            }
+
+            return result;
+
+        } catch (Exception exception) {
+
+            JarvisError error =
+                    JarvisError.fromException(
+                            JarvisError.Type.EXECUTION_FAILED,
+                            "Tool execution threw an exception: "
+                                    + exception.getMessage(),
+                            "JarvisRuntime",
+                            exception
+                    );
+
+            publishEvent(
+                    new JarvisEvent(
+                            JarvisEvent.Type.TOOL_FAILED,
+                            "JarvisRuntime",
+                            error.getMessage()
+                    ).withData("toolId", id)
+            );
+
+            return JarvisResult.failure(error);
+        }
+    }
+
+    public synchronized void addEventListener(
+            EventListener listener
+    ) {
+        if (listener != null && !listeners.contains(listener)) {
+            listeners.add(listener);
+        }
+    }
+
+    public synchronized void removeEventListener(
+            EventListener listener
+    ) {
+        listeners.remove(listener);
+    }
+
+    public synchronized List<JarvisEvent> getEventHistory() {
+        return Collections.unmodifiableList(
+                new ArrayList<>(eventHistory)
+        );
+    }
+
+    public synchronized int getRegisteredToolCount() {
+        return tools.size();
+    }
+
+    private void publishEvent(JarvisEvent event) {
+        if (event == null) {
+            return;
+        }
+
+        eventHistory.add(event);
+
+        List<EventListener> snapshot =
+                new ArrayList<>(listeners);
+
+        for (EventListener listener : snapshot) {
+            try {
+                listener.onEvent(event);
+            } catch (Exception ignored) {
+                // A listener must never be able to crash the runtime.
+            }
+        }
+    }
+
+    private String normalizeId(String id) {
+        if (id == null) {
+            return "";
+        }
+
+        return id.trim().toLowerCase();
+    }
+}
