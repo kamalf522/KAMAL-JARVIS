@@ -28,12 +28,6 @@ public final class OwnerSecurityBoundary {
         ownerId = "";
     }
 
-    /**
-     * Initializes the owner identity once.
-     *
-     * The owner identity cannot be replaced through this class
-     * after initialization.
-     */
     public synchronized JarvisResult<Void> initializeOwner(
             String requestedOwnerId
     ) {
@@ -66,16 +60,18 @@ public final class OwnerSecurityBoundary {
         );
     }
 
-    /**
-     * Checks whether the security boundary has been initialized.
-     */
     public synchronized boolean isInitialized() {
         return initialized;
     }
 
     /**
-     * Checks whether the supplied identity is the registered owner.
+     * Returns true when the security boundary is initialized and active.
+     * This method does not expose or modify the owner identity.
      */
+    public synchronized boolean isActive() {
+        return initialized;
+    }
+
     public synchronized boolean isOwner(
             String identity
     ) {
@@ -86,9 +82,6 @@ public final class OwnerSecurityBoundary {
         return ownerId.equals(normalize(identity));
     }
 
-    /**
-     * Authorizes an owner-only operation.
-     */
     public synchronized JarvisResult<Void> authorizeOwnerOperation(
             String identity,
             String operation
@@ -129,9 +122,6 @@ public final class OwnerSecurityBoundary {
         );
     }
 
-    /**
-     * Checks whether an area is protected from ordinary evolution.
-     */
     public synchronized boolean isProtectedArea(
             String area
     ) {
@@ -144,10 +134,6 @@ public final class OwnerSecurityBoundary {
         );
     }
 
-    /**
-     * Prevents normal evolution systems from modifying
-     * protected security areas.
-     */
     public synchronized JarvisResult<Void> authorizeEvolutionChange(
             String area
     ) {
@@ -180,20 +166,12 @@ public final class OwnerSecurityBoundary {
         );
     }
 
-    /**
-     * Returns the registered protected areas.
-     *
-     * The returned set cannot be modified by the caller.
-     */
     public synchronized Set<String> getProtectedAreas() {
         return Collections.unmodifiableSet(
                 new HashSet<>(protectedAreas)
         );
     }
 
-    /**
-     * Returns a safe status without exposing the owner identity.
-     */
     public synchronized String getSecurityStatus() {
         if (!initialized) {
             return "UNINITIALIZED";
@@ -202,9 +180,6 @@ public final class OwnerSecurityBoundary {
         return "ACTIVE";
     }
 
-    /**
-     * The owner identity is intentionally not exposed.
-     */
     public synchronized JarvisResult<String> getOwnerRole(
             String identity
     ) {
