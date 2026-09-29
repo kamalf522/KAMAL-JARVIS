@@ -207,9 +207,14 @@ public final class JarvisSystem {
                 false;
     }
 
+    // =========================================================
+    // START
+    // =========================================================
+
     public synchronized JarvisResult<Boolean> start() {
 
         if (initialized) {
+
             return JarvisResult.success(
                     true,
                     "JARVIS V2 is already running."
@@ -218,19 +223,29 @@ public final class JarvisSystem {
 
         try {
 
+            // -------------------------------------------------
+            // 1. OWNER SECURITY
+            // -------------------------------------------------
+
             JarvisResult<Boolean> ownerResult =
                     initializeOwner();
 
             if (!ownerResult.isSuccess()) {
+
                 return JarvisResult.failure(
                         ownerResult.getError(),
                         ownerResult.getMessage()
                 );
             }
 
+            // -------------------------------------------------
+            // 2. INTERNAL WORKSPACE
+            // -------------------------------------------------
+
             if (!workspaceRoot.exists()) {
 
                 if (!workspaceRoot.mkdirs()) {
+
                     return failure(
                             JarvisError.Type.FILE_OPERATION_FAILED,
                             "Could not create JARVIS workspace."
@@ -239,42 +254,53 @@ public final class JarvisSystem {
             }
 
             if (!workspaceRoot.isDirectory()) {
+
                 return failure(
                         JarvisError.Type.FILE_OPERATION_FAILED,
                         "JARVIS workspace is not a directory."
                 );
             }
 
-            JarvisResult<Boolean> codeResult =
-                    codeEvolutionEngine.initialize();
+            // -------------------------------------------------
+            // 3. PROJECT WORKSPACE
+            //
+            // وجود مشروع خارجي ليس شرطاً لتشغيل JARVIS.
+            // -------------------------------------------------
 
-            if (!codeResult.isSuccess()) {
-                return JarvisResult.failure(
-                        codeResult.getError(),
-                        codeResult.getMessage()
-                );
+            JarvisResult<ProjectWorkspaceManager.ProjectInspection>
+                    workspaceResult =
+                    projectWorkspaceManager.revalidate();
+
+            boolean projectReady =
+                    workspaceResult != null
+                            && workspaceResult.isSuccess()
+                            && projectWorkspaceManager.isReady();
+
+            // -------------------------------------------------
+            // 4. EVOLUTION ENGINES
+            //
+            // إذا كان المشروع الحقيقي جاهزاً، نهيئو محركات
+            // التطور. إذا لم يكن جاهزاً، لا نوقفوش JARVIS.
+            // -------------------------------------------------
+
+            if (projectReady) {
+
+                codeEvolutionEngine.initialize();
+
+                sourceEvolutionEngine.initialize();
             }
 
-            JarvisResult<Boolean> sourceResult =
-                    sourceEvolutionEngine.initialize();
-
-            if (!sourceResult.isSuccess()) {
-                return JarvisResult.failure(
-                        sourceResult.getError(),
-                        sourceResult.getMessage()
-                );
-            }
-
-            /*
-             * المشروع الحقيقي اختياري أثناء Startup.
-             * Build/Source Evolution الحقيقي يحتاج Workspace
-             * مهيأ ومتحقق منه.
-             */
-            projectWorkspaceManager.revalidate();
+            // -------------------------------------------------
+            // 5. ANDROID PERMISSIONS
+            // -------------------------------------------------
 
             permissionBridge.synchronize(
                     permissionManager
             );
+
+            // -------------------------------------------------
+            // 6. ANDROID INTENT TOOL
+            // -------------------------------------------------
 
             JarvisResult<Boolean> toolResult =
                     registerTool(
@@ -282,11 +308,16 @@ public final class JarvisSystem {
                     );
 
             if (!toolResult.isSuccess()) {
+
                 return JarvisResult.failure(
                         toolResult.getError(),
                         toolResult.getMessage()
                 );
             }
+
+            // -------------------------------------------------
+            // 7. RUNTIME
+            // -------------------------------------------------
 
             JarvisResult<Boolean> runtimeResult =
                     runtime.start();
@@ -307,11 +338,26 @@ public final class JarvisSystem {
                 );
             }
 
+            // -------------------------------------------------
+            // 8. FINAL STATE
+            // -------------------------------------------------
+
             initialized = true;
+
+            if (projectReady) {
+
+                return JarvisResult.success(
+                        true,
+                        "JARVIS V2 started successfully. "
+                                + "Core, Runtime and Evolution workspace are ready."
+                );
+            }
 
             return JarvisResult.success(
                     true,
-                    "JARVIS V2 started successfully."
+                    "JARVIS V2 started successfully. "
+                            + "Core and Runtime are ready. "
+                            + "Project Evolution workspace is not configured yet."
             );
 
         } catch (Exception exception) {
@@ -328,6 +374,10 @@ public final class JarvisSystem {
             );
         }
     }
+
+    // =========================================================
+    // STOP
+    // =========================================================
 
     public synchronized JarvisResult<Boolean> stop() {
 
@@ -355,8 +405,15 @@ public final class JarvisSystem {
         }
     }
 
-    public synchronized JarvisResult<JarvisBrain.BrainResponse>
-    processCommand(String command) {
+    // =========================================================
+    // COMMAND PROCESSING
+    // =========================================================
+
+    public synchronized
+    JarvisResult<JarvisBrain.BrainResponse>
+    processCommand(
+            String command
+    ) {
 
         if (!initialized) {
 
@@ -364,6 +421,7 @@ public final class JarvisSystem {
                     start();
 
             if (!startResult.isSuccess()) {
+
                 return JarvisResult.failure(
                         startResult.getError(),
                         startResult.getMessage()
@@ -371,14 +429,22 @@ public final class JarvisSystem {
             }
         }
 
-        return brain.process(command);
+        return brain.process(
+                command
+        );
     }
 
-    public synchronized JarvisResult<Boolean> registerTool(
+    // =========================================================
+    // TOOL REGISTRATION
+    // =========================================================
+
+    public synchronized JarvisResult<Boolean>
+    registerTool(
             ToolContract tool
     ) {
 
         if (tool == null) {
+
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
                     "Tool cannot be null."
@@ -391,6 +457,7 @@ public final class JarvisSystem {
                 );
 
         if (toolId.isEmpty()) {
+
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
                     "Tool ID cannot be empty."
@@ -398,9 +465,11 @@ public final class JarvisSystem {
         }
 
         if (!tool.isAvailable()) {
+
             return failure(
                     JarvisError.Type.TOOL_UNAVAILABLE,
-                    "Tool is not available: " + toolId
+                    "Tool is not available: "
+                            + toolId
             );
         }
 
@@ -409,25 +478,29 @@ public final class JarvisSystem {
 
             return JarvisResult.success(
                     true,
-                    "Tool is already registered: " + toolId
+                    "Tool is already registered: "
+                            + toolId
             );
         }
 
-        /*
-         * تنظيف الحالة الجزئية.
-         */
+        // تنظيف أي حالة جزئية.
+
         if (toolRegistry.contains(toolId)
                 || runtime.containsTool(toolId)) {
 
-            toolRegistry.remove(toolId);
-            runtime.unregisterTool(toolId);
+            toolRegistry.remove(
+                    toolId
+            );
+
+            runtime.unregisterTool(
+                    toolId
+            );
         }
 
-        /*
-         * ToolRegistry.register() يرجع Void.
-         */
         JarvisResult<Void> registryResult =
-                toolRegistry.register(tool);
+                toolRegistry.register(
+                        tool
+                );
 
         if (!registryResult.isSuccess()) {
 
@@ -438,11 +511,15 @@ public final class JarvisSystem {
         }
 
         JarvisResult<Boolean> runtimeResult =
-                runtime.registerTool(tool);
+                runtime.registerTool(
+                        tool
+                );
 
         if (!runtimeResult.isSuccess()) {
 
-            toolRegistry.remove(toolId);
+            toolRegistry.remove(
+                    toolId
+            );
 
             return JarvisResult.failure(
                     runtimeResult.getError(),
@@ -454,8 +531,13 @@ public final class JarvisSystem {
         if (!toolRegistry.contains(toolId)
                 || !runtime.containsTool(toolId)) {
 
-            toolRegistry.remove(toolId);
-            runtime.unregisterTool(toolId);
+            toolRegistry.remove(
+                    toolId
+            );
+
+            runtime.unregisterTool(
+                    toolId
+            );
 
             return failure(
                     JarvisError.Type.INTERNAL_ERROR,
@@ -471,14 +553,22 @@ public final class JarvisSystem {
         );
     }
 
-    public synchronized JarvisResult<Boolean> unregisterTool(
+    // =========================================================
+    // TOOL UNREGISTRATION
+    // =========================================================
+
+    public synchronized JarvisResult<Boolean>
+    unregisterTool(
             String toolId
     ) {
 
         String normalizedId =
-                normalizeToolId(toolId);
+                normalizeToolId(
+                        toolId
+                );
 
         if (normalizedId.isEmpty()) {
+
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
                     "Tool ID cannot be empty."
@@ -486,23 +576,29 @@ public final class JarvisSystem {
         }
 
         boolean registryHadTool =
-                toolRegistry.contains(normalizedId);
+                toolRegistry.contains(
+                        normalizedId
+                );
 
         boolean runtimeHadTool =
-                runtime.containsTool(normalizedId);
+                runtime.containsTool(
+                        normalizedId
+                );
 
-        if (!registryHadTool && !runtimeHadTool) {
+        if (!registryHadTool
+                && !runtimeHadTool) {
+
             return failure(
                     JarvisError.Type.NOT_FOUND,
-                    "Tool not found: " + normalizedId
+                    "Tool not found: "
+                            + normalizedId
             );
         }
 
-        /*
-         * ToolRegistry.remove() يرجع Void.
-         */
         JarvisResult<Void> registryResult =
-                toolRegistry.remove(normalizedId);
+                toolRegistry.remove(
+                        normalizedId
+                );
 
         if (!registryResult.isSuccess()
                 && registryHadTool) {
@@ -514,15 +610,17 @@ public final class JarvisSystem {
         }
 
         JarvisResult<Boolean> runtimeResult =
-                runtime.unregisterTool(normalizedId);
+                runtime.unregisterTool(
+                        normalizedId
+                );
 
         if (!runtimeResult.isSuccess()
                 && runtimeHadTool) {
 
             return JarvisResult.failure(
                     runtimeResult.getError(),
-                    "Tool removed from Registry but could not be removed "
-                            + "from Runtime: "
+                    "Tool removed from Registry but "
+                            + "could not be removed from Runtime: "
                             + runtimeResult.getMessage()
             );
         }
@@ -534,10 +632,17 @@ public final class JarvisSystem {
         );
     }
 
+    // =========================================================
+    // PROJECT WORKSPACE
+    // =========================================================
+
     public synchronized JarvisResult<Boolean>
-    configureProjectWorkspace(File projectRoot) {
+    configureProjectWorkspace(
+            File projectRoot
+    ) {
 
         if (projectRoot == null) {
+
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
                     "Project root cannot be null."
@@ -551,6 +656,7 @@ public final class JarvisSystem {
                 );
 
         if (!result.isSuccess()) {
+
             return JarvisResult.failure(
                     result.getError(),
                     result.getMessage()
@@ -564,7 +670,9 @@ public final class JarvisSystem {
     }
 
     public synchronized JarvisResult<Boolean>
-    configureProjectWorkspace(String projectPath) {
+    configureProjectWorkspace(
+            String projectPath
+    ) {
 
         if (projectPath == null
                 || projectPath.trim().isEmpty()) {
@@ -582,6 +690,7 @@ public final class JarvisSystem {
                 );
 
         if (!result.isSuccess()) {
+
             return JarvisResult.failure(
                     result.getError(),
                     result.getMessage()
@@ -613,6 +722,7 @@ public final class JarvisSystem {
                 projectWorkspaceManager.revalidate();
 
         if (!result.isSuccess()) {
+
             return JarvisResult.failure(
                     result.getError(),
                     result.getMessage()
@@ -625,18 +735,30 @@ public final class JarvisSystem {
         );
     }
 
-    public synchronized boolean isProjectWorkspaceReady() {
+    public synchronized boolean
+    isProjectWorkspaceReady() {
+
         return projectWorkspaceManager.isReady();
     }
 
-    public synchronized void synchronizePermissions() {
+    // =========================================================
+    // PERMISSIONS
+    // =========================================================
+
+    public synchronized void
+    synchronizePermissions() {
 
         permissionBridge.synchronize(
                 permissionManager
         );
     }
 
-    public synchronized SystemStatus getStatus() {
+    // =========================================================
+    // STATUS
+    // =========================================================
+
+    public synchronized SystemStatus
+    getStatus() {
 
         return new SystemStatus(
                 initialized,
@@ -657,6 +779,10 @@ public final class JarvisSystem {
         );
     }
 
+    // =========================================================
+    // GETTERS
+    // =========================================================
+
     public Context getContext() {
         return context;
     }
@@ -667,11 +793,13 @@ public final class JarvisSystem {
 
     public ProjectWorkspaceManager
     getProjectWorkspaceManager() {
+
         return projectWorkspaceManager;
     }
 
     public OwnerSecurityBoundary
     getSecurityBoundary() {
+
         return securityBoundary;
     }
 
@@ -687,23 +815,33 @@ public final class JarvisSystem {
         return permissionManager;
     }
 
-    public AndroidPermissionBridge getPermissionBridge() {
+    public AndroidPermissionBridge
+    getPermissionBridge() {
+
         return permissionBridge;
     }
 
-    public CapabilityDiscovery getCapabilityDiscovery() {
+    public CapabilityDiscovery
+    getCapabilityDiscovery() {
+
         return capabilityDiscovery;
     }
 
-    public CapabilityExecutor getCapabilityExecutor() {
+    public CapabilityExecutor
+    getCapabilityExecutor() {
+
         return capabilityExecutor;
     }
 
-    public CodeEvolutionEngine getCodeEvolutionEngine() {
+    public CodeEvolutionEngine
+    getCodeEvolutionEngine() {
+
         return codeEvolutionEngine;
     }
 
-    public SourceEvolutionEngine getSourceEvolutionEngine() {
+    public SourceEvolutionEngine
+    getSourceEvolutionEngine() {
+
         return sourceEvolutionEngine;
     }
 
@@ -711,11 +849,15 @@ public final class JarvisSystem {
         return selfBuilder;
     }
 
-    public SelfTestEngine getSelfTestEngine() {
+    public SelfTestEngine
+    getSelfTestEngine() {
+
         return selfTestEngine;
     }
 
-    public RecoveryEngine getRecoveryEngine() {
+    public RecoveryEngine
+    getRecoveryEngine() {
+
         return recoveryEngine;
     }
 
@@ -725,11 +867,13 @@ public final class JarvisSystem {
 
     public EvolutionVerificationEngine
     getVerificationEngine() {
+
         return verificationEngine;
     }
 
     public EvolutionOrchestrator
     getEvolutionOrchestrator() {
+
         return evolutionOrchestrator;
     }
 
@@ -743,12 +887,17 @@ public final class JarvisSystem {
 
     public AndroidIntentTool
     getAndroidIntentTool() {
+
         return androidIntentTool;
     }
 
     public boolean isInitialized() {
         return initialized;
     }
+
+    // =========================================================
+    // OWNER INITIALIZATION
+    // =========================================================
 
     private JarvisResult<Boolean>
     initializeOwner() {
@@ -768,7 +917,8 @@ public final class JarvisSystem {
         if (ownerId == null
                 || ownerId.trim().isEmpty()) {
 
-            ownerId = DEFAULT_OWNER_ID;
+            ownerId =
+                    DEFAULT_OWNER_ID;
 
             boolean saved =
                     preferences.edit()
@@ -779,6 +929,7 @@ public final class JarvisSystem {
                             .commit();
 
             if (!saved) {
+
                 return failure(
                         JarvisError.Type.FILE_OPERATION_FAILED,
                         "Could not persist owner identity."
@@ -788,12 +939,14 @@ public final class JarvisSystem {
 
         if (!securityBoundary.isInitialized()) {
 
-            JarvisResult<Void> initializeResult =
+            JarvisResult<Void>
+                    initializeResult =
                     securityBoundary.initializeOwner(
                             ownerId
                     );
 
             if (!initializeResult.isSuccess()) {
+
                 return JarvisResult.failure(
                         initializeResult.getError(),
                         initializeResult.getMessage()
@@ -809,6 +962,7 @@ public final class JarvisSystem {
         }
 
         if (!securityBoundary.isActive()) {
+
             return failure(
                     JarvisError.Type.NOT_AUTHORIZED,
                     "Owner security boundary is not active."
@@ -821,6 +975,10 @@ public final class JarvisSystem {
         );
     }
 
+    // =========================================================
+    // HELPERS
+    // =========================================================
+
     private static String normalizeToolId(
             String toolId
     ) {
@@ -832,7 +990,8 @@ public final class JarvisSystem {
         return toolId.trim();
     }
 
-    private JarvisResult<Boolean> failure(
+    private JarvisResult<Boolean>
+    failure(
             JarvisError.Type type,
             String message
     ) {
@@ -846,16 +1005,28 @@ public final class JarvisSystem {
         );
     }
 
+    // =========================================================
+    // SYSTEM STATUS
+    // =========================================================
+
     public static final class SystemStatus {
 
         private final boolean initialized;
+
         private final boolean securityActive;
+
         private final boolean runtimeRunning;
+
         private final boolean workspaceAvailable;
+
         private final boolean projectWorkspaceReady;
+
         private final int toolCount;
+
         private final int grantedPermissionCount;
+
         private final int requestedPermissionCount;
+
         private final String evolutionState;
 
         private SystemStatus(
@@ -870,15 +1041,32 @@ public final class JarvisSystem {
                 String evolutionState
         ) {
 
-            this.initialized = initialized;
-            this.securityActive = securityActive;
-            this.runtimeRunning = runtimeRunning;
-            this.workspaceAvailable = workspaceAvailable;
-            this.projectWorkspaceReady = projectWorkspaceReady;
-            this.toolCount = toolCount;
-            this.grantedPermissionCount = grantedPermissionCount;
-            this.requestedPermissionCount = requestedPermissionCount;
-            this.evolutionState = evolutionState;
+            this.initialized =
+                    initialized;
+
+            this.securityActive =
+                    securityActive;
+
+            this.runtimeRunning =
+                    runtimeRunning;
+
+            this.workspaceAvailable =
+                    workspaceAvailable;
+
+            this.projectWorkspaceReady =
+                    projectWorkspaceReady;
+
+            this.toolCount =
+                    toolCount;
+
+            this.grantedPermissionCount =
+                    grantedPermissionCount;
+
+            this.requestedPermissionCount =
+                    requestedPermissionCount;
+
+            this.evolutionState =
+                    evolutionState;
         }
 
         public boolean isInitialized() {
@@ -921,12 +1109,18 @@ public final class JarvisSystem {
         public String toString() {
 
             return "SystemStatus{" +
-                    "initialized=" + initialized +
-                    ", securityActive=" + securityActive +
-                    ", runtimeRunning=" + runtimeRunning +
-                    ", workspaceAvailable=" + workspaceAvailable +
-                    ", projectWorkspaceReady=" + projectWorkspaceReady +
-                    ", toolCount=" + toolCount +
+                    "initialized=" +
+                    initialized +
+                    ", securityActive=" +
+                    securityActive +
+                    ", runtimeRunning=" +
+                    runtimeRunning +
+                    ", workspaceAvailable=" +
+                    workspaceAvailable +
+                    ", projectWorkspaceReady=" +
+                    projectWorkspaceReady +
+                    ", toolCount=" +
+                    toolCount +
                     ", grantedPermissionCount=" +
                     grantedPermissionCount +
                     ", requestedPermissionCount=" +
