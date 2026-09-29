@@ -4,7 +4,6 @@ import com.kamal.jarvis.v2.core.JarvisError;
 import com.kamal.jarvis.v2.core.JarvisResult;
 import com.kamal.jarvis.v2.security.OwnerSecurityBoundary;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -12,26 +11,18 @@ import java.util.List;
 /**
  * JARVIS V2 - Evolution Orchestrator
  *
- * المنسق الرئيسي لدورة التطور.
- *
- * الدورة:
+ * المسؤول عن دورة التطور الكاملة:
  *
  * Preflight
  * -> Source Evolution
- * -> Self Builder
+ * -> Capability Build
  * -> Verification
- * -> Build
- * -> Verification
+ * -> Project Build
+ * -> Build Verification
  * -> Self Test
  * -> Recovery عند الفشل
  *
- * Recovery هنا يشمل:
- *
- * 1. Source changes
- * 2. Capability artifacts
- *
- * Security Boundary مستقل ولا يمكن لـEvolution
- * تعديل المناطق المحمية.
+ * Security Boundary مستقل ولا يمكن للتطور تعديله.
  */
 public final class EvolutionOrchestrator {
 
@@ -39,11 +30,9 @@ public final class EvolutionOrchestrator {
             "v2.evolution_orchestrator";
 
     private final OwnerSecurityBoundary securityBoundary;
-
     private final SelfBuilder selfBuilder;
     private final SelfTestEngine selfTestEngine;
     private final RecoveryEngine recoveryEngine;
-
     private final CodeEvolutionEngine codeEvolutionEngine;
     private final SourceEvolutionEngine sourceEvolutionEngine;
     private final BuildEngine buildEngine;
@@ -56,7 +45,6 @@ public final class EvolutionOrchestrator {
             EvolutionState.IDLE;
 
     private volatile EvolutionRecord lastRecord;
-
     private volatile boolean busy;
 
     public EvolutionOrchestrator(
@@ -65,7 +53,6 @@ public final class EvolutionOrchestrator {
             SelfTestEngine selfTestEngine,
             RecoveryEngine recoveryEngine
     ) {
-
         this(
                 securityBoundary,
                 selfBuilder,
@@ -96,7 +83,6 @@ public final class EvolutionOrchestrator {
             BuildEngine buildEngine,
             EvolutionVerificationEngine verificationEngine
     ) {
-
         this(
                 securityBoundary,
                 selfBuilder,
@@ -195,34 +181,18 @@ public final class EvolutionOrchestrator {
                 verificationEngine;
     }
 
-    /**
-     * Evolution بدون Source ChangeSet.
-     */
-    public synchronized JarvisResult<EvolutionRecord>
-    evolve(
+    public synchronized JarvisResult<EvolutionRecord> evolve(
             CapabilitySpec spec
     ) {
-
-        return runEvolution(
-                spec,
-                null
-        );
+        return runEvolution(spec, null);
     }
 
-    /**
-     * Evolution مع Source ChangeSet.
-     *
-     * هذا هو المسار الذي يسمح لـJARVIS
-     * بتغيير ملفات المشروع بشكل منظم.
-     */
-    public synchronized JarvisResult<EvolutionRecord>
-    evolve(
+    public synchronized JarvisResult<EvolutionRecord> evolve(
             CapabilitySpec spec,
             SourceEvolutionEngine.ChangeSet changeSet
     ) {
 
         if (changeSet == null) {
-
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
                     "ChangeSet cannot be null."
@@ -235,17 +205,12 @@ public final class EvolutionOrchestrator {
         );
     }
 
-    /**
-     * الدورة الكاملة.
-     */
-    private JarvisResult<EvolutionRecord>
-    runEvolution(
+    private JarvisResult<EvolutionRecord> runEvolution(
             CapabilitySpec spec,
             SourceEvolutionEngine.ChangeSet changeSet
     ) {
 
         if (busy) {
-
             return failure(
                     JarvisError.Type.EVOLUTION_FAILED,
                     "Another evolution cycle is already running."
@@ -257,28 +222,19 @@ public final class EvolutionOrchestrator {
         long startedAt =
                 System.currentTimeMillis();
 
-        BuildEngine.BuildRecord buildRecord =
-                null;
-
-        SelfBuilder.BuildResult capabilityBuild =
-                null;
-
-        boolean sourceApplied =
-                false;
+        BuildEngine.BuildRecord buildRecord = null;
+        SelfBuilder.BuildResult capabilityBuild = null;
+        boolean sourceApplied = false;
 
         try {
 
             /*
-             * =========================================
              * 1. PREFLIGHT
-             * =========================================
              */
-
             state =
                     EvolutionState.PREFLIGHT;
 
-            JarvisResult<PreflightResult>
-                    preflightResult =
+            JarvisResult<PreflightResult> preflightResult =
                     preflight(
                             spec,
                             changeSet
@@ -302,11 +258,8 @@ public final class EvolutionOrchestrator {
             }
 
             /*
-             * =========================================
              * 2. SOURCE EVOLUTION
-             * =========================================
              */
-
             if (changeSet != null) {
 
                 state =
@@ -340,19 +293,13 @@ public final class EvolutionOrchestrator {
             }
 
             /*
-             * =========================================
              * 3. SELF BUILDER
-             * =========================================
              */
-
             state =
                     EvolutionState.BUILDING_CAPABILITY;
 
-            JarvisResult<SelfBuilder.BuildResult>
-                    builderResult =
-                    selfBuilder.build(
-                            spec
-                    );
+            JarvisResult<SelfBuilder.BuildResult> builderResult =
+                    selfBuilder.build(spec);
 
             if (builderResult == null ||
                     !builderResult.isSuccess()) {
@@ -389,11 +336,8 @@ public final class EvolutionOrchestrator {
             }
 
             /*
-             * =========================================
              * 4. ARTIFACT VERIFICATION
-             * =========================================
              */
-
             state =
                     EvolutionState.VERIFYING_ARTIFACTS;
 
@@ -423,18 +367,14 @@ public final class EvolutionOrchestrator {
             }
 
             /*
-             * =========================================
              * 5. PROJECT BUILD
-             * =========================================
              */
-
             if (spec.requiresBuild()) {
 
                 state =
                         EvolutionState.BUILDING_PROJECT;
 
-                JarvisResult<BuildEngine.BuildRecord>
-                        buildResult =
+                JarvisResult<BuildEngine.BuildRecord> buildResult =
                         buildEngine.buildDebug();
 
                 if (buildResult == null ||
@@ -472,11 +412,8 @@ public final class EvolutionOrchestrator {
                 }
 
                 /*
-                 * =====================================
                  * 6. BUILD VERIFICATION
-                 * =====================================
                  */
-
                 state =
                         EvolutionState.VERIFYING_BUILD;
 
@@ -508,18 +445,14 @@ public final class EvolutionOrchestrator {
             }
 
             /*
-             * =========================================
              * 7. SELF TEST
-             * =========================================
              */
-
             if (spec.requiresTests()) {
 
                 state =
                         EvolutionState.TESTING;
 
-                JarvisResult<SelfTestEngine.TestReport>
-                        testResult =
+                JarvisResult<SelfTestEngine.TestReport> testResult =
                         selfTestEngine.test(
                                 spec,
                                 capabilityBuild
@@ -542,8 +475,7 @@ public final class EvolutionOrchestrator {
                     );
                 }
 
-                SelfTestEngine.TestReport
-                        testReport =
+                SelfTestEngine.TestReport testReport =
                         testResult.getData();
 
                 if (testReport == null ||
@@ -565,11 +497,8 @@ public final class EvolutionOrchestrator {
             }
 
             /*
-             * =========================================
              * 8. SUCCESS
-             * =========================================
              */
-
             state =
                     EvolutionState.READY;
 
@@ -591,9 +520,7 @@ public final class EvolutionOrchestrator {
                             changeSet
                     );
 
-            saveRecord(
-                    record
-            );
+            saveRecord(record);
 
             state =
                     EvolutionState.COMPLETED;
@@ -605,12 +532,6 @@ public final class EvolutionOrchestrator {
 
         } catch (Exception e) {
 
-            /*
-             * Exception غير متوقع.
-             *
-             * إذا كان Source قد تطبق بالفعل،
-             * نحاول Recovery قبل تسجيل الفشل النهائي.
-             */
             if (sourceApplied) {
 
                 return recoverAfterFailure(
@@ -645,9 +566,7 @@ public final class EvolutionOrchestrator {
                             changeSet
                     );
 
-            saveRecord(
-                    record
-            );
+            saveRecord(record);
 
             return JarvisResult.failure(
                     JarvisError.fromException(
@@ -660,37 +579,25 @@ public final class EvolutionOrchestrator {
 
         } finally {
 
-            busy =
-                    false;
+            busy = false;
         }
     }
 
-    /**
-     * Preflight كامل.
-     *
-     * إذا كان ChangeSet موجوداً:
-     * - لازم spec يسمح بتعديل المشروع.
-     * - ChangeSet نفسه يتفحص قبل أي كتابة.
-     */
-    public synchronized JarvisResult<PreflightResult>
-    preflight(
+    public synchronized JarvisResult<PreflightResult> preflight(
             CapabilitySpec spec
     ) {
-
         return preflight(
                 spec,
                 null
         );
     }
 
-    private JarvisResult<PreflightResult>
-    preflight(
+    private JarvisResult<PreflightResult> preflight(
             CapabilitySpec spec,
             SourceEvolutionEngine.ChangeSet changeSet
     ) {
 
         if (spec == null) {
-
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
                     "CapabilitySpec cannot be null."
@@ -698,7 +605,6 @@ public final class EvolutionOrchestrator {
         }
 
         if (!spec.isValid()) {
-
             return failure(
                     JarvisError.Type.VALIDATION_FAILED,
                     "Capability specification is invalid."
@@ -706,7 +612,6 @@ public final class EvolutionOrchestrator {
         }
 
         if (!securityBoundary.isActive()) {
-
             return failure(
                     JarvisError.Type.NOT_AUTHORIZED,
                     "Owner security boundary is not active."
@@ -735,10 +640,6 @@ public final class EvolutionOrchestrator {
             );
         }
 
-        /*
-         * ChangeSet يعني تعديل Source.
-         * لذلك spec خاصو يصرح بهذا الأمر.
-         */
         if (changeSet != null &&
                 !spec.canModifyProjectFiles()) {
 
@@ -750,12 +651,10 @@ public final class EvolutionOrchestrator {
 
         if (spec.canModifyProjectFiles()) {
 
-            JarvisResult<Boolean>
-                    authorization =
-                    securityBoundary
-                            .authorizeEvolutionChange(
-                                    "PROJECT_FILE_EVOLUTION"
-                            );
+            JarvisResult<Boolean> authorization =
+                    securityBoundary.authorizeEvolutionChange(
+                            "PROJECT_FILE_EVOLUTION"
+                    );
 
             if (authorization == null ||
                     !authorization.isSuccess()) {
@@ -767,27 +666,21 @@ public final class EvolutionOrchestrator {
             }
         }
 
-        /*
-         * فحص ChangeSet قبل التنفيذ.
-         */
         if (changeSet != null) {
 
-            JarvisResult<Boolean>
-                    validation =
-                    sourceEvolutionEngine
-                            .validateChangeSet(
-                                    changeSet
-                            );
+            JarvisResult<Boolean> validation =
+                    sourceEvolutionEngine.validateChangeSet(
+                            changeSet
+                    );
 
             if (validation == null ||
                     !validation.isSuccess()) {
 
                 return failure(
-                        validation == null
+                        validation == null ||
+                                validation.getError() == null
                                 ? JarvisError.Type.VALIDATION_FAILED
-                                : validation.getError() == null
-                                        ? JarvisError.Type.VALIDATION_FAILED
-                                        : validation.getError().getType(),
+                                : validation.getError().getType(),
                         validation == null
                                 ? "ChangeSet validation returned no result."
                                 : validation.getMessage()
@@ -810,18 +703,7 @@ public final class EvolutionOrchestrator {
         );
     }
 
-    /**
-     * Recovery كامل للدورة.
-     *
-     * الترتيب:
-     *
-     * 1. Restore Source
-     * 2. Restore Capability artifacts
-     *
-     * Source يتم Rollback بالعكس.
-     */
-    private JarvisResult<EvolutionRecord>
-    recoverAfterFailure(
+    private JarvisResult<EvolutionRecord> recoverAfterFailure(
             CapabilitySpec spec,
             SelfBuilder.BuildResult buildResult,
             BuildEngine.BuildRecord buildRecord,
@@ -835,11 +717,8 @@ public final class EvolutionOrchestrator {
         state =
                 EvolutionState.RECOVERING;
 
-        boolean sourceRecoverySuccessful =
-                true;
-
-        boolean artifactRecoverySuccessful =
-                true;
+        boolean sourceRecoverySuccessful = true;
+        boolean artifactRecoverySuccessful = true;
 
         List<String> recoveryErrors =
                 new ArrayList<>();
@@ -847,43 +726,34 @@ public final class EvolutionOrchestrator {
         try {
 
             /*
-             * =========================================
-             * 1. SOURCE RECOVERY
-             * =========================================
+             * Restore source بالعكس.
              */
-
             if (sourceApplied &&
                     changeSet != null) {
 
-                List<SourceEvolutionEngine.FileChange>
-                        changes =
+                List<SourceEvolutionEngine.FileChange> changes =
                         changeSet.getChanges();
 
-                for (int i =
-                        changes.size() - 1;
-                        i >= 0;
-                        i--) {
+                for (int i = changes.size() - 1;
+                     i >= 0;
+                     i--) {
 
-                    SourceEvolutionEngine.FileChange
-                            change =
+                    SourceEvolutionEngine.FileChange change =
                             changes.get(i);
 
                     if (change == null) {
                         continue;
                     }
 
-                    JarvisResult<Boolean>
-                            rollback =
-                            sourceEvolutionEngine
-                                    .rollbackFile(
-                                            change.getPath()
-                                    );
+                    JarvisResult<Boolean> rollback =
+                            sourceEvolutionEngine.rollbackFile(
+                                    change.getPath()
+                            );
 
                     if (rollback == null ||
                             !rollback.isSuccess()) {
 
-                        sourceRecoverySuccessful =
-                                false;
+                        sourceRecoverySuccessful = false;
 
                         String error =
                                 rollback == null
@@ -899,24 +769,18 @@ public final class EvolutionOrchestrator {
                                             + change.getPath();
                         }
 
-                        recoveryErrors.add(
-                                error
-                        );
+                        recoveryErrors.add(error);
                     }
                 }
             }
 
             /*
-             * =========================================
-             * 2. CAPABILITY ARTIFACT RECOVERY
-             * =========================================
+             * Restore generated capability artifacts.
              */
-
             if (buildResult != null) {
 
-                JarvisResult<
-                        RecoveryEngine.RecoveryRecord
-                        > artifactRecovery =
+                JarvisResult<RecoveryEngine.RecoveryRecord>
+                        artifactRecovery =
                         recoveryEngine.recover(
                                 spec,
                                 buildResult,
@@ -926,8 +790,7 @@ public final class EvolutionOrchestrator {
                 if (artifactRecovery == null ||
                         !artifactRecovery.isSuccess()) {
 
-                    artifactRecoverySuccessful =
-                            false;
+                    artifactRecoverySuccessful = false;
 
                     recoveryErrors.add(
                             artifactRecovery == null
@@ -936,12 +799,6 @@ public final class EvolutionOrchestrator {
                     );
                 }
             }
-
-            /*
-             * =========================================
-             * 3. RESULT
-             * =========================================
-             */
 
             if (sourceRecoverySuccessful &&
                     artifactRecoverySuccessful) {
@@ -966,9 +823,7 @@ public final class EvolutionOrchestrator {
                                 changeSet
                         );
 
-                saveRecord(
-                        record
-                );
+                saveRecord(record);
 
                 return JarvisResult.failure(
                         JarvisError.of(
@@ -982,9 +837,6 @@ public final class EvolutionOrchestrator {
                 );
             }
 
-            /*
-             * Recovery ناقص.
-             */
             state =
                     EvolutionState.RECOVERY_FAILED;
 
@@ -993,7 +845,6 @@ public final class EvolutionOrchestrator {
                             + " Recovery was incomplete.";
 
             if (!recoveryErrors.isEmpty()) {
-
                 recoveryMessage +=
                         " Details: "
                                 + joinErrors(
@@ -1016,9 +867,7 @@ public final class EvolutionOrchestrator {
                             changeSet
                     );
 
-            saveRecord(
-                    record
-            );
+            saveRecord(record);
 
             return JarvisResult.failure(
                     JarvisError.of(
@@ -1050,9 +899,7 @@ public final class EvolutionOrchestrator {
                             changeSet
                     );
 
-            saveRecord(
-                    record
-            );
+            saveRecord(record);
 
             return JarvisResult.failure(
                     JarvisError.fromException(
@@ -1065,9 +912,6 @@ public final class EvolutionOrchestrator {
         }
     }
 
-    /**
-     * تحويل Outcome إلى JarvisError.Type.
-     */
     private JarvisError.Type mapFailureType(
             EvolutionOutcome outcome
     ) {
@@ -1104,11 +948,7 @@ public final class EvolutionOrchestrator {
         }
     }
 
-    /**
-     * تسجيل فشل قبل تنفيذ Source.
-     */
-    private JarvisResult<EvolutionRecord>
-    finishFailure(
+    private JarvisResult<EvolutionRecord> finishFailure(
             CapabilitySpec spec,
             EvolutionOutcome outcome,
             String message,
@@ -1137,15 +977,11 @@ public final class EvolutionOrchestrator {
                         changeSet
                 );
 
-        saveRecord(
-                record
-        );
+        saveRecord(record);
 
         return JarvisResult.failure(
                 JarvisError.of(
-                        mapFailureType(
-                                outcome
-                        ),
+                        mapFailureType(outcome),
                         message,
                         ENGINE_ID
                 )
@@ -1163,27 +999,20 @@ public final class EvolutionOrchestrator {
         lastRecord =
                 record;
 
-        history.add(
-                record
-        );
+        history.add(record);
 
-        while (
-                history.size() > 100
-        ) {
-
-            history.remove(
-                    0
-            );
+        while (history.size() > 100) {
+            history.remove(0);
         }
     }
 
-    /**
-     * يمنع أي Capability ID
-     * من استهداف Security/Owner.
-     */
     private boolean containsProtectedCapabilityId(
             String capabilityId
     ) {
+
+        if (capabilityId == null) {
+            return true;
+        }
 
         String id =
                 capabilityId
@@ -1198,9 +1027,7 @@ public final class EvolutionOrchestrator {
                 "recoverysecurity"
         };
 
-        for (String token :
-                protectedTokens) {
-
+        for (String token : protectedTokens) {
             if (id.contains(token)) {
                 return true;
             }
@@ -1217,13 +1044,11 @@ public final class EvolutionOrchestrator {
                 new StringBuilder();
 
         for (int i = 0;
-                i < errors.size();
-                i++) {
+             i < errors.size();
+             i++) {
 
             if (i > 0) {
-                builder.append(
-                        " | "
-                );
+                builder.append(" | ");
             }
 
             builder.append(
@@ -1234,8 +1059,7 @@ public final class EvolutionOrchestrator {
         return builder.toString();
     }
 
-    private static CodeEvolutionEngine
-    createCodeEvolutionEngine(
+    private static CodeEvolutionEngine createCodeEvolutionEngine(
             SelfBuilder builder,
             OwnerSecurityBoundary securityBoundary
     ) {
@@ -1246,8 +1070,7 @@ public final class EvolutionOrchestrator {
         );
     }
 
-    private static SourceEvolutionEngine
-    createSourceEvolutionEngine(
+    private static SourceEvolutionEngine createSourceEvolutionEngine(
             CodeEvolutionEngine codeEvolutionEngine
     ) {
 
@@ -1256,8 +1079,7 @@ public final class EvolutionOrchestrator {
         );
     }
 
-    private static BuildEngine
-    createBuildEngine(
+    private static BuildEngine createBuildEngine(
             SelfBuilder builder,
             OwnerSecurityBoundary securityBoundary
     ) {
@@ -1268,8 +1090,7 @@ public final class EvolutionOrchestrator {
         );
     }
 
-    private static EvolutionVerificationEngine
-    createVerificationEngine(
+    private static EvolutionVerificationEngine createVerificationEngine(
             SelfBuilder builder,
             OwnerSecurityBoundary securityBoundary
     ) {
@@ -1289,32 +1110,22 @@ public final class EvolutionOrchestrator {
     }
 
     public boolean isReady() {
-
-        return state ==
-                EvolutionState.READY
-                || state ==
-                EvolutionState.COMPLETED;
+        return state == EvolutionState.READY ||
+                state == EvolutionState.COMPLETED;
     }
 
     public boolean hasFailed() {
-
-        return state ==
-                EvolutionState.FAILED
-                || state ==
-                EvolutionState.RECOVERY_FAILED;
+        return state == EvolutionState.FAILED ||
+                state == EvolutionState.RECOVERY_FAILED;
     }
 
     public EvolutionRecord getLastRecord() {
         return lastRecord;
     }
 
-    public List<EvolutionRecord>
-    getHistory() {
-
+    public List<EvolutionRecord> getHistory() {
         return Collections.unmodifiableList(
-                new ArrayList<>(
-                        history
-                )
+                new ArrayList<>(history)
         );
     }
 
@@ -1322,51 +1133,35 @@ public final class EvolutionOrchestrator {
         return history.size();
     }
 
-    public OwnerSecurityBoundary
-    getSecurityBoundary() {
-
+    public OwnerSecurityBoundary getSecurityBoundary() {
         return securityBoundary;
     }
 
-    public SelfBuilder
-    getSelfBuilder() {
-
+    public SelfBuilder getSelfBuilder() {
         return selfBuilder;
     }
 
-    public SelfTestEngine
-    getSelfTestEngine() {
-
+    public SelfTestEngine getSelfTestEngine() {
         return selfTestEngine;
     }
 
-    public RecoveryEngine
-    getRecoveryEngine() {
-
+    public RecoveryEngine getRecoveryEngine() {
         return recoveryEngine;
     }
 
-    public CodeEvolutionEngine
-    getCodeEvolutionEngine() {
-
+    public CodeEvolutionEngine getCodeEvolutionEngine() {
         return codeEvolutionEngine;
     }
 
-    public SourceEvolutionEngine
-    getSourceEvolutionEngine() {
-
+    public SourceEvolutionEngine getSourceEvolutionEngine() {
         return sourceEvolutionEngine;
     }
 
-    public BuildEngine
-    getBuildEngine() {
-
+    public BuildEngine getBuildEngine() {
         return buildEngine;
     }
 
-    public EvolutionVerificationEngine
-    getVerificationEngine() {
-
+    public EvolutionVerificationEngine getVerificationEngine() {
         return verificationEngine;
     }
 
@@ -1374,8 +1169,7 @@ public final class EvolutionOrchestrator {
         return ENGINE_ID;
     }
 
-    private <T>
-    JarvisResult<T> failure(
+    private <T> JarvisResult<T> failure(
             JarvisError.Type type,
             String message
     ) {
@@ -1390,54 +1184,31 @@ public final class EvolutionOrchestrator {
     }
 
     public enum EvolutionState {
-
         IDLE,
-
         PREFLIGHT,
-
         EVOLVING_SOURCE,
-
         BUILDING_CAPABILITY,
-
         VERIFYING_ARTIFACTS,
-
         BUILDING_PROJECT,
-
         VERIFYING_BUILD,
-
         TESTING,
-
         RECOVERING,
-
         READY,
-
         COMPLETED,
-
         RECOVERED,
-
         FAILED,
-
         RECOVERY_FAILED
     }
 
     public enum EvolutionOutcome {
-
         SUCCESS,
-
         PREFLIGHT_FAILED,
-
         SOURCE_EVOLUTION_FAILED,
-
         BUILD_FAILED,
-
         VERIFICATION_FAILED,
-
         TEST_FAILED,
-
         RECOVERED,
-
         RECOVERY_FAILED,
-
         INTERNAL_ERROR
     }
 
@@ -1457,20 +1228,11 @@ public final class EvolutionOrchestrator {
                 boolean modifiesProject
         ) {
 
-            this.passed =
-                    passed;
-
-            this.message =
-                    message;
-
-            this.requiresBuild =
-                    requiresBuild;
-
-            this.requiresTests =
-                    requiresTests;
-
-            this.modifiesProject =
-                    modifiesProject;
+            this.passed = passed;
+            this.message = message;
+            this.requiresBuild = requiresBuild;
+            this.requiresTests = requiresTests;
+            this.modifiesProject = modifiesProject;
         }
 
         public boolean isPassed() {
@@ -1503,12 +1265,8 @@ public final class EvolutionOrchestrator {
         private final long startedAt;
         private final long finishedAt;
 
-        private final SelfBuilder.BuildResult
-                buildResult;
-
-        private final BuildEngine.BuildRecord
-                buildRecord;
-
+        private final SelfBuilder.BuildResult buildResult;
+        private final BuildEngine.BuildRecord buildRecord;
         private final Throwable error;
 
         private final SourceEvolutionEngine.ChangeSet
@@ -1558,9 +1316,7 @@ public final class EvolutionOrchestrator {
             return capabilityId;
         }
 
-        public EvolutionOutcome
-        getOutcome() {
-
+        public EvolutionOutcome getOutcome() {
             return outcome;
         }
 
@@ -1577,20 +1333,14 @@ public final class EvolutionOrchestrator {
         }
 
         public long getDurationMillis() {
-
-            return finishedAt -
-                    startedAt;
+            return finishedAt - startedAt;
         }
 
-        public SelfBuilder.BuildResult
-        getBuildResult() {
-
+        public SelfBuilder.BuildResult getBuildResult() {
             return buildResult;
         }
 
-        public BuildEngine.BuildRecord
-        getBuildRecord() {
-
+        public BuildEngine.BuildRecord getBuildRecord() {
             return buildRecord;
         }
 
@@ -1600,30 +1350,50 @@ public final class EvolutionOrchestrator {
 
         public SourceEvolutionEngine.ChangeSet
         getSourceChangeSet() {
-
             return sourceChangeSet;
         }
 
         public boolean isSuccess() {
-
             return outcome ==
                     EvolutionOutcome.SUCCESS;
         }
 
         public boolean isRecovered() {
-
             return outcome ==
                     EvolutionOutcome.RECOVERED;
         }
 
-        public boolean isFailure() {
+        /**
+         * Compatibility method required by EvolutionCore.
+         */
+        public boolean isReady() {
+            return outcome ==
+                    EvolutionOutcome.SUCCESS;
+        }
 
+        /**
+         * Compatibility method required by EvolutionCore.
+         */
+        public boolean wasRecovered() {
+            return outcome ==
+                    EvolutionOutcome.RECOVERED;
+        }
+
+        /**
+         * Compatibility method required by EvolutionCore.
+         */
+        public boolean failed() {
+            return outcome !=
+                    EvolutionOutcome.SUCCESS
+                    && outcome !=
+                    EvolutionOutcome.RECOVERED;
+        }
+
+        public boolean isFailure() {
             return !isSuccess();
         }
 
-        public boolean
-        hasSourceEvolution() {
-
+        public boolean hasSourceEvolution() {
             return sourceChangeSet != null;
         }
     }
