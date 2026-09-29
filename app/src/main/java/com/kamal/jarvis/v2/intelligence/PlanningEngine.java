@@ -2,11 +2,10 @@ package com.kamal.jarvis.v2.intelligence;
 
 import com.kamal.jarvis.v2.core.JarvisError;
 import com.kamal.jarvis.v2.core.JarvisResult;
-import com.kamal.jarvis.v2.core.ToolContract;
 import com.kamal.jarvis.v2.evolution.CapabilityDiscovery;
 import com.kamal.jarvis.v2.evolution.CapabilityPlan;
-import com.kamal.jarvis.v2.evolution.CapabilityRequirement;
 import com.kamal.jarvis.v2.permissions.CapabilityPermission;
+import com.kamal.jarvis.v2.permissions.CapabilityRequirement;
 import com.kamal.jarvis.v2.permissions.PermissionManager;
 import com.kamal.jarvis.v2.tools.ToolRegistry;
 
@@ -28,12 +27,10 @@ import java.util.Set;
  * 4. معرفة الصلاحيات الناقصة.
  * 5. اختيار المسار المباشر أو البديل.
  * 6. تحديد هل نحتاج Evolution / Build.
- * 7. إنتاج خطة تنفيذ واضحة للطبقات الأعلى.
+ * 7. إنتاج خطة تنفيذ واضحة.
  *
  * PlanningEngine لا ينفذ الأدوات بنفسه.
  * التنفيذ يبقى في Execution/CapabilityExecutor.
- *
- * Security ليست قابلة للتجاوز من هذا الملف.
  */
 public final class PlanningEngine {
 
@@ -53,6 +50,7 @@ public final class PlanningEngine {
             ToolRegistry toolRegistry,
             PermissionManager permissionManager
     ) {
+
         if (toolRegistry == null) {
             throw new IllegalArgumentException(
                     "toolRegistry cannot be null."
@@ -65,8 +63,11 @@ public final class PlanningEngine {
             );
         }
 
-        this.toolRegistry = toolRegistry;
-        this.permissionManager = permissionManager;
+        this.toolRegistry =
+                toolRegistry;
+
+        this.permissionManager =
+                permissionManager;
 
         this.capabilityDiscovery =
                 new CapabilityDiscovery(
@@ -76,7 +77,7 @@ public final class PlanningEngine {
     }
 
     /**
-     * يبني خطة انطلاقاً من نتيجة فهم الأمر.
+     * إنشاء خطة انطلاقاً من فهم الأمر.
      */
     public synchronized JarvisResult<Plan> createPlan(
             CommandUnderstanding.Result understanding
@@ -101,6 +102,7 @@ public final class PlanningEngine {
                 );
 
         if (requirement == null) {
+
             state = PlanningState.FAILED;
 
             return failure(
@@ -115,6 +117,7 @@ public final class PlanningEngine {
                 );
 
         if (discovery == null) {
+
             state = PlanningState.FAILED;
 
             return failure(
@@ -129,6 +132,7 @@ public final class PlanningEngine {
                 );
 
         if (capabilityPlan == null) {
+
             state = PlanningState.FAILED;
 
             return failure(
@@ -146,6 +150,7 @@ public final class PlanningEngine {
                 );
 
         if (plan == null) {
+
             state = PlanningState.FAILED;
 
             return failure(
@@ -157,13 +162,24 @@ public final class PlanningEngine {
         lastPlan = plan;
 
         if (plan.requiresEvolution()) {
-            state = PlanningState.EVOLUTION_REQUIRED;
+
+            state =
+                    PlanningState.EVOLUTION_REQUIRED;
+
         } else if (plan.requiresPermission()) {
-            state = PlanningState.PERMISSION_REQUIRED;
+
+            state =
+                    PlanningState.PERMISSION_REQUIRED;
+
         } else if (plan.canExecute()) {
-            state = PlanningState.READY;
+
+            state =
+                    PlanningState.READY;
+
         } else {
-            state = PlanningState.UNAVAILABLE;
+
+            state =
+                    PlanningState.UNAVAILABLE;
         }
 
         return JarvisResult.success(
@@ -173,7 +189,7 @@ public final class PlanningEngine {
     }
 
     /**
-     * إنشاء Requirement من فهم الأمر.
+     * إنشاء CapabilityRequirement من فهم الأمر.
      */
     private CapabilityRequirement createRequirement(
             CommandUnderstanding.Result understanding
@@ -193,72 +209,94 @@ public final class PlanningEngine {
             switch (requirement) {
 
                 case NOTIFICATIONS:
+
                     builder.requirePermission(
                             CapabilityPermission.NOTIFICATIONS
                     );
+
                     break;
 
                 case BACKGROUND_EXECUTION:
+
                     builder.requirePermission(
                             CapabilityPermission.BACKGROUND_EXECUTION
                     );
+
                     break;
 
                 case FILE_ACCESS:
+
                     builder.requirePermission(
                             CapabilityPermission.FILE_READ
                     );
+
                     builder.requirePermission(
                             CapabilityPermission.FILE_WRITE
                     );
+
                     break;
 
                 case NETWORK:
+
                     builder.requirePermission(
                             CapabilityPermission.NETWORK
                     );
+
                     break;
 
                 case MICROPHONE:
+
                     builder.requirePermission(
                             CapabilityPermission.MICROPHONE
                     );
+
                     break;
 
                 case PROJECT_ACCESS:
+
                     builder.requirePermission(
                             CapabilityPermission.PROJECT_READ
                     );
+
                     builder.requirePermission(
                             CapabilityPermission.PROJECT_WRITE
                     );
+
                     break;
 
                 case BUILD_ACCESS:
+
                     builder.requirePermission(
                             CapabilityPermission.BUILD_PROJECT
                     );
+
                     break;
 
                 case TEST_ACCESS:
+
                     builder.requirePermission(
                             CapabilityPermission.RUN_TESTS
                     );
+
                     break;
 
                 case OWNER_AUTHORIZATION:
+
                     builder.requireOwnerAuthorization();
+
                     break;
 
                 case DESTRUCTIVE_OPERATION:
+
                     /*
-                     * العملية التخريبية لا تتحول إلى Android
-                     * permission تلقائياً.
+                     * العمليات الحساسة لا تتحول تلقائياً
+                     * إلى Android permissions.
                      *
-                     * هي security-sensitive ويتم الاحتفاظ بها
-                     * داخل الخطة حتى تتعامل معها طبقة التنفيذ.
+                     * تبقى مرتبطة بحدود المالك والأمان.
                      */
+
                     builder.requireOwnerAuthorization();
+
                     break;
 
                 default:
@@ -272,7 +310,8 @@ public final class PlanningEngine {
         );
 
         /*
-         * السماح بالبناء البديل عندما لا توجد أداة مناسبة.
+         * إذا لم تكن هناك Capability مناسبة،
+         * يسمح هذا لـEvolutionCore بمحاولة بنائها.
          */
         builder.allowAlternativeBuilding();
 
@@ -280,7 +319,7 @@ public final class PlanningEngine {
     }
 
     /**
-     * ربط نوع الأمر بالأدوات المعروفة.
+     * ربط نوع الأمر بالأدوات الموجودة.
      */
     private void addTools(
             CapabilityRequirement.Builder builder,
@@ -415,7 +454,7 @@ public final class PlanningEngine {
 
     /**
      * تحويل Discovery + CapabilityPlan
-     * إلى خطة أعلى مستوى يفهمها JARVIS.
+     * إلى خطة تنفيذ.
      */
     private Plan buildPlan(
             CommandUnderstanding.Result understanding,
@@ -496,13 +535,14 @@ public final class PlanningEngine {
                 return PlanAction.BUILD_CAPABILITY;
 
             case UNAVAILABLE:
+
             default:
                 return PlanAction.UNAVAILABLE;
         }
     }
 
     /**
-     * يسمح بفحص سريع للخطة بدون تنفيذ.
+     * فحص سريع بدون تنفيذ.
      */
     public synchronized boolean canPlan(
             CommandUnderstanding.Result understanding
@@ -510,6 +550,7 @@ public final class PlanningEngine {
 
         if (understanding == null ||
                 !understanding.isValid()) {
+
             return false;
         }
 
@@ -527,11 +568,12 @@ public final class PlanningEngine {
                         requirement
                 );
 
-        return discovery != null;
+        return discovery != null &&
+                discovery.isValid();
     }
 
     /**
-     * فحص الصلاحيات الناقصة مباشرة.
+     * معرفة الصلاحيات الناقصة.
      */
     public Set<CapabilityPermission>
     getMissingPermissions(
@@ -659,16 +701,26 @@ public final class PlanningEngine {
     public static final class Plan {
 
         private final CommandUnderstanding.Result understanding;
+
         private final CapabilityRequirement requirement;
+
         private final CapabilityPlan capabilityPlan;
+
         private final PlanAction action;
+
         private final List<String> toolIds;
+
         private final Set<CapabilityPermission>
                 missingPermissions;
+
         private final boolean requiresEvolution;
+
         private final boolean requiresPermission;
+
         private final boolean executable;
+
         private final boolean ownerAuthorizationRequired;
+
         private final String reason;
 
         private Plan(
@@ -801,16 +853,14 @@ public final class PlanningEngine {
 
             return requirement == null
                     ? ""
-                    : requirement
-                    .getCapabilityId();
+                    : requirement.getCapabilityId();
         }
 
         public String getGoal() {
 
             return requirement == null
                     ? ""
-                    : requirement
-                    .getDescription();
+                    : requirement.getDescription();
         }
 
         public String getSummary() {
