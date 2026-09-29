@@ -16,56 +16,20 @@ import java.util.List;
  * JARVIS V2 - Evolution Verification Engine
  *
  * مسؤول عن التحقق الحقيقي من نتائج Evolution.
- *
- * يوجد هنا نوعان من المساحات:
- *
- * 1. artifactWorkspaceRoot
- *    مساحة JARVIS الداخلية التي ينشئ فيها SelfBuilder
- *    ملفات capability الخاصة به.
- *
- * 2. ProjectWorkspaceManager
- *    المشروع Android الحقيقي الذي يتم عليه:
- *      - Source Evolution
- *      - Gradle Build
- *      - APK verification
- *
- * هذا الفصل مهم حتى لا نخلط بين:
- *
- * "JARVIS أنشأ ملفات capability"
- *
- * و:
- *
- * "مشروع Android الحقيقي تم بناؤه بنجاح."
- *
- * لا يتم إعلان النجاح النهائي بدون الأدلة المطلوبة.
  */
 public final class EvolutionVerificationEngine {
 
     private static final String ENGINE_ID =
             "v2.evolution_verification_engine";
 
-    /*
-     * Workspace الداخلي الخاص بـSelfBuilder.
-     */
     private final File artifactWorkspaceRoot;
 
-    /*
-     * المشروع Android الحقيقي.
-     *
-     * يمكن أن يكون null في constructor القديم
-     * من أجل المحافظة على compatibility.
-     */
     private final ProjectWorkspaceManager projectWorkspaceManager;
 
     private final OwnerSecurityBoundary securityBoundary;
 
     private volatile VerificationReport lastReport;
 
-    /**
-     * Constructor قديم.
-     *
-     * يبقى موجوداً حتى لا نكسر الملفات القديمة.
-     */
     public EvolutionVerificationEngine(
             File workspaceRoot,
             OwnerSecurityBoundary securityBoundary
@@ -93,15 +57,6 @@ public final class EvolutionVerificationEngine {
                 securityBoundary;
     }
 
-    /**
-     * Constructor الجديد.
-     *
-     * artifactWorkspaceRoot:
-     * workspace الداخلي الذي يستعمله SelfBuilder.
-     *
-     * projectWorkspaceManager:
-     * المشروع Android الحقيقي.
-     */
     public EvolutionVerificationEngine(
             File artifactWorkspaceRoot,
             ProjectWorkspaceManager projectWorkspaceManager,
@@ -136,11 +91,6 @@ public final class EvolutionVerificationEngine {
                 securityBoundary;
     }
 
-    /**
-     * التحقق من artifacts بعد SelfBuilder.
-     *
-     * هذه المرحلة لا تدعي أن Android project تم بناؤه.
-     */
     public synchronized JarvisResult<VerificationReport>
     verify(
             CapabilitySpec spec,
@@ -185,41 +135,23 @@ public final class EvolutionVerificationEngine {
         long startedAt =
                 System.currentTimeMillis();
 
-        /*
-         * 1. Artifact workspace.
-         */
-        checkArtifactWorkspace(
-                checks
-        );
+        checkArtifactWorkspace(checks);
 
-        /*
-         * 2. Capability directory.
-         */
         checkCapabilityDirectory(
                 checks,
                 buildResult
         );
 
-        /*
-         * 3. Files created by SelfBuilder.
-         */
         checkCreatedFiles(
                 checks,
                 buildResult
         );
 
-        /*
-         * 4. Contents.
-         */
         checkFileContents(
                 checks,
                 buildResult
         );
 
-        /*
-         * 5. If build is required,
-         *    verify the REAL Android project structure.
-         */
         if (spec.requiresBuild()) {
 
             checkRealProjectStructure(
@@ -227,20 +159,11 @@ public final class EvolutionVerificationEngine {
             );
         }
 
-        /*
-         * Success criteria هنا يتم التحقق من تعريفها،
-         * وليس الادعاء أن الوظيفة نفسها اشتغلت.
-         */
         checkSuccessCriteria(
                 checks,
                 spec
         );
 
-        /*
-         * Build evidence غير موجود في هذه المرحلة.
-         *
-         * هذا Warning وليس Success نهائي.
-         */
         if (spec.requiresBuild()) {
 
             checks.add(
@@ -279,16 +202,6 @@ public final class EvolutionVerificationEngine {
         );
     }
 
-    /**
-     * التحقق النهائي بعد BuildEngine.
-     *
-     * هنا يمكن اعتبار Build دليلاً فقط إذا:
-     *
-     * - BuildRecord success
-     * - exit code = 0
-     * - APK موجود
-     * - APK حجمه > 0
-     */
     public synchronized JarvisResult<VerificationReport>
     verifyWithBuild(
             CapabilitySpec spec,
@@ -342,12 +255,7 @@ public final class EvolutionVerificationEngine {
         long startedAt =
                 System.currentTimeMillis();
 
-        /*
-         * Artifact verification.
-         */
-        checkArtifactWorkspace(
-                checks
-        );
+        checkArtifactWorkspace(checks);
 
         checkCapabilityDirectory(
                 checks,
@@ -364,9 +272,6 @@ public final class EvolutionVerificationEngine {
                 buildResult
         );
 
-        /*
-         * Real Android project.
-         */
         if (spec.requiresBuild()) {
 
             checkRealProjectStructure(
@@ -379,9 +284,6 @@ public final class EvolutionVerificationEngine {
             );
         }
 
-        /*
-         * Success criteria.
-         */
         checkSuccessCriteria(
                 checks,
                 spec
@@ -415,9 +317,6 @@ public final class EvolutionVerificationEngine {
         );
     }
 
-    /**
-     * إنشاء VerificationReport.
-     */
     private VerificationReport createReport(
             String capabilityId,
             List<VerificationCheck> checks,
@@ -435,9 +334,6 @@ public final class EvolutionVerificationEngine {
         );
     }
 
-    /**
-     * فحص workspace الداخلي.
-     */
     private void checkArtifactWorkspace(
             List<VerificationCheck> checks
     ) {
@@ -474,9 +370,6 @@ public final class EvolutionVerificationEngine {
         );
     }
 
-    /**
-     * فحص capability directory.
-     */
     private void checkCapabilityDirectory(
             List<VerificationCheck> checks,
             SelfBuilder.BuildResult buildResult
@@ -530,9 +423,6 @@ public final class EvolutionVerificationEngine {
         );
     }
 
-    /**
-     * فحص جميع الملفات التي أنشأها SelfBuilder.
-     */
     private void checkCreatedFiles(
             List<VerificationCheck> checks,
             SelfBuilder.BuildResult buildResult
@@ -554,8 +444,7 @@ public final class EvolutionVerificationEngine {
             return;
         }
 
-        int valid =
-                0;
+        int valid = 0;
 
         for (File file : files) {
 
@@ -603,9 +492,6 @@ public final class EvolutionVerificationEngine {
         }
     }
 
-    /**
-     * فحص محتوى الملفات.
-     */
     private void checkFileContents(
             List<VerificationCheck> checks,
             SelfBuilder.BuildResult buildResult
@@ -628,9 +514,15 @@ public final class EvolutionVerificationEngine {
 
             try {
 
+                /*
+                 * Android-compatible replacement for
+                 * Files.readString(...).
+                 */
                 String content =
-                        Files.readString(
-                                file.toPath(),
+                        new String(
+                                Files.readAllBytes(
+                                        file.toPath()
+                                ),
                                 StandardCharsets.UTF_8
                         );
 
@@ -665,14 +557,6 @@ public final class EvolutionVerificationEngine {
         }
     }
 
-    /**
-     * الحصول على المشروع Android الحقيقي.
-     *
-     * إذا كان ProjectWorkspaceManager موجوداً:
-     * نستعمله فقط.
-     *
-     * لا يوجد fallback صامت إلى jarvis_workspace.
-     */
     private File resolveProjectWorkspace() {
 
         if (projectWorkspaceManager == null) {
@@ -693,9 +577,6 @@ public final class EvolutionVerificationEngine {
         return root.getAbsoluteFile();
     }
 
-    /**
-     * فحص بنية Android/Gradle الحقيقية.
-     */
     private void checkRealProjectStructure(
             List<VerificationCheck> checks
     ) {
@@ -735,9 +616,6 @@ public final class EvolutionVerificationEngine {
                 )
         );
 
-        /*
-         * settings.gradle / settings.gradle.kts
-         */
         File settingsGradle =
                 new File(
                         projectRoot,
@@ -770,9 +648,6 @@ public final class EvolutionVerificationEngine {
             );
         }
 
-        /*
-         * Root build.gradle.
-         */
         File rootBuildGradle =
                 new File(
                         projectRoot,
@@ -805,9 +680,6 @@ public final class EvolutionVerificationEngine {
             );
         }
 
-        /*
-         * Android app module.
-         */
         File app =
                 new File(
                         projectRoot,
@@ -833,9 +705,6 @@ public final class EvolutionVerificationEngine {
                 )
         );
 
-        /*
-         * app/build.gradle
-         */
         File appBuildGradle =
                 new File(
                         app,
@@ -868,9 +737,6 @@ public final class EvolutionVerificationEngine {
             );
         }
 
-        /*
-         * Gradle Wrapper.
-         */
         File gradlew =
                 new File(
                         projectRoot,
@@ -904,9 +770,6 @@ public final class EvolutionVerificationEngine {
         }
     }
 
-    /**
-     * التحقق من BuildRecord الحقيقي.
-     */
     private void checkBuildResult(
             List<VerificationCheck> checks,
             BuildEngine.BuildRecord buildRecord
@@ -988,29 +851,8 @@ public final class EvolutionVerificationEngine {
                         "A non-empty APK was produced by the build."
                 )
         );
-
-        /*
-         * APK خاصو يكون داخل المشروع الحقيقي
-         * أو على الأقل BuildEngine هو الذي أنتجه.
-         *
-         * لا نرفضه فقط لأنه قد يكون copy destination
-         * خارج المشروع.
-         */
     }
 
-    /**
-     * Success Criteria.
-     *
-     * ملاحظة مهمة:
-     *
-     * وجود criterion لا يعني أن الوظيفة اشتغلت.
-     *
-     * لذلك هذا الفحص يتحقق من أن الشروط:
-     * - موجودة
-     * - غير فارغة
-     *
-     * أما إثبات التنفيذ الحقيقي فيحتاج Runtime evidence.
-     */
     private void checkSuccessCriteria(
             List<VerificationCheck> checks,
             CapabilitySpec spec
@@ -1032,8 +874,7 @@ public final class EvolutionVerificationEngine {
             return;
         }
 
-        int valid =
-                0;
+        int valid = 0;
 
         for (String criterion : criteria) {
 
@@ -1075,9 +916,6 @@ public final class EvolutionVerificationEngine {
         }
     }
 
-    /**
-     * هل الملف داخل artifact workspace؟
-     */
     private boolean isInsideArtifactWorkspace(
             File file
     ) {
@@ -1107,25 +945,15 @@ public final class EvolutionVerificationEngine {
         }
     }
 
-    /**
-     * آخر تقرير.
-     */
     public VerificationReport getLastReport() {
         return lastReport;
     }
 
-    /**
-     * Workspace الداخلي.
-     */
     public File getWorkspaceRoot() {
         return artifactWorkspaceRoot;
     }
 
-    /**
-     * Workspace المشروع الحقيقي.
-     */
     public File getProjectWorkspaceRoot() {
-
         return resolveProjectWorkspace();
     }
 
@@ -1160,9 +988,6 @@ public final class EvolutionVerificationEngine {
         );
     }
 
-    /**
-     * نتيجة فحص واحدة.
-     */
     public static final class VerificationCheck {
 
         public enum Status {
@@ -1252,9 +1077,6 @@ public final class EvolutionVerificationEngine {
         }
     }
 
-    /**
-     * التقرير الكامل.
-     */
     public static final class VerificationReport {
 
         private final String capabilityId;
@@ -1289,14 +1111,9 @@ public final class EvolutionVerificationEngine {
             this.durationMillis =
                     durationMillis;
 
-            int passed =
-                    0;
-
-            int failed =
-                    0;
-
-            int warning =
-                    0;
+            int passed = 0;
+            int failed = 0;
+            int warning = 0;
 
             for (VerificationCheck check :
                     checks) {
@@ -1374,11 +1191,6 @@ public final class EvolutionVerificationEngine {
             return warningCount;
         }
 
-        /**
-         * Warning لا يفشل التقرير.
-         *
-         * Failed فقط هو الذي يجعل التقرير failed.
-         */
         public boolean isPassed() {
             return failedCount == 0;
         }
