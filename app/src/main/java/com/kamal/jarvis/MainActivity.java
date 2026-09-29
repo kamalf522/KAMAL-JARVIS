@@ -2,7 +2,6 @@ package com.kamal.jarvis;
 
 import android.Manifest;
 import android.app.Activity;
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -15,7 +14,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.Window;
 import android.view.inputmethod.InputMethodManager;
-import android.view.animation.AlphaAnimation;
+import android.content.Context;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -23,18 +22,21 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.graphics.drawable.GradientDrawable;
 
+import com.kamal.jarvis.v2.JarvisSystem;
+import com.kamal.jarvis.v2.intelligence.JarvisBrain;
+
 import java.util.ArrayList;
 import java.util.Locale;
 
-public class MainActivity extends Activity
+public final class MainActivity extends Activity
         implements TextToSpeech.OnInitListener {
 
-    private static final int REQUEST_AUDIO = 1001;
-    private static final int REQUEST_VOICE = 1002;
-    private static final int REQUEST_NOTIFICATIONS = 1003;
+    private static final int REQUEST_AUDIO = 2001;
+    private static final int REQUEST_VOICE = 2002;
+    private static final int REQUEST_NOTIFICATIONS = 2003;
 
+    private JarvisSystem jarvisSystem;
     private TextToSpeech textToSpeech;
-    private CommandRouter commandRouter;
 
     private TextView statusText;
     private TextView coreStateText;
@@ -43,8 +45,8 @@ public class MainActivity extends Activity
     private ScrollView chatScroll;
     private View statusDot;
 
-    private boolean ttsReady = false;
-    private boolean commandRunning = false;
+    private boolean ttsReady;
+    private boolean commandRunning;
 
     private final int BG = Color.rgb(5, 9, 18);
     private final int PANEL = Color.rgb(11, 18, 32);
@@ -64,83 +66,77 @@ public class MainActivity extends Activity
         window.setStatusBarColor(BG);
         window.setNavigationBarColor(BG);
 
-        try {
-            commandRouter = new CommandRouter(this);
-        } catch (Exception e) {
-            commandRouter = null;
-        }
-
-        textToSpeech = new TextToSpeech(this, this);
-
         createInterface();
+
+        textToSpeech =
+                new TextToSpeech(
+                        this,
+                        this
+                );
+
+        initializeJarvis();
+
         requestRequiredPermissions();
-        startJarvisBackgroundService();
 
         handleIncomingIntent(getIntent());
     }
 
-    private int dp(float value) {
-        return (int) (
-                value *
-                        getResources()
-                                .getDisplayMetrics()
-                                .density
-                        + 0.5f
-        );
-    }
+    // =========================================================
+    // JARVIS INITIALIZATION
+    // =========================================================
 
-    private GradientDrawable roundedBackground(
-            int color,
-            float radius,
-            int strokeColor,
-            int strokeWidth
-    ) {
-        GradientDrawable drawable =
-                new GradientDrawable();
+    private void initializeJarvis() {
 
-        drawable.setColor(color);
-        drawable.setCornerRadius(dp(radius));
+        try {
 
-        if (strokeWidth > 0) {
-            drawable.setStroke(
-                    dp(strokeWidth),
-                    strokeColor
+            jarvisSystem =
+                    new JarvisSystem(this);
+
+            new Thread(() -> {
+
+                final com.kamal.jarvis.v2.core.JarvisResult<Boolean>
+                        result =
+                        jarvisSystem.start();
+
+                runOnUiThread(() -> {
+
+                    if (result != null &&
+                            result.isSuccess()) {
+
+                        setOnlineState();
+
+                        appendChat(
+                                "JARVIS: النظام الأساسي اشتغل بنجاح."
+                        );
+
+                    } else {
+
+                        setErrorState();
+
+                        String message =
+                                result == null
+                                        ? "Startup returned no result."
+                                        : result.getMessage();
+
+                        appendChat(
+                                "JARVIS: فشل تشغيل النظام: "
+                                        + safe(message)
+                        );
+                    }
+                });
+
+            }).start();
+
+        } catch (Exception exception) {
+
+            jarvisSystem = null;
+
+            setErrorState();
+
+            appendChat(
+                    "JARVIS: فشل تهيئة النظام."
             );
         }
-
-        return drawable;
-    }
-
-    private TextView makeText(
-            String text,
-            float size,
-            int color,
-            Typeface typeface
-    ) {
-        TextView view =
-                new TextView(this);
-
-        view.setText(text);
-        view.setTextSize(size);
-        view.setTextColor(color);
-        view.setTypeface(typeface);
-
-        return view;
-    }
-
-    private void addSpace(
-            LinearLayout parent,
-            int height
-    ) {
-        View space = new View(this);
-
-        parent.addView(
-                space,
-                new LinearLayout.LayoutParams(
-                        1,
-                        dp(height)
-                )
-        );
     }
 
     // =========================================================
@@ -165,9 +161,7 @@ public class MainActivity extends Activity
 
         root.setBackgroundColor(BG);
 
-        // =====================================================
         // HEADER
-        // =====================================================
 
         LinearLayout header =
                 new LinearLayout(this);
@@ -192,21 +186,15 @@ public class MainActivity extends Activity
                         "KAMAL",
                         27,
                         WHITE,
-                        Typeface.create(
-                                "sans-serif",
-                                Typeface.BOLD
-                        )
+                        Typeface.BOLD
                 );
 
         TextView subtitle =
                 makeText(
-                        "J A R V I S  •  PERSONAL SYSTEM",
+                        "J A R V I S  •  V2 SYSTEM",
                         9,
                         MUTED,
-                        Typeface.create(
-                                "sans-serif",
-                                Typeface.BOLD
-                        )
+                        Typeface.BOLD
                 );
 
         titleBox.addView(title);
@@ -252,9 +240,9 @@ public class MainActivity extends Activity
 
         statusDot.setBackground(
                 roundedBackground(
-                        GREEN,
+                        YELLOW,
                         50,
-                        GREEN,
+                        YELLOW,
                         0
                 )
         );
@@ -269,13 +257,10 @@ public class MainActivity extends Activity
 
         statusText =
                 makeText(
-                        "ONLINE",
+                        "STARTING",
                         10,
-                        GREEN,
-                        Typeface.create(
-                                "sans-serif",
-                                Typeface.BOLD
-                        )
+                        YELLOW,
+                        Typeface.BOLD
                 );
 
         LinearLayout.LayoutParams statusParams =
@@ -292,13 +277,12 @@ public class MainActivity extends Activity
         );
 
         header.addView(statusBox);
+
         root.addView(header);
 
         addSpace(root, 16);
 
-        // =====================================================
         // CORE CARD
-        // =====================================================
 
         LinearLayout coreCard =
                 new LinearLayout(this);
@@ -323,56 +307,43 @@ public class MainActivity extends Activity
                 )
         );
 
-        TextView coreTitle =
+        coreCard.addView(
                 makeText(
                         "JARVIS CORE",
                         11,
                         CYAN,
-                        Typeface.create(
-                                "sans-serif",
-                                Typeface.BOLD
-                        )
-                );
-
-        coreCard.addView(coreTitle);
+                        Typeface.BOLD
+                )
+        );
 
         addSpace(coreCard, 6);
 
         coreStateText =
                 makeText(
-                        "SYSTEM READY",
+                        "INITIALIZING...",
                         20,
                         WHITE,
-                        Typeface.create(
-                                "sans-serif",
-                                Typeface.BOLD
-                        )
+                        Typeface.BOLD
                 );
 
         coreCard.addView(coreStateText);
 
         addSpace(coreCard, 4);
 
-        TextView description =
+        coreCard.addView(
                 makeText(
-                        "Command • Voice • Automation • Intelligence • Learning",
+                        "Brain • Evolution • Runtime • Security • Tools",
                         10,
                         MUTED,
-                        Typeface.create(
-                                "sans-serif",
-                                Typeface.NORMAL
-                        )
-                );
-
-        coreCard.addView(description);
+                        Typeface.NORMAL
+                )
+        );
 
         root.addView(coreCard);
 
         addSpace(root, 14);
 
-        // =====================================================
         // SESSION
-        // =====================================================
 
         LinearLayout sessionCard =
                 new LinearLayout(this);
@@ -397,35 +368,26 @@ public class MainActivity extends Activity
                 )
         );
 
-        TextView sessionTitle =
+        sessionCard.addView(
                 makeText(
                         "LIVE SESSION",
                         10,
                         CYAN,
-                        Typeface.create(
-                                "sans-serif",
-                                Typeface.BOLD
-                        )
-                );
-
-        sessionCard.addView(sessionTitle);
+                        Typeface.BOLD
+                )
+        );
 
         addSpace(sessionCard, 8);
 
         chatScroll =
                 new ScrollView(this);
 
-        chatScroll.setFillViewport(false);
-
         chatText =
                 makeText(
-                        "JARVIS: مرحبا كمال.\nأنا جاهز لاستقبال أوامرك.",
+                        "JARVIS: كنوجد النظام...",
                         14,
                         WHITE,
-                        Typeface.create(
-                                "sans-serif",
-                                Typeface.NORMAL
-                        )
+                        Typeface.NORMAL
                 );
 
         chatText.setGravity(
@@ -448,7 +410,7 @@ public class MainActivity extends Activity
                 chatText,
                 new ScrollView.LayoutParams(
                         ScrollView.LayoutParams.MATCH_PARENT,
-                        dp(150)
+                        dp(160)
                 )
         );
 
@@ -456,7 +418,7 @@ public class MainActivity extends Activity
                 chatScroll,
                 new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
-                        dp(150)
+                        dp(160)
                 )
         );
 
@@ -464,9 +426,7 @@ public class MainActivity extends Activity
 
         addSpace(root, 12);
 
-        // =====================================================
         // INPUT
-        // =====================================================
 
         LinearLayout inputRow =
                 new LinearLayout(this);
@@ -481,8 +441,12 @@ public class MainActivity extends Activity
         inputText.setSingleLine(false);
         inputText.setTextColor(WHITE);
         inputText.setHintTextColor(MUTED);
-        inputText.setHint("كتب الأمر ديالك هنا...");
+        inputText.setHint(
+                "كتب الأمر ديالك هنا..."
+        );
+
         inputText.setTextSize(14);
+
         inputText.setPadding(
                 dp(14),
                 dp(10),
@@ -499,16 +463,13 @@ public class MainActivity extends Activity
                 )
         );
 
-        LinearLayout.LayoutParams inputParams =
+        inputRow.addView(
+                inputText,
                 new LinearLayout.LayoutParams(
                         0,
                         dp(52),
                         1
-                );
-
-        inputRow.addView(
-                inputText,
-                inputParams
+                )
         );
 
         Button sendButton =
@@ -538,9 +499,7 @@ public class MainActivity extends Activity
 
         addSpace(root, 8);
 
-        // =====================================================
-        // VOICE BUTTON
-        // =====================================================
+        // VOICE
 
         Button voiceButton =
                 createButton(
@@ -548,15 +507,12 @@ public class MainActivity extends Activity
                         GREEN
                 );
 
-        LinearLayout.LayoutParams voiceParams =
+        root.addView(
+                voiceButton,
                 new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
                         dp(50)
-                );
-
-        root.addView(
-                voiceButton,
-                voiceParams
+                )
         );
 
         voiceButton.setOnClickListener(
@@ -565,9 +521,7 @@ public class MainActivity extends Activity
 
         addSpace(root, 8);
 
-        // =====================================================
-        // QUICK COMMANDS
-        // =====================================================
+        // QUICK BUTTONS
 
         LinearLayout quickRow =
                 new LinearLayout(this);
@@ -582,10 +536,10 @@ public class MainActivity extends Activity
                         CYAN
                 );
 
-        Button helpButton =
+        Button stopButton =
                 createButton(
-                        "HELP",
-                        YELLOW
+                        "STOP",
+                        RED
                 );
 
         quickRow.addView(
@@ -597,70 +551,35 @@ public class MainActivity extends Activity
                 )
         );
 
-        LinearLayout.LayoutParams helpParams =
+        LinearLayout.LayoutParams stopParams =
                 new LinearLayout.LayoutParams(
                         0,
                         dp(44),
                         1
                 );
 
-        helpParams.leftMargin = dp(8);
+        stopParams.leftMargin = dp(8);
 
         quickRow.addView(
-                helpButton,
-                helpParams
+                stopButton,
+                stopParams
         );
 
         root.addView(quickRow);
 
         statusButton.setOnClickListener(
-                v -> executeCommand("حالة جارفيس")
+                v -> showStatus()
         );
 
-        helpButton.setOnClickListener(
-                v -> executeCommand("شنو تقدر تدير")
+        stopButton.setOnClickListener(
+                v -> stopJarvis()
         );
 
         setContentView(root);
     }
 
-    private Button createButton(
-            String text,
-            int color
-    ) {
-        Button button =
-                new Button(this);
-
-        button.setText(text);
-        button.setTextColor(BG);
-        button.setTextSize(11);
-        button.setTypeface(
-                Typeface.create(
-                        "sans-serif",
-                        Typeface.BOLD
-                )
-        );
-
-        button.setGravity(
-                Gravity.CENTER
-        );
-
-        button.setAllCaps(false);
-
-        button.setBackground(
-                roundedBackground(
-                        color,
-                        16,
-                        color,
-                        0
-                )
-        );
-
-        return button;
-    }
-
     // =========================================================
-    // COMMAND EXECUTION
+    // COMMAND
     // =========================================================
 
     private void executeTypedCommand() {
@@ -693,9 +612,18 @@ public class MainActivity extends Activity
             return;
         }
 
+        if (jarvisSystem == null) {
+
+            appendChat(
+                    "JARVIS: النظام مازال ما تهيأش."
+            );
+
+            return;
+        }
+
         commandRunning = true;
 
-        setBusyState(true);
+        setBusyState();
 
         appendChat(
                 "YOU: " + command
@@ -707,175 +635,278 @@ public class MainActivity extends Activity
 
             try {
 
-                if (commandRouter == null) {
-
-                    response =
-                            "JARVIS Core مازال ما تهيأش.";
-
-                } else {
-
-                    response =
-                            commandRouter.execute(
-                                    command
-                            );
-                }
-
-            } catch (Exception e) {
+                com.kamal.jarvis.v2.core.JarvisResult<
+                        JarvisBrain.BrainResponse
+                        > result =
+                        jarvisSystem.processCommand(
+                                command
+                        );
 
                 response =
-                        "وقع خطأ أثناء تنفيذ الأمر.";
+                        buildBrainResponse(
+                                result
+                        );
 
+            } catch (Exception exception) {
+
+                response =
+                        "وقع خطأ حقيقي أثناء تنفيذ الأمر: "
+                                + safe(
+                                exception.getMessage()
+                        );
             }
 
             final String finalResponse =
-                    response == null
-                            ? ""
-                            : response.trim();
+                    response;
 
             runOnUiThread(() -> {
 
                 appendChat(
                         "JARVIS: "
-                                + (
-                                finalResponse.isEmpty()
-                                        ? "ما عنديش جواب."
-                                        : finalResponse
-                        )
+                                + finalResponse
                 );
 
                 speak(finalResponse);
 
-                setBusyState(false);
-
                 commandRunning = false;
+
+                if (jarvisSystem != null &&
+                        jarvisSystem.isInitialized()) {
+
+                    setOnlineState();
+
+                } else {
+
+                    setErrorState();
+                }
             });
 
         }).start();
     }
 
-    private void setBusyState(
-            boolean busy
+    private String buildBrainResponse(
+            com.kamal.jarvis.v2.core.JarvisResult<
+                    JarvisBrain.BrainResponse
+                    > result
     ) {
 
-        if (coreStateText == null ||
-                statusText == null ||
-                statusDot == null) {
-            return;
+        if (result == null) {
+            return "النظام رجع بدون نتيجة.";
         }
 
-        if (busy) {
+        if (!result.isSuccess()) {
 
-            coreStateText.setText(
-                    "PROCESSING..."
-            );
-
-            coreStateText.setTextColor(
-                    YELLOW
-            );
-
-            statusText.setText(
-                    "BUSY"
-            );
-
-            statusText.setTextColor(
-                    YELLOW
-            );
-
-            statusDot.setBackground(
-                    roundedBackground(
-                            YELLOW,
-                            50,
-                            YELLOW,
-                            0
-                    )
-            );
-
-        } else {
-
-            coreStateText.setText(
-                    "SYSTEM READY"
-            );
-
-            coreStateText.setTextColor(
-                    WHITE
-            );
-
-            statusText.setText(
-                    "ONLINE"
-            );
-
-            statusText.setTextColor(
-                    GREEN
-            );
-
-            statusDot.setBackground(
-                    roundedBackground(
-                            GREEN,
-                            50,
-                            GREEN,
-                            0
-                    )
-            );
+            return "الأمر ما تنفذش: "
+                    + safe(result.getMessage());
         }
+
+        JarvisBrain.BrainResponse response =
+                result.getData();
+
+        if (response == null) {
+
+            return safe(result.getMessage());
+        }
+
+        String message =
+                response.getMessage();
+
+        if (message != null &&
+                !message.trim().isEmpty()) {
+
+            return message;
+        }
+
+        return safe(result.getMessage());
     }
 
     // =========================================================
-    // CHAT
+    // STATUS
     // =========================================================
 
-    private void appendChat(
-            String message
-    ) {
+    private void showStatus() {
 
-        if (chatText == null) {
+        if (jarvisSystem == null) {
+
+            appendChat(
+                    "JARVIS: النظام غير مهيأ."
+            );
+
             return;
         }
 
-        String old =
-                chatText.getText()
-                        .toString();
+        JarvisSystem.SystemStatus status =
+                jarvisSystem.getStatus();
 
-        String updated;
+        String message =
+                "SYSTEM STATUS\n"
+                        + "Initialized: "
+                        + status.isInitialized()
+                        + "\nSecurity: "
+                        + status.isSecurityActive()
+                        + "\nRuntime: "
+                        + status.isRuntimeRunning()
+                        + "\nWorkspace: "
+                        + status.isWorkspaceReady()
+                        + "\nTools: "
+                        + status.getToolCount()
+                        + "\nPermissions: "
+                        + status.getGrantedPermissionCount()
+                        + "\nEvolution: "
+                        + status.getEvolutionState();
 
-        if (old.trim().isEmpty()) {
+        appendChat(
+                "JARVIS:\n" + message
+        );
+    }
 
-            updated = message;
+    private void stopJarvis() {
 
-        } else {
-
-            updated =
-                    old
-                            + "\n\n"
-                            + message;
+        if (jarvisSystem == null) {
+            return;
         }
 
-        chatText.setText(updated);
+        new Thread(() -> {
 
-        if (chatScroll != null) {
+            com.kamal.jarvis.v2.core.JarvisResult<Boolean>
+                    result =
+                    jarvisSystem.stop();
 
-            chatScroll.post(
-                    () -> chatScroll.fullScroll(
-                            View.FOCUS_DOWN
-                    )
-            );
-        }
+            runOnUiThread(() -> {
 
-        try {
+                if (result != null &&
+                        result.isSuccess()) {
 
-            AlphaAnimation animation =
-                    new AlphaAnimation(
-                            0.0f,
-                            1.0f
+                    coreStateText.setText(
+                            "SYSTEM STOPPED"
                     );
 
-            animation.setDuration(220);
+                    statusText.setText(
+                            "OFFLINE"
+                    );
 
-            chatText.startAnimation(
-                    animation
-            );
+                    statusText.setTextColor(
+                            RED
+                    );
 
-        } catch (Exception ignored) {
+                    statusDot.setBackground(
+                            roundedBackground(
+                                    RED,
+                                    50,
+                                    RED,
+                                    0
+                            )
+                    );
+
+                    appendChat(
+                            "JARVIS: تم إيقاف النظام."
+                    );
+
+                } else {
+
+                    appendChat(
+                            "JARVIS: فشل إيقاف النظام."
+                    );
+                }
+            });
+
+        }).start();
+    }
+
+    // =========================================================
+    // STATES
+    // =========================================================
+
+    private void setOnlineState() {
+
+        if (coreStateText == null) {
+            return;
         }
+
+        coreStateText.setText(
+                "SYSTEM ONLINE"
+        );
+
+        coreStateText.setTextColor(
+                WHITE
+        );
+
+        statusText.setText(
+                "ONLINE"
+        );
+
+        statusText.setTextColor(
+                GREEN
+        );
+
+        statusDot.setBackground(
+                roundedBackground(
+                        GREEN,
+                        50,
+                        GREEN,
+                        0
+                )
+        );
+    }
+
+    private void setBusyState() {
+
+        coreStateText.setText(
+                "PROCESSING..."
+        );
+
+        coreStateText.setTextColor(
+                YELLOW
+        );
+
+        statusText.setText(
+                "BUSY"
+        );
+
+        statusText.setTextColor(
+                YELLOW
+        );
+
+        statusDot.setBackground(
+                roundedBackground(
+                        YELLOW,
+                        50,
+                        YELLOW,
+                        0
+                )
+        );
+    }
+
+    private void setErrorState() {
+
+        if (coreStateText == null) {
+            return;
+        }
+
+        coreStateText.setText(
+                "SYSTEM ERROR"
+        );
+
+        coreStateText.setTextColor(
+                RED
+        );
+
+        statusText.setText(
+                "ERROR"
+        );
+
+        statusText.setTextColor(
+                RED
+        );
+
+        statusDot.setBackground(
+                roundedBackground(
+                        RED,
+                        50,
+                        RED,
+                        0
+                )
+        );
     }
 
     // =========================================================
@@ -926,10 +957,10 @@ public class MainActivity extends Activity
                     REQUEST_VOICE
             );
 
-        } catch (Exception e) {
+        } catch (Exception exception) {
 
             appendChat(
-                    "JARVIS: ما قدرتش نشغل التعرف على الصوت."
+                    "JARVIS: التعرف على الصوت غير متاح."
             );
         }
     }
@@ -940,6 +971,7 @@ public class MainActivity extends Activity
             int resultCode,
             Intent data
     ) {
+
         super.onActivityResult(
                 requestCode,
                 resultCode,
@@ -952,30 +984,25 @@ public class MainActivity extends Activity
             return;
         }
 
-        try {
-
-            ArrayList<String> results =
-                    data.getStringArrayListExtra(
-                            RecognizerIntent.EXTRA_RESULTS
-                    );
-
-            if (results == null ||
-                    results.isEmpty()) {
-                return;
-            }
-
-            String command =
-                    results.get(0);
-
-            if (command != null &&
-                    !command.trim().isEmpty()) {
-
-                executeCommand(
-                        command.trim()
+        ArrayList<String> results =
+                data.getStringArrayListExtra(
+                        RecognizerIntent.EXTRA_RESULTS
                 );
-            }
 
-        } catch (Exception ignored) {
+        if (results == null ||
+                results.isEmpty()) {
+            return;
+        }
+
+        String command =
+                results.get(0);
+
+        if (command != null &&
+                !command.trim().isEmpty()) {
+
+            executeCommand(
+                    command.trim()
+            );
         }
     }
 
@@ -989,7 +1016,7 @@ public class MainActivity extends Activity
         if (status ==
                 TextToSpeech.SUCCESS) {
 
-            int result =
+            int languageResult =
                     textToSpeech.setLanguage(
                             new Locale(
                                     "ar",
@@ -998,10 +1025,10 @@ public class MainActivity extends Activity
                     );
 
             ttsReady =
-                    result !=
+                    languageResult !=
                             TextToSpeech.LANG_MISSING_DATA
                             &&
-                            result !=
+                            languageResult !=
                                     TextToSpeech.LANG_NOT_SUPPORTED;
 
         } else {
@@ -1043,29 +1070,24 @@ public class MainActivity extends Activity
         ArrayList<String> permissions =
                 new ArrayList<>();
 
-        if (Build.VERSION.SDK_INT >= 23) {
-
-            if (checkSelfPermission(
-                    Manifest.permission.RECORD_AUDIO
-            ) != PackageManager.PERMISSION_GRANTED) {
-
-                permissions.add(
+        if (Build.VERSION.SDK_INT >= 23 &&
+                checkSelfPermission(
                         Manifest.permission.RECORD_AUDIO
-                );
-            }
+                ) != PackageManager.PERMISSION_GRANTED) {
+
+            permissions.add(
+                    Manifest.permission.RECORD_AUDIO
+            );
         }
 
-        if (Build.VERSION.SDK_INT >=
-                Build.VERSION_CODES.TIRAMISU) {
-
-            if (checkSelfPermission(
-                    Manifest.permission.POST_NOTIFICATIONS
-            ) != PackageManager.PERMISSION_GRANTED) {
-
-                permissions.add(
+        if (Build.VERSION.SDK_INT >= 33 &&
+                checkSelfPermission(
                         Manifest.permission.POST_NOTIFICATIONS
-                );
-            }
+                ) != PackageManager.PERMISSION_GRANTED) {
+
+            permissions.add(
+                    Manifest.permission.POST_NOTIFICATIONS
+            );
         }
 
         if (!permissions.isEmpty()) {
@@ -1085,105 +1107,207 @@ public class MainActivity extends Activity
             String[] permissions,
             int[] grantResults
     ) {
+
         super.onRequestPermissionsResult(
                 requestCode,
                 permissions,
                 grantResults
         );
 
-        if (requestCode == REQUEST_AUDIO) {
+        if (jarvisSystem != null) {
 
-            if (Build.VERSION.SDK_INT >=
-                    Build.VERSION_CODES.TIRAMISU) {
+            jarvisSystem.synchronizePermissions();
+        }
 
-                boolean notificationMissing =
-                        checkSelfPermission(
+        if (requestCode ==
+                REQUEST_AUDIO) {
+
+            if (Build.VERSION.SDK_INT >= 33 &&
+                    checkSelfPermission(
+                            Manifest.permission.POST_NOTIFICATIONS
+                    ) != PackageManager.PERMISSION_GRANTED) {
+
+                requestPermissions(
+                        new String[]{
                                 Manifest.permission.POST_NOTIFICATIONS
-                        ) != PackageManager.PERMISSION_GRANTED;
-
-                if (notificationMissing) {
-
-                    requestPermissions(
-                            new String[]{
-                                    Manifest.permission.POST_NOTIFICATIONS
-                            },
-                            REQUEST_NOTIFICATIONS
-                    );
-                }
+                        },
+                        REQUEST_NOTIFICATIONS
+                );
             }
         }
     }
 
     // =========================================================
-    // BACKGROUND SERVICE
+    // CHAT
     // =========================================================
 
-    private void startJarvisBackgroundService() {
+    private void appendChat(
+            String message
+    ) {
 
-        try {
+        if (chatText == null) {
+            return;
+        }
 
-            Intent serviceIntent =
-                    new Intent(
-                            this,
-                            JarvisBackgroundService.class
-                    );
+        String old =
+                chatText.getText()
+                        .toString();
 
-            if (Build.VERSION.SDK_INT >=
-                    Build.VERSION_CODES.O) {
+        if (old.trim().isEmpty()) {
 
-                startForegroundService(
-                        serviceIntent
-                );
+            chatText.setText(
+                    message
+            );
 
-            } else {
+        } else {
 
-                startService(
-                        serviceIntent
-                );
-            }
+            chatText.setText(
+                    old
+                            + "\n\n"
+                            + message
+            );
+        }
 
-        } catch (Exception e) {
+        if (chatScroll != null) {
 
-            appendChat(
-                    "JARVIS: Background Service غير متاح حاليا."
+            chatScroll.post(
+                    () -> chatScroll.fullScroll(
+                            View.FOCUS_DOWN
+                    )
             );
         }
     }
 
     // =========================================================
-    // INCOMING INTENT
+    // UI HELPERS
     // =========================================================
 
-    private void handleIncomingIntent(
-            Intent intent
+    private TextView makeText(
+            String text,
+            float size,
+            int color,
+            int typefaceStyle
     ) {
 
-        if (intent == null) {
-            return;
-        }
+        TextView view =
+                new TextView(this);
 
-        try {
+        view.setText(text);
+        view.setTextSize(size);
+        view.setTextColor(color);
 
-            String command =
-                    intent.getStringExtra(
-                            "command"
-                    );
+        view.setTypeface(
+                Typeface.create(
+                        "sans-serif",
+                        typefaceStyle
+                )
+        );
 
-            if (command != null &&
-                    !command.trim().isEmpty()) {
-
-                executeCommand(
-                        command.trim()
-                );
-            }
-
-        } catch (Exception ignored) {
-        }
+        return view;
     }
 
-    // =========================================================
-    // KEYBOARD
-    // =========================================================
+    private Button createButton(
+            String text,
+            int color
+    ) {
+
+        Button button =
+                new Button(this);
+
+        button.setText(text);
+        button.setTextColor(BG);
+        button.setTextSize(11);
+        button.setAllCaps(false);
+
+        button.setTypeface(
+                Typeface.create(
+                        "sans-serif",
+                        Typeface.BOLD
+                )
+        );
+
+        button.setGravity(
+                Gravity.CENTER
+        );
+
+        button.setBackground(
+                roundedBackground(
+                        color,
+                        16,
+                        color,
+                        0
+                )
+        );
+
+        return button;
+    }
+
+    private GradientDrawable roundedBackground(
+            int color,
+            float radius,
+            int strokeColor,
+            int strokeWidth
+    ) {
+
+        GradientDrawable drawable =
+                new GradientDrawable();
+
+        drawable.setColor(color);
+        drawable.setCornerRadius(
+                dp(radius)
+        );
+
+        if (strokeWidth > 0) {
+
+            drawable.setStroke(
+                    dp(strokeWidth),
+                    strokeColor
+            );
+        }
+
+        return drawable;
+    }
+
+    private void addSpace(
+            LinearLayout parent,
+            int height
+    ) {
+
+        View space =
+                new View(this);
+
+        parent.addView(
+                space,
+                new LinearLayout.LayoutParams(
+                        1,
+                        dp(height)
+                )
+        );
+    }
+
+    private int dp(float value) {
+
+        return (int) (
+                value *
+                        getResources()
+                                .getDisplayMetrics()
+                                .density
+                        + 0.5f
+        );
+    }
+
+    private String safe(
+            String value
+    ) {
+
+        if (value == null ||
+                value.trim().isEmpty()) {
+
+            return "unknown";
+        }
+
+        return value;
+    }
 
     private void hideKeyboard() {
 
@@ -1209,13 +1333,36 @@ public class MainActivity extends Activity
     }
 
     // =========================================================
-    // LIFECYCLE
+    // INTENTS / LIFECYCLE
     // =========================================================
+
+    private void handleIncomingIntent(
+            Intent intent
+    ) {
+
+        if (intent == null) {
+            return;
+        }
+
+        String command =
+                intent.getStringExtra(
+                        "command"
+                );
+
+        if (command != null &&
+                !command.trim().isEmpty()) {
+
+            executeCommand(
+                    command.trim()
+            );
+        }
+    }
 
     @Override
     protected void onNewIntent(
             Intent intent
     ) {
+
         super.onNewIntent(intent);
 
         setIntent(intent);
@@ -1225,6 +1372,15 @@ public class MainActivity extends Activity
 
     @Override
     protected void onDestroy() {
+
+        try {
+
+            if (jarvisSystem != null) {
+                jarvisSystem.stop();
+            }
+
+        } catch (Exception ignored) {
+        }
 
         try {
 
