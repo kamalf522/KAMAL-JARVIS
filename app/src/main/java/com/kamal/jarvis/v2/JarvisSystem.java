@@ -3,6 +3,7 @@ package com.kamal.jarvis.v2;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import com.kamal.jarvis.v2.core.JarvisError;
 import com.kamal.jarvis.v2.core.JarvisResult;
 import com.kamal.jarvis.v2.core.JarvisRuntime;
 import com.kamal.jarvis.v2.core.ToolContract;
@@ -21,6 +22,7 @@ import com.kamal.jarvis.v2.intelligence.JarvisBrain;
 import com.kamal.jarvis.v2.permissions.AndroidPermissionBridge;
 import com.kamal.jarvis.v2.permissions.PermissionManager;
 import com.kamal.jarvis.v2.security.OwnerSecurityBoundary;
+import com.kamal.jarvis.v2.tools.AndroidIntentTool;
 import com.kamal.jarvis.v2.tools.ToolRegistry;
 
 import java.io.File;
@@ -28,21 +30,26 @@ import java.io.File;
 /**
  * JARVIS V2 - System
  *
- * نقطة التجميع الحقيقية للنظام.
+ * نقطة التجميع الرئيسية للنظام.
  *
- * المسؤوليات:
+ * مسؤول عن:
  *
- * 1. إنشاء جميع المكونات الأساسية.
+ * 1. إنشاء مكونات JARVIS.
  * 2. ربط المكونات مع بعضها.
  * 3. تهيئة Owner Security.
  * 4. تهيئة Permission Manager.
  * 5. تهيئة Workspace.
- * 6. تشغيل Runtime.
- * 7. إعطاء المستوى الأعلى نقطة واحدة للتعامل مع JARVIS.
+ * 6. تسجيل الأدوات الحقيقية في Registry و Runtime.
+ * 7. تشغيل Runtime.
+ * 8. تمرير الأوامر إلى Brain.
  *
- * هذا الملف لا يحتوي على منطق وهمي.
- * جميع المكونات التي يتم إنشاؤها هنا هي المكونات
- * الفعلية الموجودة داخل JARVIS V2.
+ * مبدأ مهم:
+ *
+ * ToolRegistry و JarvisRuntime يجب أن يحتويا
+ * على نفس الأدوات القابلة للتنفيذ.
+ *
+ * إذا كانت الأداة موجودة في Registry فقط،
+ * يمكن للنظام اكتشافها ولكن لا يستطيع Runtime تنفيذها.
  */
 public final class JarvisSystem {
 
@@ -93,6 +100,11 @@ public final class JarvisSystem {
 
     private final JarvisBrain brain;
 
+    /**
+     * الأدوات الحقيقية التي يوفرها JARVIS من البداية.
+     */
+    private final AndroidIntentTool androidIntentTool;
+
     private boolean initialized;
 
     public JarvisSystem(
@@ -140,6 +152,21 @@ public final class JarvisSystem {
 
         this.toolRegistry =
                 new ToolRegistry();
+
+        /*
+         * الأداة الحقيقية الأولى للنظام.
+         *
+         * هذه الأداة قادرة على تنفيذ Android Intents
+         * المسموح بها مثل:
+         *
+         * - فتح Settings
+         * - فتح App Settings
+         * - فتح HTTP/HTTPS URLs
+         */
+        this.androidIntentTool =
+                new AndroidIntentTool(
+                        this.context
+                );
 
         /*
          * =========================================================
@@ -270,6 +297,7 @@ public final class JarvisSystem {
     public synchronized JarvisResult<Boolean> start() {
 
         if (initialized) {
+
             return JarvisResult.success(
                     true,
                     "JARVIS V2 is already running."
@@ -305,24 +333,18 @@ public final class JarvisSystem {
 
                 if (!workspaceRoot.mkdirs()) {
 
-                    return JarvisResult.failure(
-                            com.kamal.jarvis.v2.core.JarvisError.of(
-                                    com.kamal.jarvis.v2.core.JarvisError.Type.FILE_OPERATION_FAILED,
-                                    "Could not create JARVIS workspace.",
-                                    "JarvisSystem"
-                            )
+                    return failure(
+                            JarvisError.Type.FILE_OPERATION_FAILED,
+                            "Could not create JARVIS workspace."
                     );
                 }
             }
 
             if (!workspaceRoot.isDirectory()) {
 
-                return JarvisResult.failure(
-                        com.kamal.jarvis.v2.core.JarvisError.of(
-                                com.kamal.jarvis.v2.core.JarvisError.Type.FILE_OPERATION_FAILED,
-                                "JARVIS workspace is not a directory.",
-                                "JarvisSystem"
-                        )
+                return failure(
+                        JarvisError.Type.FILE_OPERATION_FAILED,
+                        "JARVIS workspace is not a directory."
                 );
             }
 
@@ -372,7 +394,36 @@ public final class JarvisSystem {
 
             /*
              * -----------------------------------------------------
-             * 6. Runtime
+             * 6. Register built-in tools
+             * -----------------------------------------------------
+             *
+             * مهم:
+             *
+             * الأداة يجب أن تكون موجودة في:
+             *
+             * ToolRegistry
+             * +
+             * JarvisRuntime
+             *
+             * حتى يستطيع Brain اكتشافها وتنفيذها فعلياً.
+             */
+
+            JarvisResult<Boolean> toolResult =
+                    registerTool(
+                            androidIntentTool
+                    );
+
+            if (!toolResult.isSuccess()) {
+
+                return JarvisResult.failure(
+                        toolResult.getError(),
+                        toolResult.getMessage()
+                );
+            }
+
+            /*
+             * -----------------------------------------------------
+             * 7. Runtime
              * -----------------------------------------------------
              */
 
@@ -380,6 +431,19 @@ public final class JarvisSystem {
                     runtime.start();
 
             if (!runtimeResult.isSuccess()) {
+
+                /*
+                 * إذا فشل Runtime بعد تسجيل الأداة،
+                 * نحاول تنظيف الربط حتى لا يبقى النظام
+                 * في حالة جزئية.
+                 */
+                toolRegistry.remove(
+                        AndroidIntentTool.TOOL_ID
+                );
+
+                runtime.unregisterTool(
+                        AndroidIntentTool.TOOL_ID
+                );
 
                 return JarvisResult.failure(
                         runtimeResult.getError(),
@@ -401,8 +465,8 @@ public final class JarvisSystem {
                     false;
 
             return JarvisResult.failure(
-                    com.kamal.jarvis.v2.core.JarvisError.fromException(
-                            com.kamal.jarvis.v2.core.JarvisError.Type.INTERNAL_ERROR,
+                    JarvisError.fromException(
+                            JarvisError.Type.INTERNAL_ERROR,
                             "JARVIS V2 startup failed.",
                             "JarvisSystem",
                             exception
@@ -431,8 +495,8 @@ public final class JarvisSystem {
         } catch (Exception exception) {
 
             return JarvisResult.failure(
-                    com.kamal.jarvis.v2.core.JarvisError.fromException(
-                            com.kamal.jarvis.v2.core.JarvisError.Type.INTERNAL_ERROR,
+                    JarvisError.fromException(
+                            JarvisError.Type.INTERNAL_ERROR,
                             "JARVIS V2 stop failed.",
                             "JarvisSystem",
                             exception
@@ -470,6 +534,15 @@ public final class JarvisSystem {
 
     /**
      * تسجيل Tool حقيقي داخل النظام.
+     *
+     * الربط هنا ذري قدر الإمكان:
+     *
+     * 1. نسجل في ToolRegistry.
+     * 2. نسجل نفس الأداة في Runtime.
+     * 3. إذا فشل Runtime نحذف التسجيل من Registry.
+     *
+     * بهذا لا يبقى Tool موجوداً في جهة
+     * وغير موجود في الجهة الأخرى.
      */
     public synchronized JarvisResult<Boolean> registerTool(
             ToolContract tool
@@ -477,17 +550,205 @@ public final class JarvisSystem {
 
         if (tool == null) {
 
-            return JarvisResult.failure(
-                    com.kamal.jarvis.v2.core.JarvisError.of(
-                            com.kamal.jarvis.v2.core.JarvisError.Type.INVALID_REQUEST,
-                            "Tool cannot be null.",
-                            "JarvisSystem"
-                    )
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "Tool cannot be null."
             );
         }
 
-        return toolRegistry.register(
-                tool
+        String toolId =
+                normalizeToolId(
+                        tool.getId()
+                );
+
+        if (toolId.isEmpty()) {
+
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "Tool ID cannot be empty."
+            );
+        }
+
+        if (!tool.isAvailable()) {
+
+            return failure(
+                    JarvisError.Type.TOOL_UNAVAILABLE,
+                    "Tool is not available: " + toolId
+            );
+        }
+
+        /*
+         * إذا كان مسجلاً بالفعل في الجهتين،
+         * لا نكرر التسجيل.
+         */
+        if (toolRegistry.contains(toolId) &&
+                runtime.containsTool(toolId)) {
+
+            return JarvisResult.success(
+                    true,
+                    "Tool is already registered: "
+                            + toolId
+            );
+        }
+
+        /*
+         * إذا كانت إحدى الجهتين تحتوي على Tool
+         * والأخرى لا، نرفض الحالة غير المتناسقة
+         * ونحاول تنظيفها قبل إعادة التسجيل.
+         */
+        if (toolRegistry.contains(toolId) ||
+                runtime.containsTool(toolId)) {
+
+            toolRegistry.remove(toolId);
+            runtime.unregisterTool(toolId);
+        }
+
+        /*
+         * ---------------------------------------------------------
+         * Registry
+         * ---------------------------------------------------------
+         */
+
+        JarvisResult<ToolContract> registryResult =
+                toolRegistry.register(
+                        tool
+                );
+
+        if (!registryResult.isSuccess()) {
+
+            return JarvisResult.failure(
+                    registryResult.getError(),
+                    registryResult.getMessage()
+            );
+        }
+
+        /*
+         * ---------------------------------------------------------
+         * Runtime
+         * ---------------------------------------------------------
+         */
+
+        JarvisResult<Boolean> runtimeResult =
+                runtime.registerTool(
+                        tool
+                );
+
+        if (!runtimeResult.isSuccess()) {
+
+            /*
+             * Rollback للـRegistry.
+             */
+            toolRegistry.remove(
+                    toolId
+            );
+
+            return JarvisResult.failure(
+                    runtimeResult.getError(),
+                    "Tool registration failed in Runtime: "
+                            + runtimeResult.getMessage()
+            );
+        }
+
+        /*
+         * تحقق نهائي من الاتساق.
+         */
+        if (!toolRegistry.contains(toolId) ||
+                !runtime.containsTool(toolId)) {
+
+            toolRegistry.remove(toolId);
+            runtime.unregisterTool(toolId);
+
+            return failure(
+                    JarvisError.Type.INTERNAL_ERROR,
+                    "Tool registration consistency check failed: "
+                            + toolId
+            );
+        }
+
+        return JarvisResult.success(
+                true,
+                "Tool registered in Registry and Runtime: "
+                        + toolId
+        );
+    }
+
+    /**
+     * إزالة Tool من النظامين معاً.
+     */
+    public synchronized JarvisResult<Boolean> unregisterTool(
+            String toolId
+    ) {
+
+        String normalizedId =
+                normalizeToolId(
+                        toolId
+                );
+
+        if (normalizedId.isEmpty()) {
+
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "Tool ID cannot be empty."
+            );
+        }
+
+        boolean registryHadTool =
+                toolRegistry.contains(
+                        normalizedId
+                );
+
+        boolean runtimeHadTool =
+                runtime.containsTool(
+                        normalizedId
+                );
+
+        if (!registryHadTool &&
+                !runtimeHadTool) {
+
+            return failure(
+                    JarvisError.Type.NOT_FOUND,
+                    "Tool not found: " + normalizedId
+            );
+        }
+
+        JarvisResult<ToolContract> registryResult =
+                toolRegistry.remove(
+                        normalizedId
+                );
+
+        if (!registryResult.isSuccess() &&
+                registryHadTool) {
+
+            return JarvisResult.failure(
+                    registryResult.getError(),
+                    registryResult.getMessage()
+            );
+        }
+
+        JarvisResult<Boolean> runtimeResult =
+                runtime.unregisterTool(
+                        normalizedId
+                );
+
+        if (!runtimeResult.isSuccess() &&
+                runtimeHadTool) {
+
+            /*
+             * لا نعيد Tool تلقائياً هنا لأن المرجع الأصلي
+             * قد يكون تغير. نبلغ بوضوح عن حالة التنظيف.
+             */
+            return JarvisResult.failure(
+                    runtimeResult.getError(),
+                    "Tool removed from Registry but could not be removed "
+                            + "from Runtime: "
+                            + runtimeResult.getMessage()
+            );
+        }
+
+        return JarvisResult.success(
+                true,
+                "Tool removed from Registry and Runtime: "
+                        + normalizedId
         );
     }
 
@@ -594,18 +855,16 @@ public final class JarvisSystem {
         return brain;
     }
 
+    public AndroidIntentTool getAndroidIntentTool() {
+        return androidIntentTool;
+    }
+
     public boolean isInitialized() {
         return initialized;
     }
 
     /**
-     * تهيئة Owner identity بشكل دائم داخل مساحة التطبيق الخاصة.
-     *
-     * هذا يحافظ على نفس هوية المالك بين تشغيلات التطبيق.
-     *
-     * ملاحظة:
-     * هذه هوية داخلية وليست بديلاً عن Biometric/PIN.
-     * المصادقة القوية سنربطها لاحقاً بحدود الأمان نفسها.
+     * تهيئة Owner identity بشكل دائم داخل مساحة التطبيق.
      */
     private JarvisResult<Boolean> initializeOwner() {
 
@@ -637,53 +896,78 @@ public final class JarvisSystem {
 
             if (!saved) {
 
-                return JarvisResult.failure(
-                        com.kamal.jarvis.v2.core.JarvisError.of(
-                                com.kamal.jarvis.v2.core.JarvisError.Type.MEMORY_ERROR,
-                                "Could not persist JARVIS owner identity.",
-                                "JarvisSystem"
-                        )
+                return failure(
+                        JarvisError.Type.FILE_OPERATION_FAILED,
+                        "Could not persist owner identity."
                 );
             }
         }
 
-        if (securityBoundary.isInitialized()) {
+        if (!securityBoundary.isInitialized()) {
 
-            if (!securityBoundary.isOwner(
-                    ownerId
-            )) {
+            JarvisResult<Void> initializeResult =
+                    securityBoundary.initializeOwner(
+                            ownerId
+                    );
+
+            if (!initializeResult.isSuccess()) {
 
                 return JarvisResult.failure(
-                        com.kamal.jarvis.v2.core.JarvisError.of(
-                                com.kamal.jarvis.v2.core.JarvisError.Type.NOT_AUTHORIZED,
-                                "Stored owner identity does not match the active security boundary.",
-                                "JarvisSystem"
-                        )
+                        initializeResult.getError(),
+                        initializeResult.getMessage()
                 );
             }
 
-            return JarvisResult.success(
-                    true,
-                    "Owner security is already active."
+        } else if (!securityBoundary.isOwner(ownerId)) {
+
+            return failure(
+                    JarvisError.Type.NOT_AUTHORIZED,
+                    "Stored owner identity does not match security boundary."
             );
         }
 
-        JarvisResult<Void> result =
-                securityBoundary.initializeOwner(
-                        ownerId
-                );
+        if (!securityBoundary.isActive()) {
 
-        if (!result.isSuccess()) {
-
-            return JarvisResult.failure(
-                    result.getError(),
-                    result.getMessage()
+            return failure(
+                    JarvisError.Type.NOT_AUTHORIZED,
+                    "Owner security boundary is not active."
             );
         }
 
         return JarvisResult.success(
                 true,
-                "Owner security initialized."
+                "Owner identity initialized."
+        );
+    }
+
+    /**
+     * توحيد Tool ID.
+     */
+    private static String normalizeToolId(
+            String toolId
+    ) {
+
+        if (toolId == null) {
+            return "";
+        }
+
+        return toolId.trim();
+    }
+
+    /**
+     * إنشاء Failure موحد.
+     */
+    private JarvisResult<Boolean> failure(
+            JarvisError.Type type,
+            String message
+    ) {
+
+        return JarvisResult.failure(
+                JarvisError.of(
+                        type,
+                        message,
+                        "JarvisSystem"
+                )
         );
     }
 
@@ -693,19 +977,26 @@ public final class JarvisSystem {
     public static final class SystemStatus {
 
         private final boolean initialized;
+
         private final boolean securityActive;
+
         private final boolean runtimeRunning;
-        private final boolean workspaceReady;
+
+        private final boolean workspaceAvailable;
+
         private final int toolCount;
+
         private final int grantedPermissionCount;
+
         private final int requestedPermissionCount;
+
         private final String evolutionState;
 
         private SystemStatus(
                 boolean initialized,
                 boolean securityActive,
                 boolean runtimeRunning,
-                boolean workspaceReady,
+                boolean workspaceAvailable,
                 int toolCount,
                 int grantedPermissionCount,
                 int requestedPermissionCount,
@@ -721,8 +1012,8 @@ public final class JarvisSystem {
             this.runtimeRunning =
                     runtimeRunning;
 
-            this.workspaceReady =
-                    workspaceReady;
+            this.workspaceAvailable =
+                    workspaceAvailable;
 
             this.toolCount =
                     toolCount;
@@ -749,8 +1040,8 @@ public final class JarvisSystem {
             return runtimeRunning;
         }
 
-        public boolean isWorkspaceReady() {
-            return workspaceReady;
+        public boolean isWorkspaceAvailable() {
+            return workspaceAvailable;
         }
 
         public int getToolCount() {
@@ -767,6 +1058,30 @@ public final class JarvisSystem {
 
         public String getEvolutionState() {
             return evolutionState;
+        }
+
+        @Override
+        public String toString() {
+
+            return "SystemStatus{" +
+                    "initialized=" +
+                    initialized +
+                    ", securityActive=" +
+                    securityActive +
+                    ", runtimeRunning=" +
+                    runtimeRunning +
+                    ", workspaceAvailable=" +
+                    workspaceAvailable +
+                    ", toolCount=" +
+                    toolCount +
+                    ", grantedPermissionCount=" +
+                    grantedPermissionCount +
+                    ", requestedPermissionCount=" +
+                    requestedPermissionCount +
+                    ", evolutionState='" +
+                    evolutionState +
+                    '\'' +
+                    '}';
         }
     }
 }
