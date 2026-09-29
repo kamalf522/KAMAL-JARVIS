@@ -21,59 +21,29 @@ import java.util.Map;
  * محرك تعديل الكود الحقيقي.
  *
  * المسؤوليات:
- * - قراءة ملفات المشروع الحقيقي.
- * - إنشاء ملفات.
- * - تعديل ملفات.
- * - حذف ملفات.
- * - إنشاء Backup قبل التعديل.
+ * - قراءة ملفات المشروع.
+ * - إنشاء وتعديل وحذف الملفات.
+ * - Backup قبل التعديل.
  * - Rollback حقيقي.
  * - منع الخروج من Workspace.
- * - منع تعديل ملفات Owner/Security.
+ * - حماية Owner/Security.
  *
- * مهم:
- * هذا المحرك لا يعتبر التعديل ناجحاً لمجرد أن الملف كتب.
- * BuildEngine و SelfTestEngine و EvolutionVerificationEngine
- * هم المسؤولون عن إثبات أن التغيير صالح.
+ * ملاحظة Android:
+ * لا يستعمل Files.readString/writeString
+ * حتى يبقى متوافقاً مع بيئة Android.
  */
 public final class CodeEvolutionEngine {
 
     private static final String ENGINE_ID =
             "v2.code_evolution_engine";
 
-    /*
-     * Legacy/runtime workspace.
-     *
-     * يبقى فقط للتوافق مع الملفات القديمة.
-     * النسخة الجديدة من JarvisSystem ستستعمل
-     * ProjectWorkspaceManager حتى تكون عمليات
-     * تطور الكود على المشروع الحقيقي.
-     */
     private final File legacyWorkspaceRoot;
-
-    /*
-     * المشروع الحقيقي.
-     *
-     * عندما يكون موجوداً ومهيأً:
-     * جميع عمليات source evolution تستعمله.
-     *
-     * عندما لا يكون مهيأً:
-     * لا يتم استعمال runtime workspace كبديل صامت.
-     */
     private final ProjectWorkspaceManager projectWorkspaceManager;
-
     private final OwnerSecurityBoundary securityBoundary;
 
     private final Map<String, BackupRecord> backups =
             new LinkedHashMap<>();
 
-    /**
-     * Constructor قديم للتوافق.
-     *
-     * ملاحظة:
-     * هذا constructor يسمح باستعمال workspace محدد مباشرة.
-     * لا يجب استعماله في النظام النهائي عندما يكون
-     * ProjectWorkspaceManager متوفراً.
-     */
     public CodeEvolutionEngine(
             File workspaceRoot,
             OwnerSecurityBoundary securityBoundary
@@ -94,19 +64,10 @@ public final class CodeEvolutionEngine {
         this.legacyWorkspaceRoot =
                 workspaceRoot.getAbsoluteFile();
 
-        this.projectWorkspaceManager =
-                null;
-
-        this.securityBoundary =
-                securityBoundary;
+        this.projectWorkspaceManager = null;
+        this.securityBoundary = securityBoundary;
     }
 
-    /**
-     * Constructor الجديد.
-     *
-     * يستعمل ProjectWorkspaceManager حتى لا يتم
-     * الخلط بين runtime workspace والمشروع الحقيقي.
-     */
     public CodeEvolutionEngine(
             ProjectWorkspaceManager projectWorkspaceManager,
             OwnerSecurityBoundary securityBoundary
@@ -124,24 +85,20 @@ public final class CodeEvolutionEngine {
             );
         }
 
-        this.legacyWorkspaceRoot =
-                null;
-
+        this.legacyWorkspaceRoot = null;
         this.projectWorkspaceManager =
                 projectWorkspaceManager;
-
-        this.securityBoundary =
-                securityBoundary;
+        this.securityBoundary = securityBoundary;
     }
 
-    /**
-     * تهيئة المحرك.
-     */
+    // =========================================================
+    // INITIALIZE
+    // =========================================================
+
     public synchronized JarvisResult<Boolean>
     initialize() {
 
-        File workspace =
-                resolveWorkspace();
+        File workspace = resolveWorkspace();
 
         if (workspace == null) {
             return failure(
@@ -153,7 +110,6 @@ public final class CodeEvolutionEngine {
         try {
 
             if (!workspace.exists()) {
-
                 return failure(
                         JarvisError.Type.NOT_FOUND,
                         "Evolution workspace does not exist."
@@ -161,7 +117,6 @@ public final class CodeEvolutionEngine {
             }
 
             if (!workspace.isDirectory()) {
-
                 return failure(
                         JarvisError.Type.FILE_OPERATION_FAILED,
                         "Evolution workspace is not a directory."
@@ -186,21 +141,19 @@ public final class CodeEvolutionEngine {
         }
     }
 
-    /**
-     * قراءة ملف حقيقي من المشروع.
-     */
+    // =========================================================
+    // READ
+    // =========================================================
+
     public synchronized JarvisResult<String>
     readFile(
             String relativePath
     ) {
 
         File file =
-                resolveSafeFile(
-                        relativePath
-                );
+                resolveSafeFile(relativePath);
 
         if (file == null) {
-
             return failure(
                     JarvisError.Type.FILE_OPERATION_FAILED,
                     "Invalid project path."
@@ -208,30 +161,23 @@ public final class CodeEvolutionEngine {
         }
 
         if (!file.exists()) {
-
             return failure(
                     JarvisError.Type.NOT_FOUND,
-                    "File does not exist: "
-                            + relativePath
+                    "File does not exist: " + relativePath
             );
         }
 
         if (!file.isFile()) {
-
             return failure(
                     JarvisError.Type.FILE_OPERATION_FAILED,
-                    "Path is not a file: "
-                            + relativePath
+                    "Path is not a file: " + relativePath
             );
         }
 
         try {
 
             String content =
-                    Files.readString(
-                            file.toPath(),
-                            StandardCharsets.UTF_8
-                    );
+                    readUtf8(file);
 
             return JarvisResult.success(
                     content,
@@ -251,11 +197,10 @@ public final class CodeEvolutionEngine {
         }
     }
 
-    /**
-     * تعديل أو إنشاء ملف.
-     *
-     * يتم Backup قبل الكتابة.
-     */
+    // =========================================================
+    // WRITE
+    // =========================================================
+
     public synchronized JarvisResult<ChangeRecord>
     writeFile(
             String relativePath,
@@ -322,9 +267,7 @@ public final class CodeEvolutionEngine {
         }
 
         File file =
-                resolveSafeFile(
-                        normalizedPath
-                );
+                resolveSafeFile(normalizedPath);
 
         if (file == null) {
 
@@ -361,10 +304,7 @@ public final class CodeEvolutionEngine {
 
             String previousContent =
                     existed
-                            ? Files.readString(
-                                    file.toPath(),
-                                    StandardCharsets.UTF_8
-                            )
+                            ? readUtf8(file)
                             : null;
 
             File backupFile =
@@ -388,17 +328,13 @@ public final class CodeEvolutionEngine {
                 );
             }
 
-            Files.writeString(
-                    file.toPath(),
-                    newContent,
-                    StandardCharsets.UTF_8
+            writeUtf8(
+                    file,
+                    newContent
             );
 
             String written =
-                    Files.readString(
-                            file.toPath(),
-                            StandardCharsets.UTF_8
-                    );
+                    readUtf8(file);
 
             if (!newContent.equals(written)) {
 
@@ -459,9 +395,10 @@ public final class CodeEvolutionEngine {
         }
     }
 
-    /**
-     * إنشاء ملف جديد.
-     */
+    // =========================================================
+    // CREATE
+    // =========================================================
+
     public synchronized JarvisResult<ChangeRecord>
     createFile(
             String relativePath,
@@ -502,9 +439,10 @@ public final class CodeEvolutionEngine {
         );
     }
 
-    /**
-     * حذف ملف مع Backup.
-     */
+    // =========================================================
+    // DELETE
+    // =========================================================
+
     public synchronized JarvisResult<Boolean>
     deleteFile(
             String relativePath
@@ -529,6 +467,14 @@ public final class CodeEvolutionEngine {
 
         String normalized =
                 normalizePath(relativePath);
+
+        if (normalized.isEmpty()) {
+
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "Invalid file path."
+            );
+        }
 
         if (isProtectedPath(normalized)) {
 
@@ -583,10 +529,7 @@ public final class CodeEvolutionEngine {
         try {
 
             String previousContent =
-                    Files.readString(
-                            file.toPath(),
-                            StandardCharsets.UTF_8
-                    );
+                    readUtf8(file);
 
             File backup =
                     createBackup(
@@ -632,9 +575,10 @@ public final class CodeEvolutionEngine {
         }
     }
 
-    /**
-     * Rollback لملف واحد.
-     */
+    // =========================================================
+    // ROLLBACK
+    // =========================================================
+
     public synchronized JarvisResult<Boolean>
     rollback(
             String relativePath
@@ -710,9 +654,6 @@ public final class CodeEvolutionEngine {
         }
     }
 
-    /**
-     * Rollback لكل التغييرات.
-     */
     public synchronized JarvisResult<RollbackReport>
     rollbackAll() {
 
@@ -751,27 +692,28 @@ public final class CodeEvolutionEngine {
                         failed
                 );
 
-        if (!failed.isEmpty()) {
+        if (report.isSuccessful()) {
 
-            return JarvisResult.failure(
-                    JarvisError.of(
-                            JarvisError.Type.RECOVERY_FAILED,
-                            "Some changes could not be rolled back.",
-                            ENGINE_ID
-                    ),
-                    report.toString()
+            return JarvisResult.success(
+                    report,
+                    "All pending changes rolled back."
             );
         }
 
-        return JarvisResult.success(
-                report,
-                "All recorded code changes were rolled back."
+        return JarvisResult.failure(
+                JarvisError.of(
+                        JarvisError.Type.RECOVERY_FAILED,
+                        "Some files could not be rolled back.",
+                        ENGINE_ID
+                ),
+                report.toString()
         );
     }
 
-    /**
-     * هل الملف قابل للتعديل؟
-     */
+    // =========================================================
+    // INSPECTION
+    // =========================================================
+
     public synchronized boolean
     isModifiable(
             String relativePath
@@ -791,21 +733,26 @@ public final class CodeEvolutionEngine {
         return resolveSafeFile(normalized) != null;
     }
 
-    /**
-     * قائمة ملفات المشروع.
-     */
     public synchronized JarvisResult<List<String>>
     listFiles() {
 
         File root =
                 resolveWorkspace();
 
-        if (root == null ||
-                !root.isDirectory()) {
+        if (root == null) {
 
             return failure(
                     JarvisError.Type.NOT_FOUND,
-                    "Project workspace is not ready."
+                    "Project workspace is not configured."
+            );
+        }
+
+        if (!root.exists() ||
+                !root.isDirectory()) {
+
+            return failure(
+                    JarvisError.Type.FILE_OPERATION_FAILED,
+                    "Project workspace is invalid."
             );
         }
 
@@ -821,74 +768,75 @@ public final class CodeEvolutionEngine {
         Collections.sort(result);
 
         return JarvisResult.success(
-                result,
+                Collections.unmodifiableList(result),
                 "Project files listed successfully."
         );
     }
 
     public synchronized int
     getPendingRollbackCount() {
+
         return backups.size();
     }
 
-    public File getWorkspaceRoot() {
+    public File
+    getWorkspaceRoot() {
+
         return resolveWorkspace();
     }
 
     public OwnerSecurityBoundary
     getSecurityBoundary() {
+
         return securityBoundary;
     }
 
     public ProjectWorkspaceManager
     getProjectWorkspaceManager() {
+
         return projectWorkspaceManager;
     }
 
-    public String getEngineId() {
+    public String
+    getEngineId() {
+
         return ENGINE_ID;
     }
 
-    /**
-     * تحديد Workspace.
-     */
-    private File resolveWorkspace() {
+    // =========================================================
+    // WORKSPACE
+    // =========================================================
 
-        /*
-         * النظام الجديد:
-         * ProjectWorkspaceManager هو المصدر الحقيقي.
-         */
+    private File
+    resolveWorkspace() {
+
         if (projectWorkspaceManager != null) {
 
             if (!projectWorkspaceManager.isReady()) {
                 return null;
             }
 
-            File project =
+            File root =
                     projectWorkspaceManager
                             .getProjectRoot();
 
-            if (project == null) {
+            if (root == null) {
                 return null;
             }
 
-            return project.getAbsoluteFile();
+            return root.getAbsoluteFile();
         }
 
-        /*
-         * التوافق مع constructor القديم.
-         */
-        if (legacyWorkspaceRoot != null) {
-            return legacyWorkspaceRoot;
+        if (legacyWorkspaceRoot == null) {
+            return null;
         }
 
-        return null;
+        return legacyWorkspaceRoot
+                .getAbsoluteFile();
     }
 
-    /**
-     * Resolve آمن داخل المشروع.
-     */
-    private File resolveSafeFile(
+    private File
+    resolveSafeFile(
             String relativePath
     ) {
 
@@ -900,17 +848,18 @@ public final class CodeEvolutionEngine {
         }
 
         if (normalized.startsWith("/") ||
-                normalized.startsWith("\\") ||
-                normalized.contains("\0") ||
-                normalized.equals("..") ||
-                normalized.startsWith("../") ||
-                normalized.contains("/../")) {
-
+                normalized.contains(":")) {
             return null;
         }
 
-        if (isProtectedPath(normalized)) {
-            return null;
+        String[] parts =
+                normalized.split("/");
+
+        for (String part : parts) {
+
+            if ("..".equals(part)) {
+                return null;
+            }
         }
 
         File root =
@@ -919,7 +868,6 @@ public final class CodeEvolutionEngine {
         if (root == null ||
                 !root.exists() ||
                 !root.isDirectory()) {
-
             return null;
         }
 
@@ -953,10 +901,12 @@ public final class CodeEvolutionEngine {
         }
     }
 
-    /**
-     * حماية Owner/Security.
-     */
-    private boolean isProtectedPath(
+    // =========================================================
+    // SECURITY
+    // =========================================================
+
+    private boolean
+    isProtectedPath(
             String path
     ) {
 
@@ -972,10 +922,6 @@ public final class CodeEvolutionEngine {
             return true;
         }
 
-        /*
-         * لا نسمح بتعديل ملفات الحماية
-         * أو ملفات الأسرار/المفاتيح.
-         */
         String[] protectedParts = {
                 "ownersecurityboundary",
                 "ownersecuritycore",
@@ -1000,32 +946,20 @@ public final class CodeEvolutionEngine {
             }
         }
 
-        /*
-         * منع تعديل manifest الخاص
-         * بالحماية إذا كان يحتوي على
-         * إعدادات أمنية حساسة.
-         *
-         * AndroidManifest نفسه ليس محمياً
-         * بالكامل؛ التعديل عليه يحتاج
-         * مسار evolution خاص لاحقاً.
-         */
-        if (normalized.equals(
+        return normalized.equals(
                 "owner.json"
         ) ||
                 normalized.equals(
                         "security.json"
-                )) {
-
-            return true;
-        }
-
-        return false;
+                );
     }
 
-    /**
-     * إنشاء Backup حقيقي.
-     */
-    private File createBackup(
+    // =========================================================
+    // BACKUP
+    // =========================================================
+
+    private File
+    createBackup(
             File original,
             String normalizedPath,
             String previousContent,
@@ -1034,7 +968,6 @@ public final class CodeEvolutionEngine {
 
         if (!existed ||
                 previousContent == null) {
-
             return null;
         }
 
@@ -1063,14 +996,8 @@ public final class CodeEvolutionEngine {
 
         String safeName =
                 normalizedPath
-                        .replace(
-                                '/',
-                                '_'
-                        )
-                        .replace(
-                                '\\',
-                                '_'
-                        );
+                        .replace('/', '_')
+                        .replace('\\', '_');
 
         File backup =
                 new File(
@@ -1080,19 +1007,16 @@ public final class CodeEvolutionEngine {
                                 + safeName
                 );
 
-        Files.writeString(
-                backup.toPath(),
-                previousContent,
-                StandardCharsets.UTF_8
+        writeUtf8(
+                backup,
+                previousContent
         );
 
         return backup;
     }
 
-    /**
-     * Restore Backup.
-     */
-    private void restoreBackup(
+    private void
+    restoreBackup(
             File backupFile,
             File target,
             String previousContent,
@@ -1101,53 +1025,42 @@ public final class CodeEvolutionEngine {
 
         if (existed) {
 
+            String content = null;
+
             if (backupFile != null &&
                     backupFile.isFile()) {
 
-                String backupContent =
-                        Files.readString(
-                                backupFile.toPath(),
-                                StandardCharsets.UTF_8
-                        );
-
-                File parent =
-                        target.getParentFile();
-
-                if (parent != null &&
-                        !parent.exists() &&
-                        !parent.mkdirs()) {
-
-                    throw new IOException(
-                            "Could not recreate parent directory."
-                    );
-                }
-
-                Files.writeString(
-                        target.toPath(),
-                        backupContent,
-                        StandardCharsets.UTF_8
-                );
+                content =
+                        readUtf8(backupFile);
 
             } else if (previousContent != null) {
 
-                File parent =
-                        target.getParentFile();
+                content =
+                        previousContent;
+            }
 
-                if (parent != null &&
-                        !parent.exists() &&
-                        !parent.mkdirs()) {
-
-                    throw new IOException(
-                            "Could not recreate parent directory."
-                    );
-                }
-
-                Files.writeString(
-                        target.toPath(),
-                        previousContent,
-                        StandardCharsets.UTF_8
+            if (content == null) {
+                throw new IOException(
+                        "No previous content available."
                 );
             }
+
+            File parent =
+                    target.getParentFile();
+
+            if (parent != null &&
+                    !parent.exists() &&
+                    !parent.mkdirs()) {
+
+                throw new IOException(
+                        "Could not recreate parent directory."
+                );
+            }
+
+            writeUtf8(
+                    target,
+                    content
+            );
 
         } else {
 
@@ -1161,10 +1074,58 @@ public final class CodeEvolutionEngine {
         }
     }
 
-    /**
-     * الحصول على المسار النسبي للـBackup.
-     */
-    private String getRelativePath(
+    // =========================================================
+    // FILE IO - ANDROID COMPATIBLE
+    // =========================================================
+
+    private String
+    readUtf8(
+            File file
+    ) throws IOException {
+
+        byte[] bytes =
+                Files.readAllBytes(
+                        file.toPath()
+                );
+
+        return new String(
+                bytes,
+                StandardCharsets.UTF_8
+        );
+    }
+
+    private void
+    writeUtf8(
+            File file,
+            String content
+    ) throws IOException {
+
+        File parent =
+                file.getParentFile();
+
+        if (parent != null &&
+                !parent.exists() &&
+                !parent.mkdirs()) {
+
+            throw new IOException(
+                    "Could not create parent directory."
+            );
+        }
+
+        Files.write(
+                file.toPath(),
+                content.getBytes(
+                        StandardCharsets.UTF_8
+                )
+        );
+    }
+
+    // =========================================================
+    // PATH HELPERS
+    // =========================================================
+
+    private String
+    getRelativePath(
             File file
     ) {
 
@@ -1177,38 +1138,14 @@ public final class CodeEvolutionEngine {
             return "";
         }
 
-        try {
-
-            Path rootPath =
-                    root.getCanonicalFile()
-                            .toPath();
-
-            Path filePath =
-                    file.getCanonicalFile()
-                            .toPath();
-
-            if (!filePath.startsWith(
-                    rootPath
-            )) {
-
-                return "";
-            }
-
-            return rootPath
-                    .relativize(filePath)
-                    .toString()
-                    .replace(
-                            '\\',
-                            '/'
-                    );
-
-        } catch (IOException e) {
-
-            return "";
-        }
+        return getRelativePathFrom(
+                root,
+                file
+        );
     }
 
-    private void collectFiles(
+    private void
+    collectFiles(
             File root,
             File current,
             List<String> result
@@ -1223,9 +1160,6 @@ public final class CodeEvolutionEngine {
 
         for (File child : children) {
 
-            /*
-             * Backups ليست source files.
-             */
             if (child.isDirectory() &&
                     child.getName().equals(
                             ".jarvis_backups"
@@ -1256,7 +1190,8 @@ public final class CodeEvolutionEngine {
         }
     }
 
-    private String getRelativePathFrom(
+    private String
+    getRelativePathFrom(
             File root,
             File file
     ) {
@@ -1291,7 +1226,8 @@ public final class CodeEvolutionEngine {
         }
     }
 
-    private String normalizePath(
+    private String
+    normalizePath(
             String path
     ) {
 
@@ -1311,6 +1247,10 @@ public final class CodeEvolutionEngine {
                 );
     }
 
+    // =========================================================
+    // RESULT HELPER
+    // =========================================================
+
     private <T>
     JarvisResult<T> failure(
             JarvisError.Type type,
@@ -1328,7 +1268,7 @@ public final class CodeEvolutionEngine {
     }
 
     // =========================================================
-    // BackupRecord
+    // BACKUP RECORD
     // =========================================================
 
     public static final class BackupRecord {
@@ -1370,7 +1310,7 @@ public final class CodeEvolutionEngine {
     }
 
     // =========================================================
-    // ChangeRecord
+    // CHANGE RECORD
     // =========================================================
 
     public static final class ChangeRecord {
@@ -1426,7 +1366,7 @@ public final class CodeEvolutionEngine {
     }
 
     // =========================================================
-    // RollbackReport
+    // ROLLBACK REPORT
     // =========================================================
 
     public static final class RollbackReport {
