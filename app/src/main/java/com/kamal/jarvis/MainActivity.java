@@ -81,10 +81,6 @@ public final class MainActivity extends Activity
         handleIncomingIntent(getIntent());
     }
 
-    // =========================================================
-    // JARVIS INITIALIZATION
-    // =========================================================
-
     private void initializeJarvis() {
 
         try {
@@ -139,10 +135,6 @@ public final class MainActivity extends Activity
         }
     }
 
-    // =========================================================
-    // INTERFACE
-    // =========================================================
-
     private void createInterface() {
 
         LinearLayout root =
@@ -160,8 +152,6 @@ public final class MainActivity extends Activity
         );
 
         root.setBackgroundColor(BG);
-
-        // HEADER
 
         LinearLayout header =
                 new LinearLayout(this);
@@ -282,8 +272,6 @@ public final class MainActivity extends Activity
 
         addSpace(root, 16);
 
-        // CORE CARD
-
         LinearLayout coreCard =
                 new LinearLayout(this);
 
@@ -342,8 +330,6 @@ public final class MainActivity extends Activity
         root.addView(coreCard);
 
         addSpace(root, 14);
-
-        // SESSION
 
         LinearLayout sessionCard =
                 new LinearLayout(this);
@@ -426,8 +412,6 @@ public final class MainActivity extends Activity
 
         addSpace(root, 12);
 
-        // INPUT
-
         LinearLayout inputRow =
                 new LinearLayout(this);
 
@@ -499,8 +483,6 @@ public final class MainActivity extends Activity
 
         addSpace(root, 8);
 
-        // VOICE
-
         Button voiceButton =
                 createButton(
                         "🎙  TALK TO JARVIS",
@@ -520,8 +502,6 @@ public final class MainActivity extends Activity
         );
 
         addSpace(root, 8);
-
-        // QUICK BUTTONS
 
         LinearLayout quickRow =
                 new LinearLayout(this);
@@ -577,10 +557,6 @@ public final class MainActivity extends Activity
 
         setContentView(root);
     }
-
-    // =========================================================
-    // COMMAND
-    // =========================================================
 
     private void executeTypedCommand() {
 
@@ -720,10 +696,6 @@ public final class MainActivity extends Activity
         return safe(result.getMessage());
     }
 
-    // =========================================================
-    // STATUS
-    // =========================================================
-
     private void showStatus() {
 
         if (jarvisSystem == null) {
@@ -747,7 +719,7 @@ public final class MainActivity extends Activity
                         + "\nRuntime: "
                         + status.isRuntimeRunning()
                         + "\nWorkspace: "
-                        + status.isWorkspaceReady()
+                        + status.isProjectWorkspaceReady()
                         + "\nTools: "
                         + status.getToolCount()
                         + "\nPermissions: "
@@ -812,10 +784,6 @@ public final class MainActivity extends Activity
 
         }).start();
     }
-
-    // =========================================================
-    // STATES
-    // =========================================================
 
     private void setOnlineState() {
 
@@ -908,10 +876,6 @@ public final class MainActivity extends Activity
                 )
         );
     }
-
-    // =========================================================
-    // VOICE
-    // =========================================================
 
     private void startVoiceRecognition() {
 
@@ -1006,10 +970,6 @@ public final class MainActivity extends Activity
         }
     }
 
-    // =========================================================
-    // TTS
-    // =========================================================
-
     @Override
     public void onInit(int status) {
 
@@ -1060,10 +1020,6 @@ public final class MainActivity extends Activity
         } catch (Exception ignored) {
         }
     }
-
-    // =========================================================
-    // PERMISSIONS
-    // =========================================================
 
     private void requestRequiredPermissions() {
 
@@ -1137,10 +1093,6 @@ public final class MainActivity extends Activity
         }
     }
 
-    // =========================================================
-    // CHAT
-    // =========================================================
-
     private void appendChat(
             String message
     ) {
@@ -1177,10 +1129,6 @@ public final class MainActivity extends Activity
             );
         }
     }
-
-    // =========================================================
-    // UI HELPERS
-    // =========================================================
 
     private TextView makeText(
             String text,
@@ -1331,10 +1279,6 @@ public final class MainActivity extends Activity
         } catch (Exception ignored) {
         }
     }
-
-    // =========================================================
-    // INTENTS / LIFECYCLE
-    // =========================================================
 
     private void handleIncomingIntent(
             Intent intent
