@@ -31,8 +31,8 @@ public final class JarvisError {
             Throwable cause
     ) {
         this.type = type == null ? Type.UNKNOWN : type;
-        this.message = message == null ? "Unknown error." : message;
-        this.source = source == null ? "unknown" : source;
+        this.message = message == null ? "" : message;
+        this.source = source == null ? "" : source;
         this.cause = cause;
     }
 
@@ -41,12 +41,14 @@ public final class JarvisError {
             String message,
             String source
     ) {
-        return new JarvisError(
-                type,
-                message,
-                source,
-                null
-        );
+        return new JarvisError(type, message, source, null);
+    }
+
+    public static JarvisError of(
+            Type type,
+            String message
+    ) {
+        return new JarvisError(type, message, "", null);
     }
 
     public static JarvisError fromException(
@@ -55,10 +57,27 @@ public final class JarvisError {
             String source,
             Throwable cause
     ) {
+        return new JarvisError(type, message, source, cause);
+    }
+
+    public static JarvisError fromException(
+            Type type,
+            Throwable cause
+    ) {
+        String message = "";
+
+        if (cause != null) {
+            message = cause.getMessage();
+
+            if (message == null || message.trim().isEmpty()) {
+                message = cause.getClass().getSimpleName();
+            }
+        }
+
         return new JarvisError(
                 type,
                 message,
-                source,
+                "",
                 cause
         );
     }
@@ -80,7 +99,7 @@ public final class JarvisError {
     }
 
     public boolean is(Type expectedType) {
-        return type == expectedType;
+        return expectedType != null && type == expectedType;
     }
 
     @Override
