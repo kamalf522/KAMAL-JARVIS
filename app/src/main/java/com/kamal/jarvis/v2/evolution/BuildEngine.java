@@ -19,32 +19,21 @@ import java.util.concurrent.TimeUnit;
 /**
  * JARVIS V2 - Real Build Engine
  *
- * مسؤول عن تنفيذ Build حقيقي للمشروع من داخل Workspace.
+ * Build حقيقي للمشروع Android.
  *
- * Build flow:
+ * هذا المحرك:
  *
- * Project
- *   -> Gradle Wrapper
- *   -> Gradle
- *   -> Android Gradle Plugin
- *   -> APK
- *
- * هذا المحرك لا يعتبر العملية ناجحة لمجرد أن
- * Gradle process توقف بدون exception.
- *
- * النجاح الحقيقي يتطلب:
- * 1. Process exit code = 0
- * 2. وجود APK الناتج
- *
- * ملاحظة تقنية:
- * هذا المحرك يحتاج إلى بيئة Build حقيقية:
- * - gradlew أو gradlew.bat
- * - Gradle distribution التي يستعملها wrapper
- * - JDK
- * - Android SDK
- * - Build tools
- *
- * إذا لم تكن البيئة موجودة، يرجع سبب الفشل الحقيقي.
+ * 1. يستعمل ProjectWorkspaceManager إذا كان المشروع الحقيقي مهيأ.
+ * 2. لا يستعمل jarvis_workspace كبديل صامت للمشروع الحقيقي.
+ * 3. يتحقق من Gradle Wrapper و Android app module.
+ * 4. يشغل assembleDebug.
+ * 5. لا يعتبر Build ناجحاً إلا إذا:
+ *      - Gradle exit code = 0
+ *      - APK موجود
+ *      - APK حجمه أكبر من صفر
+ * 6. يسجل output الحقيقي.
+ * 7. يدعم timeout.
+ * 8. يحافظ على Security Boundary.
  */
 public final class BuildEngine {
 
@@ -60,12 +49,27 @@ public final class BuildEngine {
     private static final String GRADLE_WRAPPER_WINDOWS =
             "gradlew.bat";
 
-    private final File workspaceRoot;
     private final OwnerSecurityBoundary securityBoundary;
 
+    /*
+     * المشروع الحقيقي.
+     *
+     * إذا كان null نستعمل fixedWorkspaceRoot
+     * فقط للتوافق مع constructor القديم.
+     */
+    private final ProjectWorkspaceManager projectWorkspaceManager;
+
+    private final File fixedWorkspaceRoot;
+
     private volatile boolean building;
+
     private volatile BuildRecord lastBuild;
 
+    /**
+     * Constructor قديم للتوافق.
+     *
+     * لا نحذفه حتى لا نكسر الملفات الموجودة.
+     */
     public BuildEngine(
             File workspaceRoot,
             OwnerSecurityBoundary securityBoundary
@@ -83,18 +87,91 @@ public final class BuildEngine {
             );
         }
 
-        this.workspaceRoot =
-                workspaceRoot.getAbsoluteFile();
-
         this.securityBoundary =
                 securityBoundary;
+
+        this.fixedWorkspaceRoot =
+                workspaceRoot.getAbsoluteFile();
+
+        this.projectWorkspaceManager =
+                null;
     }
 
     /**
-     * يتحقق من أن Workspace صالح للبناء.
+     * Constructor الجديد للمشروع الحقيقي.
+     */
+    public BuildEngine(
+            ProjectWorkspaceManager projectWorkspaceManager,
+            OwnerSecurityBoundary securityBoundary
+    ) {
+
+        if (projectWorkspaceManager == null) {
+            throw new IllegalArgumentException(
+                    "projectWorkspaceManager cannot be null."
+            );
+        }
+
+        if (securityBoundary == null) {
+            throw new IllegalArgumentException(
+                    "securityBoundary cannot be null."
+            );
+        }
+
+        this.securityBoundary =
+                securityBoundary;
+
+        this.projectWorkspaceManager =
+                projectWorkspaceManager;
+
+        this.fixedWorkspaceRoot =
+                null;
+    }
+
+    /**
+     * الحصول على Workspace الحقيقي.
+     *
+     * مهم:
+     * إذا استعملنا ProjectWorkspaceManager،
+     * فلا نرجع إلى jarvis_workspace تلقائياً.
+     */
+    private File resolveWorkspace() {
+
+        if (projectWorkspaceManager != null) {
+
+            if (!projectWorkspaceManager.isReady()) {
+                return null;
+            }
+
+            File root =
+                    projectWorkspaceManager
+                            .getProjectRoot();
+
+            if (root == null) {
+                return null;
+            }
+
+            return root.getAbsoluteFile();
+        }
+
+        return fixedWorkspaceRoot;
+    }
+
+    /**
+     * فحص بيئة البناء الحقيقية.
      */
     public synchronized JarvisResult<BuildEnvironment>
     inspectEnvironment() {
+
+        File workspaceRoot =
+                resolveWorkspace();
+
+        if (workspaceRoot == null) {
+
+            return failure(
+                    JarvisError.Type.BUILD_FAILED,
+                    "Real Android project workspace is not configured."
+            );
+        }
 
         try {
 
@@ -102,7 +179,8 @@ public final class BuildEngine {
 
                 return failure(
                         JarvisError.Type.BUILD_FAILED,
-                        "Build workspace does not exist."
+                        "Build project root does not exist: "
+                                + workspaceRoot.getAbsolutePath()
                 );
             }
 
@@ -110,7 +188,7 @@ public final class BuildEngine {
 
                 return failure(
                         JarvisError.Type.BUILD_FAILED,
-                        "Build workspace is not a directory."
+                        "Build project root is not a directory."
                 );
             }
 
@@ -132,35 +210,37 @@ public final class BuildEngine {
             boolean hasWindowsWrapper =
                     windowsWrapper.isFile();
 
-            if (!hasUnixWrapper &&
-                    !hasWindowsWrapper) {
-
-                return failure(
-                        JarvisError.Type.BUILD_FAILED,
-                        "No Gradle Wrapper found in project root."
-                );
-            }
-
-            File gradleProject =
+            File settingsGradle =
                     new File(
                             workspaceRoot,
                             "settings.gradle"
                     );
 
-            File gradleProjectKts =
+            File settingsKts =
                     new File(
                             workspaceRoot,
                             "settings.gradle.kts"
                     );
 
-            if (!gradleProject.isFile() &&
-                    !gradleProjectKts.isFile()) {
+            boolean hasSettings =
+                    settingsGradle.isFile()
+                            || settingsKts.isFile();
 
-                return failure(
-                        JarvisError.Type.BUILD_FAILED,
-                        "No Gradle settings file found."
-                );
-            }
+            File rootBuildGradle =
+                    new File(
+                            workspaceRoot,
+                            "build.gradle"
+                    );
+
+            File rootBuildKts =
+                    new File(
+                            workspaceRoot,
+                            "build.gradle.kts"
+                    );
+
+            boolean hasRootBuild =
+                    rootBuildGradle.isFile()
+                            || rootBuildKts.isFile();
 
             File appDirectory =
                     new File(
@@ -171,28 +251,30 @@ public final class BuildEngine {
             boolean hasAppModule =
                     appDirectory.isDirectory();
 
-            File buildFile =
+            File appBuildGradle =
                     new File(
                             appDirectory,
                             "build.gradle"
                     );
 
-            File buildFileKts =
+            File appBuildKts =
                     new File(
                             appDirectory,
                             "build.gradle.kts"
                     );
 
-            boolean hasBuildFile =
-                    buildFile.isFile()
-                            || buildFileKts.isFile();
+            boolean hasAppBuild =
+                    appBuildGradle.isFile()
+                            || appBuildKts.isFile();
 
             BuildEnvironment environment =
                     new BuildEnvironment(
                             hasUnixWrapper,
                             hasWindowsWrapper,
+                            hasSettings,
+                            hasRootBuild,
                             hasAppModule,
-                            hasBuildFile
+                            hasAppBuild
                     );
 
             if (!environment.isReady()) {
@@ -208,7 +290,7 @@ public final class BuildEngine {
 
             return JarvisResult.success(
                     environment,
-                    "Real Gradle build environment detected."
+                    "Real Android Gradle project detected."
             );
 
         } catch (Exception e) {
@@ -237,7 +319,7 @@ public final class BuildEngine {
     }
 
     /**
-     * Build باستعمال Gradle task محددة.
+     * تنفيذ Gradle task حقيقية.
      */
     public synchronized JarvisResult<BuildRecord>
     build(
@@ -278,8 +360,7 @@ public final class BuildEngine {
             );
         }
 
-        JarvisResult<Boolean>
-                authorization =
+        JarvisResult<Boolean> authorization =
                 securityBoundary
                         .authorizeEvolutionChange(
                                 "PROJECT_BUILD"
@@ -291,6 +372,17 @@ public final class BuildEngine {
             return failure(
                     JarvisError.Type.NOT_AUTHORIZED,
                     "Project build was not authorized."
+            );
+        }
+
+        File workspaceRoot =
+                resolveWorkspace();
+
+        if (workspaceRoot == null) {
+
+            return failure(
+                    JarvisError.Type.BUILD_FAILED,
+                    "No real project workspace is configured."
             );
         }
 
@@ -314,6 +406,7 @@ public final class BuildEngine {
 
         File wrapper =
                 chooseWrapper(
+                        workspaceRoot,
                         environment
                 );
 
@@ -321,7 +414,7 @@ public final class BuildEngine {
 
             return failure(
                     JarvisError.Type.BUILD_FAILED,
-                    "No executable Gradle Wrapper is available."
+                    "No Gradle Wrapper is available."
             );
         }
 
@@ -347,44 +440,56 @@ public final class BuildEngine {
 
         try {
 
-            ProcessBuilder builder =
-                    new ProcessBuilder(
+            /*
+             * في Android/Linux:
+             * gradlew يحتاج execute permission.
+             *
+             * إذا لم تكن executable نحاول استعمال sh.
+             */
+            List<String> actualCommand =
+                    prepareExecutableCommand(
+                            wrapper,
                             command
                     );
 
-            builder.directory(
+            ProcessBuilder processBuilder =
+                    new ProcessBuilder(
+                            actualCommand
+                    );
+
+            processBuilder.directory(
                     workspaceRoot
             );
 
-            builder.redirectErrorStream(
+            processBuilder.redirectErrorStream(
                     true
             );
 
             process =
-                    builder.start();
+                    processBuilder.start();
 
-            try (
-                    BufferedReader reader =
-                            new BufferedReader(
-                                    new InputStreamReader(
-                                            process.getInputStream(),
-                                            StandardCharsets.UTF_8
-                                    )
+            /*
+             * نقرأ output أثناء Build.
+             */
+            BufferedReader reader =
+                    new BufferedReader(
+                            new InputStreamReader(
+                                    process.getInputStream(),
+                                    StandardCharsets.UTF_8
                             )
+                    );
+
+            String line;
+
+            while (
+                    (line = reader.readLine())
+                            != null
             ) {
 
-                String line;
-
-                while (
-                        (line = reader.readLine())
-                                != null
-                ) {
-
-                    output.add(
-                            line
-                    );
-                }
+                output.add(line);
             }
+
+            reader.close();
 
             boolean finished =
                     process.waitFor(
@@ -413,7 +518,7 @@ public final class BuildEngine {
                 BuildRecord record =
                         BuildRecord.failed(
                                 gradleTask,
-                                command,
+                                actualCommand,
                                 -1,
                                 output,
                                 duration,
@@ -457,13 +562,16 @@ public final class BuildEngine {
                 BuildRecord record =
                         BuildRecord.failed(
                                 gradleTask,
-                                command,
+                                actualCommand,
                                 exitCode,
                                 output,
                                 duration,
                                 false,
                                 apk,
-                                "Gradle process failed."
+                                createFailureMessage(
+                                        exitCode,
+                                        output
+                                )
                         );
 
                 lastBuild = record;
@@ -486,13 +594,13 @@ public final class BuildEngine {
                 BuildRecord record =
                         BuildRecord.failed(
                                 gradleTask,
-                                command,
+                                actualCommand,
                                 exitCode,
                                 output,
                                 duration,
                                 false,
                                 null,
-                                "Gradle returned success but no APK was found."
+                                "Gradle returned success but no valid APK was produced."
                         );
 
                 lastBuild = record;
@@ -510,7 +618,7 @@ public final class BuildEngine {
             BuildRecord record =
                     BuildRecord.success(
                             gradleTask,
-                            command,
+                            actualCommand,
                             exitCode,
                             output,
                             duration,
@@ -596,9 +704,16 @@ public final class BuildEngine {
     }
 
     /**
-     * البحث عن APK Debug الناتج.
+     * البحث عن APK Debug الحقيقي.
      */
     public synchronized File findDebugApk() {
+
+        File workspaceRoot =
+                resolveWorkspace();
+
+        if (workspaceRoot == null) {
+            return null;
+        }
 
         File direct =
                 new File(
@@ -606,9 +721,7 @@ public final class BuildEngine {
                         "app/build/outputs/apk/debug/app-debug.apk"
                 );
 
-        if (isValidApk(
-                direct
-        )) {
+        if (isValidApk(direct)) {
             return direct;
         }
 
@@ -628,7 +741,7 @@ public final class BuildEngine {
     }
 
     /**
-     * ينسخ APK إلى مكان آمن داخل Workspace.
+     * نسخ APK الناتج إلى داخل المشروع.
      */
     public synchronized JarvisResult<File>
     copyApkTo(
@@ -641,6 +754,17 @@ public final class BuildEngine {
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
                     "APK destination cannot be empty."
+            );
+        }
+
+        File workspaceRoot =
+                resolveWorkspace();
+
+        if (workspaceRoot == null) {
+
+            return failure(
+                    JarvisError.Type.FILE_OPERATION_FAILED,
+                    "Project workspace is not configured."
             );
         }
 
@@ -657,6 +781,7 @@ public final class BuildEngine {
 
         File destination =
                 resolveSafeDestination(
+                        workspaceRoot,
                         relativeDestination
                 );
 
@@ -664,7 +789,7 @@ public final class BuildEngine {
 
             return failure(
                     JarvisError.Type.FILE_OPERATION_FAILED,
-                    "APK destination is outside the workspace."
+                    "APK destination is outside the project."
             );
         }
 
@@ -689,9 +814,7 @@ public final class BuildEngine {
                     StandardCopyOption.REPLACE_EXISTING
             );
 
-            if (!isValidApk(
-                    destination
-            )) {
+            if (!isValidApk(destination)) {
 
                 return failure(
                         JarvisError.Type.FILE_OPERATION_FAILED,
@@ -725,8 +848,11 @@ public final class BuildEngine {
         return lastBuild;
     }
 
+    /**
+     * يرجع المشروع الحقيقي إذا كان مربوطاً.
+     */
     public File getWorkspaceRoot() {
-        return workspaceRoot;
+        return resolveWorkspace();
     }
 
     public OwnerSecurityBoundary
@@ -734,43 +860,59 @@ public final class BuildEngine {
         return securityBoundary;
     }
 
+    public ProjectWorkspaceManager
+    getProjectWorkspaceManager() {
+        return projectWorkspaceManager;
+    }
+
     public String getEngineId() {
         return ENGINE_ID;
     }
 
+    /**
+     * اختيار Gradle Wrapper.
+     */
     private File chooseWrapper(
+            File workspaceRoot,
             BuildEnvironment environment
     ) {
 
-        /*
-         * على Android/Linux نستعمل gradlew.
-         */
+        if (workspaceRoot == null ||
+                environment == null) {
+
+            return null;
+        }
+
         File unix =
                 new File(
                         workspaceRoot,
                         GRADLE_WRAPPER
                 );
 
-        if (unix.isFile()) {
+        if (environment.hasUnixWrapper() &&
+                unix.isFile()) {
+
             return unix;
         }
 
-        /*
-         * على Windows نستعمل gradlew.bat.
-         */
         File windows =
                 new File(
                         workspaceRoot,
                         GRADLE_WRAPPER_WINDOWS
                 );
 
-        if (windows.isFile()) {
+        if (environment.hasWindowsWrapper() &&
+                windows.isFile()) {
+
             return windows;
         }
 
         return null;
     }
 
+    /**
+     * إنشاء أمر Gradle.
+     */
     private List<String>
     createGradleCommand(
             File wrapper,
@@ -784,21 +926,11 @@ public final class BuildEngine {
                 wrapper.getName()
                         .toLowerCase();
 
-        if (name.endsWith(
-                ".bat"
-        )) {
+        if (name.endsWith(".bat")) {
 
-            command.add(
-                    "cmd"
-            );
-
-            command.add(
-                    "/c"
-            );
-
-            command.add(
-                    wrapper.getAbsolutePath()
-            );
+            command.add("cmd");
+            command.add("/c");
+            command.add(wrapper.getAbsolutePath());
 
         } else {
 
@@ -807,30 +939,93 @@ public final class BuildEngine {
             );
         }
 
-        command.add(
-                task
-        );
+        command.add(task);
 
-        /*
-         * يمنع daemon من البقاء بعد انتهاء Build.
-         */
-        command.add(
-                "--no-daemon"
-        );
+        command.add("--no-daemon");
 
-        /*
-         * يجعل output أوضح لمحرك التشخيص.
-         */
-        command.add(
-                "--stacktrace"
-        );
+        command.add("--stacktrace");
 
         return command;
     }
 
+    /**
+     * تجهيز الأمر على Linux/Android.
+     *
+     * إذا كان gradlew executable:
+     *
+     * ./gradlew
+     *
+     * إذا لم يكن executable:
+     *
+     * sh gradlew
+     */
+    private List<String>
+    prepareExecutableCommand(
+            File wrapper,
+            List<String> command
+    ) {
+
+        if (wrapper == null ||
+                command == null) {
+
+            return command;
+        }
+
+        String name =
+                wrapper.getName()
+                        .toLowerCase();
+
+        /*
+         * Windows لا يحتاج sh.
+         */
+        if (name.endsWith(".bat")) {
+            return command;
+        }
+
+        /*
+         * إذا executable نستعمله مباشرة.
+         */
+        if (wrapper.canExecute()) {
+            return command;
+        }
+
+        /*
+         * محاولة حقيقية لتشغيل Gradle Wrapper
+         * حتى إذا لم يحمل execute bit.
+         */
+        List<String> shellCommand =
+                new ArrayList<>();
+
+        shellCommand.add("sh");
+
+        shellCommand.add(
+                wrapper.getAbsolutePath()
+        );
+
+        for (int i = 1;
+             i < command.size();
+             i++) {
+
+            shellCommand.add(
+                    command.get(i)
+            );
+        }
+
+        return shellCommand;
+    }
+
+    /**
+     * البحث عن APK بشكل recursive.
+     */
     private File findApkRecursively(
             File directory
     ) {
+
+        if (directory == null ||
+                !directory.isDirectory()) {
+
+            return null;
+        }
 
         File[] children =
                 directory.listFiles();
@@ -839,8 +1034,7 @@ public final class BuildEngine {
             return null;
         }
 
-        for (File child :
-                children) {
+        for (File child : children) {
 
             if (child == null) {
                 continue;
@@ -851,9 +1045,7 @@ public final class BuildEngine {
                             .equalsIgnoreCase(
                                     "app-debug.apk"
                             ) &&
-                    isValidApk(
-                            child
-                    )) {
+                    isValidApk(child)) {
 
                 return child;
             }
@@ -883,9 +1075,19 @@ public final class BuildEngine {
                 apk.length() > 0;
     }
 
+    /**
+     * منع خروج APK destination من المشروع.
+     */
     private File resolveSafeDestination(
+            File workspaceRoot,
             String relativePath
     ) {
+
+        if (workspaceRoot == null ||
+                relativePath == null) {
+
+            return null;
+        }
 
         String normalized =
                 relativePath
@@ -900,19 +1102,13 @@ public final class BuildEngine {
         ) {
 
             normalized =
-                    normalized.substring(
-                            1
-                    );
+                    normalized.substring(1);
         }
 
         if (normalized.isEmpty() ||
                 normalized.equals(".") ||
-                normalized.contains(
-                        "../"
-                ) ||
-                normalized.startsWith(
-                        ".."
-                )) {
+                normalized.contains("../") ||
+                normalized.startsWith("..")) {
 
             return null;
         }
@@ -935,9 +1131,7 @@ public final class BuildEngine {
                             .getCanonicalFile()
                             .toPath();
 
-            if (!target.startsWith(
-                    root
-            )) {
+            if (!target.startsWith(root)) {
                 return null;
             }
 
@@ -949,6 +1143,9 @@ public final class BuildEngine {
         }
     }
 
+    /**
+     * إنشاء رسالة فشل مفيدة من Gradle output.
+     */
     private String createFailureMessage(
             int exitCode,
             List<String> output
@@ -961,13 +1158,9 @@ public final class BuildEngine {
                 "Gradle failed with exit code "
         );
 
-        builder.append(
-                exitCode
-        );
+        builder.append(exitCode);
 
-        builder.append(
-                "."
-        );
+        builder.append(".");
 
         if (output != null &&
                 !output.isEmpty()) {
@@ -1019,18 +1212,22 @@ public final class BuildEngine {
     }
 
     /**
-     * معلومات بيئة البناء.
+     * معلومات Build Environment.
      */
     public static final class BuildEnvironment {
 
         private final boolean hasUnixWrapper;
         private final boolean hasWindowsWrapper;
+        private final boolean hasSettings;
+        private final boolean hasRootBuild;
         private final boolean hasAppModule;
         private final boolean hasBuildFile;
 
         private BuildEnvironment(
                 boolean hasUnixWrapper,
                 boolean hasWindowsWrapper,
+                boolean hasSettings,
+                boolean hasRootBuild,
                 boolean hasAppModule,
                 boolean hasBuildFile
         ) {
@@ -1040,6 +1237,12 @@ public final class BuildEngine {
 
             this.hasWindowsWrapper =
                     hasWindowsWrapper;
+
+            this.hasSettings =
+                    hasSettings;
+
+            this.hasRootBuild =
+                    hasRootBuild;
 
             this.hasAppModule =
                     hasAppModule;
@@ -1056,6 +1259,14 @@ public final class BuildEngine {
             return hasWindowsWrapper;
         }
 
+        public boolean hasSettings() {
+            return hasSettings;
+        }
+
+        public boolean hasRootBuild() {
+            return hasRootBuild;
+        }
+
         public boolean hasAppModule() {
             return hasAppModule;
         }
@@ -1070,6 +1281,8 @@ public final class BuildEngine {
                     hasUnixWrapper ||
                     hasWindowsWrapper
             )
+                    && hasSettings
+                    && hasRootBuild
                     && hasAppModule
                     && hasBuildFile;
         }
@@ -1082,6 +1295,16 @@ public final class BuildEngine {
             )) {
 
                 return "Gradle Wrapper is missing.";
+            }
+
+            if (!hasSettings) {
+
+                return "Gradle settings file is missing.";
+            }
+
+            if (!hasRootBuild) {
+
+                return "Root Gradle build file is missing.";
             }
 
             if (!hasAppModule) {
@@ -1099,7 +1322,7 @@ public final class BuildEngine {
     }
 
     /**
-     * النتيجة الكاملة لعملية Build.
+     * النتيجة الكاملة للـBuild.
      */
     public static final class BuildRecord {
 
@@ -1131,7 +1354,10 @@ public final class BuildEngine {
             this.command =
                     Collections.unmodifiableList(
                             new ArrayList<>(
-                                    command
+                                    command == null
+                                            ? Collections
+                                                    .<String>emptyList()
+                                            : command
                             )
                     );
 
@@ -1141,7 +1367,10 @@ public final class BuildEngine {
             this.output =
                     Collections.unmodifiableList(
                             new ArrayList<>(
-                                    output
+                                    output == null
+                                            ? Collections
+                                                    .<String>emptyList()
+                                            : output
                             )
                     );
 
@@ -1158,7 +1387,9 @@ public final class BuildEngine {
                     success;
 
             this.summary =
-                    summary;
+                    summary == null
+                            ? ""
+                            : summary;
         }
 
         public static BuildRecord success(
