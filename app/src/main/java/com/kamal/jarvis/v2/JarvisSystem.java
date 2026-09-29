@@ -28,38 +28,6 @@ import com.kamal.jarvis.v2.tools.ToolRegistry;
 
 import java.io.File;
 
-/**
- * JARVIS V2 - System
- *
- * نقطة التجميع الرئيسية للنظام.
- *
- * المسؤول عن:
- *
- * - Security
- * - Runtime
- * - Tools
- * - Permissions
- * - Evolution
- * - Project Workspace
- * - Brain
- *
- * مهم:
- *
- * يوجد فرق بين:
- *
- * 1. jarvis_workspace
- *    مساحة JARVIS الداخلية للـartifacts والبيانات المؤقتة.
- *
- * 2. ProjectWorkspaceManager
- *    المشروع Android الحقيقي الذي يمكن أن يخضع لـ:
- *
- *    Source Evolution
- *    Build
- *    Verification
- *
- * JARVIS لا يعتبر workspace الداخلي مشروع Android
- * حقيقياً ولا يستعمله كبديل صامت.
- */
 public final class JarvisSystem {
 
     private static final String PREFS_NAME =
@@ -73,14 +41,8 @@ public final class JarvisSystem {
 
     private final Context context;
 
-    /*
-     * Workspace داخلي لـJARVIS.
-     */
     private final File workspaceRoot;
 
-    /*
-     * مدير المشروع الحقيقي.
-     */
     private final ProjectWorkspaceManager projectWorkspaceManager;
 
     private final OwnerSecurityBoundary securityBoundary;
@@ -121,9 +83,7 @@ public final class JarvisSystem {
 
     private boolean initialized;
 
-    public JarvisSystem(
-            Context context
-    ) {
+    public JarvisSystem(Context context) {
 
         if (context == null) {
             throw new IllegalArgumentException(
@@ -134,57 +94,22 @@ public final class JarvisSystem {
         this.context =
                 context.getApplicationContext();
 
-        /*
-         * =========================================================
-         * INTERNAL WORKSPACE
-         * =========================================================
-         */
-
         this.workspaceRoot =
                 new File(
                         this.context.getFilesDir(),
                         "jarvis_workspace"
                 );
 
-        /*
-         * =========================================================
-         * SECURITY
-         * =========================================================
-         */
-
         this.securityBoundary =
                 new OwnerSecurityBoundary();
-
-        /*
-         * =========================================================
-         * PROJECT WORKSPACE
-         * =========================================================
-         *
-         * هذا لا يعني أننا نفترض أن المشروع الحقيقي موجود
-         * داخل jarvis_workspace.
-         *
-         * المشروع الحقيقي خاصو يتسجل بشكل مستقل.
-         */
 
         this.projectWorkspaceManager =
                 new ProjectWorkspaceManager(
                         this.securityBoundary
                 );
 
-        /*
-         * =========================================================
-         * RUNTIME
-         * =========================================================
-         */
-
         this.runtime =
                 new JarvisRuntime();
-
-        /*
-         * =========================================================
-         * TOOLS
-         * =========================================================
-         */
 
         this.toolRegistry =
                 new ToolRegistry();
@@ -194,12 +119,6 @@ public final class JarvisSystem {
                         this.context
                 );
 
-        /*
-         * =========================================================
-         * PERMISSIONS
-         * =========================================================
-         */
-
         this.permissionManager =
                 new PermissionManager();
 
@@ -207,20 +126,6 @@ public final class JarvisSystem {
                 new AndroidPermissionBridge(
                         this.context
                 );
-
-        /*
-         * =========================================================
-         * EVOLUTION FOUNDATION
-         * =========================================================
-         */
-
-        /*
-         * CodeEvolutionEngine أصبح مربوطاً بـ
-         * ProjectWorkspaceManager.
-         *
-         * لذلك عندما لا يكون المشروع الحقيقي configured:
-         * لا يتم تحويل jarvis_workspace إلى مشروع مزيف.
-         */
 
         this.codeEvolutionEngine =
                 new CodeEvolutionEngine(
@@ -233,10 +138,6 @@ public final class JarvisSystem {
                         this.codeEvolutionEngine
                 );
 
-        /*
-         * SelfBuilder مازال يستعمل workspace الداخلي
-         * لإنشاء capability artifacts.
-         */
         this.selfBuilder =
                 new SelfBuilder(
                         this.securityBoundary,
@@ -251,36 +152,18 @@ public final class JarvisSystem {
                         this.workspaceRoot
                 );
 
-        /*
-         * BuildEngine مربوط بالمشروع الحقيقي.
-         */
         this.buildEngine =
                 new BuildEngine(
                         this.projectWorkspaceManager,
                         this.securityBoundary
                 );
 
-        /*
-         * Verification:
-         *
-         * workspaceRoot
-         *     = artifact workspace
-         *
-         * projectWorkspaceManager
-         *     = real Android project
-         */
         this.verificationEngine =
                 new EvolutionVerificationEngine(
                         this.workspaceRoot,
                         this.projectWorkspaceManager,
                         this.securityBoundary
                 );
-
-        /*
-         * =========================================================
-         * ORCHESTRATOR
-         * =========================================================
-         */
 
         this.evolutionOrchestrator =
                 new EvolutionOrchestrator(
@@ -293,12 +176,6 @@ public final class JarvisSystem {
                         this.buildEngine,
                         this.verificationEngine
                 );
-
-        /*
-         * =========================================================
-         * DISCOVERY + EXECUTION
-         * =========================================================
-         */
 
         this.capabilityDiscovery =
                 new CapabilityDiscovery(
@@ -313,24 +190,12 @@ public final class JarvisSystem {
                         this.permissionManager
                 );
 
-        /*
-         * =========================================================
-         * EVOLUTION CORE
-         * =========================================================
-         */
-
         this.evolutionCore =
                 new EvolutionCore(
                         this.capabilityDiscovery,
                         this.capabilityExecutor,
                         this.evolutionOrchestrator
                 );
-
-        /*
-         * =========================================================
-         * BRAIN
-         * =========================================================
-         */
 
         this.brain =
                 new JarvisBrain(
@@ -342,13 +207,9 @@ public final class JarvisSystem {
                 false;
     }
 
-    /**
-     * تشغيل JARVIS.
-     */
     public synchronized JarvisResult<Boolean> start() {
 
         if (initialized) {
-
             return JarvisResult.success(
                     true,
                     "JARVIS V2 is already running."
@@ -357,33 +218,19 @@ public final class JarvisSystem {
 
         try {
 
-            /*
-             * =====================================================
-             * 1. OWNER
-             * =====================================================
-             */
-
             JarvisResult<Boolean> ownerResult =
                     initializeOwner();
 
             if (!ownerResult.isSuccess()) {
-
                 return JarvisResult.failure(
                         ownerResult.getError(),
                         ownerResult.getMessage()
                 );
             }
 
-            /*
-             * =====================================================
-             * 2. INTERNAL WORKSPACE
-             * =====================================================
-             */
-
             if (!workspaceRoot.exists()) {
 
                 if (!workspaceRoot.mkdirs()) {
-
                     return failure(
                             JarvisError.Type.FILE_OPERATION_FAILED,
                             "Could not create JARVIS workspace."
@@ -392,41 +239,26 @@ public final class JarvisSystem {
             }
 
             if (!workspaceRoot.isDirectory()) {
-
                 return failure(
                         JarvisError.Type.FILE_OPERATION_FAILED,
                         "JARVIS workspace is not a directory."
                 );
             }
 
-            /*
-             * =====================================================
-             * 3. CODE EVOLUTION
-             * =====================================================
-             */
-
             JarvisResult<Boolean> codeResult =
                     codeEvolutionEngine.initialize();
 
             if (!codeResult.isSuccess()) {
-
                 return JarvisResult.failure(
                         codeResult.getError(),
                         codeResult.getMessage()
                 );
             }
 
-            /*
-             * =====================================================
-             * 4. SOURCE EVOLUTION
-             * =====================================================
-             */
-
             JarvisResult<Boolean> sourceResult =
                     sourceEvolutionEngine.initialize();
 
             if (!sourceResult.isSuccess()) {
-
                 return JarvisResult.failure(
                         sourceResult.getError(),
                         sourceResult.getMessage()
@@ -434,37 +266,15 @@ public final class JarvisSystem {
             }
 
             /*
-             * =====================================================
-             * 5. PROJECT REVALIDATION
-             * =====================================================
-             *
-             * إذا لم يكن هناك مشروع حقيقي configured:
-             * لا نعتبر ذلك خطأ startup.
-             *
-             * JARVIS يقدر يخدم runtime capabilities
-             * ويستعمل evolution الداخلي.
-             *
-             * أما Build/Source Evolution الحقيقي:
-             * يحتاج مشروعاً حقيقياً configured.
+             * المشروع الحقيقي اختياري أثناء Startup.
+             * Build/Source Evolution الحقيقي يحتاج Workspace
+             * مهيأ ومتحقق منه.
              */
-
             projectWorkspaceManager.revalidate();
-
-            /*
-             * =====================================================
-             * 6. ANDROID PERMISSIONS
-             * =====================================================
-             */
 
             permissionBridge.synchronize(
                     permissionManager
             );
-
-            /*
-             * =====================================================
-             * 7. BUILT-IN TOOLS
-             * =====================================================
-             */
 
             JarvisResult<Boolean> toolResult =
                     registerTool(
@@ -472,18 +282,11 @@ public final class JarvisSystem {
                     );
 
             if (!toolResult.isSuccess()) {
-
                 return JarvisResult.failure(
                         toolResult.getError(),
                         toolResult.getMessage()
                 );
             }
-
-            /*
-             * =====================================================
-             * 8. RUNTIME
-             * =====================================================
-             */
 
             JarvisResult<Boolean> runtimeResult =
                     runtime.start();
@@ -504,8 +307,7 @@ public final class JarvisSystem {
                 );
             }
 
-            initialized =
-                    true;
+            initialized = true;
 
             return JarvisResult.success(
                     true,
@@ -514,8 +316,7 @@ public final class JarvisSystem {
 
         } catch (Exception exception) {
 
-            initialized =
-                    false;
+            initialized = false;
 
             return JarvisResult.failure(
                     JarvisError.fromException(
@@ -528,17 +329,13 @@ public final class JarvisSystem {
         }
     }
 
-    /**
-     * إيقاف JARVIS.
-     */
     public synchronized JarvisResult<Boolean> stop() {
 
         try {
 
             runtime.stop();
 
-            initialized =
-                    false;
+            initialized = false;
 
             return JarvisResult.success(
                     true,
@@ -558,13 +355,8 @@ public final class JarvisSystem {
         }
     }
 
-    /**
-     * إرسال أمر إلى Brain.
-     */
     public synchronized JarvisResult<JarvisBrain.BrainResponse>
-    processCommand(
-            String command
-    ) {
+    processCommand(String command) {
 
         if (!initialized) {
 
@@ -572,7 +364,6 @@ public final class JarvisSystem {
                     start();
 
             if (!startResult.isSuccess()) {
-
                 return JarvisResult.failure(
                         startResult.getError(),
                         startResult.getMessage()
@@ -580,20 +371,14 @@ public final class JarvisSystem {
             }
         }
 
-        return brain.process(
-                command
-        );
+        return brain.process(command);
     }
 
-    /**
-     * تسجيل Tool في Registry وRuntime معاً.
-     */
     public synchronized JarvisResult<Boolean> registerTool(
             ToolContract tool
     ) {
 
         if (tool == null) {
-
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
                     "Tool cannot be null."
@@ -606,7 +391,6 @@ public final class JarvisSystem {
                 );
 
         if (toolId.isEmpty()) {
-
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
                     "Tool ID cannot be empty."
@@ -614,48 +398,36 @@ public final class JarvisSystem {
         }
 
         if (!tool.isAvailable()) {
-
             return failure(
                     JarvisError.Type.TOOL_UNAVAILABLE,
                     "Tool is not available: " + toolId
             );
         }
 
-        /*
-         * الحالة المتناسقة موجودة بالفعل.
-         */
-        if (toolRegistry.contains(toolId) &&
-                runtime.containsTool(toolId)) {
+        if (toolRegistry.contains(toolId)
+                && runtime.containsTool(toolId)) {
 
             return JarvisResult.success(
                     true,
-                    "Tool is already registered: "
-                            + toolId
+                    "Tool is already registered: " + toolId
             );
         }
 
         /*
-         * تنظيف أي حالة جزئية.
+         * تنظيف الحالة الجزئية.
          */
-        if (toolRegistry.contains(toolId) ||
-                runtime.containsTool(toolId)) {
+        if (toolRegistry.contains(toolId)
+                || runtime.containsTool(toolId)) {
 
-            toolRegistry.remove(
-                    toolId
-            );
-
-            runtime.unregisterTool(
-                    toolId
-            );
+            toolRegistry.remove(toolId);
+            runtime.unregisterTool(toolId);
         }
 
         /*
-         * Registry.
+         * ToolRegistry.register() يرجع Void.
          */
-        JarvisResult<ToolContract> registryResult =
-                toolRegistry.register(
-                        tool
-                );
+        JarvisResult<Void> registryResult =
+                toolRegistry.register(tool);
 
         if (!registryResult.isSuccess()) {
 
@@ -665,19 +437,12 @@ public final class JarvisSystem {
             );
         }
 
-        /*
-         * Runtime.
-         */
         JarvisResult<Boolean> runtimeResult =
-                runtime.registerTool(
-                        tool
-                );
+                runtime.registerTool(tool);
 
         if (!runtimeResult.isSuccess()) {
 
-            toolRegistry.remove(
-                    toolId
-            );
+            toolRegistry.remove(toolId);
 
             return JarvisResult.failure(
                     runtimeResult.getError(),
@@ -686,19 +451,11 @@ public final class JarvisSystem {
             );
         }
 
-        /*
-         * تحقق نهائي.
-         */
-        if (!toolRegistry.contains(toolId) ||
-                !runtime.containsTool(toolId)) {
+        if (!toolRegistry.contains(toolId)
+                || !runtime.containsTool(toolId)) {
 
-            toolRegistry.remove(
-                    toolId
-            );
-
-            runtime.unregisterTool(
-                    toolId
-            );
+            toolRegistry.remove(toolId);
+            runtime.unregisterTool(toolId);
 
             return failure(
                     JarvisError.Type.INTERNAL_ERROR,
@@ -714,20 +471,14 @@ public final class JarvisSystem {
         );
     }
 
-    /**
-     * إزالة Tool من Registry وRuntime.
-     */
     public synchronized JarvisResult<Boolean> unregisterTool(
             String toolId
     ) {
 
         String normalizedId =
-                normalizeToolId(
-                        toolId
-                );
+                normalizeToolId(toolId);
 
         if (normalizedId.isEmpty()) {
-
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
                     "Tool ID cannot be empty."
@@ -735,31 +486,26 @@ public final class JarvisSystem {
         }
 
         boolean registryHadTool =
-                toolRegistry.contains(
-                        normalizedId
-                );
+                toolRegistry.contains(normalizedId);
 
         boolean runtimeHadTool =
-                runtime.containsTool(
-                        normalizedId
-                );
+                runtime.containsTool(normalizedId);
 
-        if (!registryHadTool &&
-                !runtimeHadTool) {
-
+        if (!registryHadTool && !runtimeHadTool) {
             return failure(
                     JarvisError.Type.NOT_FOUND,
                     "Tool not found: " + normalizedId
             );
         }
 
-        JarvisResult<ToolContract> registryResult =
-                toolRegistry.remove(
-                        normalizedId
-                );
+        /*
+         * ToolRegistry.remove() يرجع Void.
+         */
+        JarvisResult<Void> registryResult =
+                toolRegistry.remove(normalizedId);
 
-        if (!registryResult.isSuccess() &&
-                registryHadTool) {
+        if (!registryResult.isSuccess()
+                && registryHadTool) {
 
             return JarvisResult.failure(
                     registryResult.getError(),
@@ -768,12 +514,10 @@ public final class JarvisSystem {
         }
 
         JarvisResult<Boolean> runtimeResult =
-                runtime.unregisterTool(
-                        normalizedId
-                );
+                runtime.unregisterTool(normalizedId);
 
-        if (!runtimeResult.isSuccess() &&
-                runtimeHadTool) {
+        if (!runtimeResult.isSuccess()
+                && runtimeHadTool) {
 
             return JarvisResult.failure(
                     runtimeResult.getError(),
@@ -790,60 +534,40 @@ public final class JarvisSystem {
         );
     }
 
-    /**
-     * =========================================================
-     * PROJECT WORKSPACE
-     * =========================================================
-     *
-     * يسمح للنظام بتحديد مشروع Android الحقيقي.
-     *
-     * لا يتم استعمال jarvis_workspace كبديل.
-     */
     public synchronized JarvisResult<Boolean>
-    configureProjectWorkspace(
-            File projectRoot
-    ) {
+    configureProjectWorkspace(File projectRoot) {
 
         if (projectRoot == null) {
-
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
                     "Project root cannot be null."
             );
         }
 
-        JarvisResult<Boolean> result =
+        JarvisResult<ProjectWorkspaceManager.ProjectInspection>
+                result =
                 projectWorkspaceManager.configure(
                         projectRoot
                 );
 
         if (!result.isSuccess()) {
-
-            return result;
+            return JarvisResult.failure(
+                    result.getError(),
+                    result.getMessage()
+            );
         }
-
-        /*
-         * بعد configuration:
-         * نعيد فحص المكونات التي تعتمد على المشروع.
-         */
-        projectWorkspaceManager.revalidate();
 
         return JarvisResult.success(
                 true,
-                "Real Android project workspace configured."
+                result.getMessage()
         );
     }
 
-    /**
-     * Configuration بواسطة path.
-     */
     public synchronized JarvisResult<Boolean>
-    configureProjectWorkspace(
-            String projectPath
-    ) {
+    configureProjectWorkspace(String projectPath) {
 
-        if (projectPath == null ||
-                projectPath.trim().isEmpty()) {
+        if (projectPath == null
+                || projectPath.trim().isEmpty()) {
 
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
@@ -851,29 +575,25 @@ public final class JarvisSystem {
             );
         }
 
-        JarvisResult<Boolean> result =
+        JarvisResult<ProjectWorkspaceManager.ProjectInspection>
+                result =
                 projectWorkspaceManager.configurePath(
                         projectPath
                 );
 
         if (!result.isSuccess()) {
-
-            return result;
+            return JarvisResult.failure(
+                    result.getError(),
+                    result.getMessage()
+            );
         }
-
-        projectWorkspaceManager.revalidate();
 
         return JarvisResult.success(
                 true,
-                "Real Android project workspace configured."
+                result.getMessage()
         );
     }
 
-    /**
-     * حذف project workspace من إعدادات JARVIS.
-     *
-     * هذا لا يحذف ملفات المشروع.
-     */
     public synchronized JarvisResult<Boolean>
     clearProjectWorkspace() {
 
@@ -885,27 +605,30 @@ public final class JarvisSystem {
         );
     }
 
-    /**
-     * إعادة فحص المشروع الحقيقي.
-     */
     public synchronized JarvisResult<Boolean>
     revalidateProjectWorkspace() {
 
-        return projectWorkspaceManager.revalidate();
+        JarvisResult<ProjectWorkspaceManager.ProjectInspection>
+                result =
+                projectWorkspaceManager.revalidate();
+
+        if (!result.isSuccess()) {
+            return JarvisResult.failure(
+                    result.getError(),
+                    result.getMessage()
+            );
+        }
+
+        return JarvisResult.success(
+                true,
+                result.getMessage()
+        );
     }
 
-    /**
-     * هل المشروع الحقيقي جاهز؟
-     */
-    public synchronized boolean
-    isProjectWorkspaceReady() {
-
+    public synchronized boolean isProjectWorkspaceReady() {
         return projectWorkspaceManager.isReady();
     }
 
-    /**
-     * مزامنة صلاحيات Android.
-     */
     public synchronized void synchronizePermissions() {
 
         permissionBridge.synchronize(
@@ -913,9 +636,6 @@ public final class JarvisSystem {
         );
     }
 
-    /**
-     * حالة النظام.
-     */
     public synchronized SystemStatus getStatus() {
 
         return new SystemStatus(
@@ -947,13 +667,11 @@ public final class JarvisSystem {
 
     public ProjectWorkspaceManager
     getProjectWorkspaceManager() {
-
         return projectWorkspaceManager;
     }
 
     public OwnerSecurityBoundary
     getSecurityBoundary() {
-
         return securityBoundary;
     }
 
@@ -965,39 +683,27 @@ public final class JarvisSystem {
         return toolRegistry;
     }
 
-    public PermissionManager
-    getPermissionManager() {
-
+    public PermissionManager getPermissionManager() {
         return permissionManager;
     }
 
-    public AndroidPermissionBridge
-    getPermissionBridge() {
-
+    public AndroidPermissionBridge getPermissionBridge() {
         return permissionBridge;
     }
 
-    public CapabilityDiscovery
-    getCapabilityDiscovery() {
-
+    public CapabilityDiscovery getCapabilityDiscovery() {
         return capabilityDiscovery;
     }
 
-    public CapabilityExecutor
-    getCapabilityExecutor() {
-
+    public CapabilityExecutor getCapabilityExecutor() {
         return capabilityExecutor;
     }
 
-    public CodeEvolutionEngine
-    getCodeEvolutionEngine() {
-
+    public CodeEvolutionEngine getCodeEvolutionEngine() {
         return codeEvolutionEngine;
     }
 
-    public SourceEvolutionEngine
-    getSourceEvolutionEngine() {
-
+    public SourceEvolutionEngine getSourceEvolutionEngine() {
         return sourceEvolutionEngine;
     }
 
@@ -1005,15 +711,11 @@ public final class JarvisSystem {
         return selfBuilder;
     }
 
-    public SelfTestEngine
-    getSelfTestEngine() {
-
+    public SelfTestEngine getSelfTestEngine() {
         return selfTestEngine;
     }
 
-    public RecoveryEngine
-    getRecoveryEngine() {
-
+    public RecoveryEngine getRecoveryEngine() {
         return recoveryEngine;
     }
 
@@ -1023,13 +725,11 @@ public final class JarvisSystem {
 
     public EvolutionVerificationEngine
     getVerificationEngine() {
-
         return verificationEngine;
     }
 
     public EvolutionOrchestrator
     getEvolutionOrchestrator() {
-
         return evolutionOrchestrator;
     }
 
@@ -1043,7 +743,6 @@ public final class JarvisSystem {
 
     public AndroidIntentTool
     getAndroidIntentTool() {
-
         return androidIntentTool;
     }
 
@@ -1051,9 +750,6 @@ public final class JarvisSystem {
         return initialized;
     }
 
-    /**
-     * Owner initialization.
-     */
     private JarvisResult<Boolean>
     initializeOwner() {
 
@@ -1069,11 +765,10 @@ public final class JarvisSystem {
                         null
                 );
 
-        if (ownerId == null ||
-                ownerId.trim().isEmpty()) {
+        if (ownerId == null
+                || ownerId.trim().isEmpty()) {
 
-            ownerId =
-                    DEFAULT_OWNER_ID;
+            ownerId = DEFAULT_OWNER_ID;
 
             boolean saved =
                     preferences.edit()
@@ -1084,7 +779,6 @@ public final class JarvisSystem {
                             .commit();
 
             if (!saved) {
-
                 return failure(
                         JarvisError.Type.FILE_OPERATION_FAILED,
                         "Could not persist owner identity."
@@ -1100,7 +794,6 @@ public final class JarvisSystem {
                     );
 
             if (!initializeResult.isSuccess()) {
-
                 return JarvisResult.failure(
                         initializeResult.getError(),
                         initializeResult.getMessage()
@@ -1116,7 +809,6 @@ public final class JarvisSystem {
         }
 
         if (!securityBoundary.isActive()) {
-
             return failure(
                     JarvisError.Type.NOT_AUTHORIZED,
                     "Owner security boundary is not active."
@@ -1154,27 +846,16 @@ public final class JarvisSystem {
         );
     }
 
-    /**
-     * حالة النظام.
-     */
     public static final class SystemStatus {
 
         private final boolean initialized;
-
         private final boolean securityActive;
-
         private final boolean runtimeRunning;
-
         private final boolean workspaceAvailable;
-
         private final boolean projectWorkspaceReady;
-
         private final int toolCount;
-
         private final int grantedPermissionCount;
-
         private final int requestedPermissionCount;
-
         private final String evolutionState;
 
         private SystemStatus(
@@ -1189,32 +870,15 @@ public final class JarvisSystem {
                 String evolutionState
         ) {
 
-            this.initialized =
-                    initialized;
-
-            this.securityActive =
-                    securityActive;
-
-            this.runtimeRunning =
-                    runtimeRunning;
-
-            this.workspaceAvailable =
-                    workspaceAvailable;
-
-            this.projectWorkspaceReady =
-                    projectWorkspaceReady;
-
-            this.toolCount =
-                    toolCount;
-
-            this.grantedPermissionCount =
-                    grantedPermissionCount;
-
-            this.requestedPermissionCount =
-                    requestedPermissionCount;
-
-            this.evolutionState =
-                    evolutionState;
+            this.initialized = initialized;
+            this.securityActive = securityActive;
+            this.runtimeRunning = runtimeRunning;
+            this.workspaceAvailable = workspaceAvailable;
+            this.projectWorkspaceReady = projectWorkspaceReady;
+            this.toolCount = toolCount;
+            this.grantedPermissionCount = grantedPermissionCount;
+            this.requestedPermissionCount = requestedPermissionCount;
+            this.evolutionState = evolutionState;
         }
 
         public boolean isInitialized() {
@@ -1257,18 +921,12 @@ public final class JarvisSystem {
         public String toString() {
 
             return "SystemStatus{" +
-                    "initialized=" +
-                    initialized +
-                    ", securityActive=" +
-                    securityActive +
-                    ", runtimeRunning=" +
-                    runtimeRunning +
-                    ", workspaceAvailable=" +
-                    workspaceAvailable +
-                    ", projectWorkspaceReady=" +
-                    projectWorkspaceReady +
-                    ", toolCount=" +
-                    toolCount +
+                    "initialized=" + initialized +
+                    ", securityActive=" + securityActive +
+                    ", runtimeRunning=" + runtimeRunning +
+                    ", workspaceAvailable=" + workspaceAvailable +
+                    ", projectWorkspaceReady=" + projectWorkspaceReady +
+                    ", toolCount=" + toolCount +
                     ", grantedPermissionCount=" +
                     grantedPermissionCount +
                     ", requestedPermissionCount=" +
