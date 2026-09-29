@@ -5,9 +5,26 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * JARVIS V2 - Event
+ *
+ * الحدث الموحد داخل النظام.
+ *
+ * يستعمله Runtime وباقي المكونات لتسجيل:
+ *
+ * - Commands
+ * - Tools
+ * - Evolution
+ * - Build
+ * - Tests
+ * - Recovery
+ * - Security
+ * - System
+ */
 public final class JarvisEvent {
 
     public enum Type {
+
         COMMAND_RECEIVED,
         COMMAND_STARTED,
         COMMAND_COMPLETED,
@@ -16,6 +33,11 @@ public final class JarvisEvent {
         TOOL_STARTED,
         TOOL_COMPLETED,
         TOOL_FAILED,
+
+        /*
+         * Alias عام يستعمله Runtime الحالي.
+         */
+        TOOL,
 
         EVOLUTION_STARTED,
         EVOLUTION_COMPLETED,
@@ -42,14 +64,24 @@ public final class JarvisEvent {
         SYSTEM_STARTED,
         SYSTEM_STOPPED,
 
+        /*
+         * Alias عام يستعمله Runtime الحالي.
+         */
+        SYSTEM,
+
         CUSTOM
     }
 
     private final String id;
+
     private final Type type;
+
     private final long timestamp;
+
     private final String source;
+
     private final String message;
+
     private final Map<String, Object> data;
 
     public JarvisEvent(
@@ -57,6 +89,7 @@ public final class JarvisEvent {
             String source,
             String message
     ) {
+
         this(
                 UUID.randomUUID().toString(),
                 type,
@@ -75,18 +108,43 @@ public final class JarvisEvent {
             String message,
             Map<String, Object> data
     ) {
-        this.id = id == null ? UUID.randomUUID().toString() : id;
-        this.type = type == null ? Type.CUSTOM : type;
-        this.timestamp = timestamp;
-        this.source = source == null ? "unknown" : source;
-        this.message = message == null ? "" : message;
 
-        if (data == null) {
-            this.data = Collections.emptyMap();
+        this.id =
+                id == null || id.trim().isEmpty()
+                        ? UUID.randomUUID().toString()
+                        : id;
+
+        this.type =
+                type == null
+                        ? Type.CUSTOM
+                        : type;
+
+        this.timestamp =
+                timestamp;
+
+        this.source =
+                source == null
+                        ? "unknown"
+                        : source;
+
+        this.message =
+                message == null
+                        ? ""
+                        : message;
+
+        if (data == null || data.isEmpty()) {
+
+            this.data =
+                    Collections.emptyMap();
+
         } else {
-            this.data = Collections.unmodifiableMap(
-                    new LinkedHashMap<>(data)
-            );
+
+            this.data =
+                    Collections.unmodifiableMap(
+                            new LinkedHashMap<>(
+                                    data
+                            )
+                    );
         }
     }
 
@@ -114,11 +172,56 @@ public final class JarvisEvent {
         return data;
     }
 
-    public JarvisEvent withData(String key, Object value) {
-        Map<String, Object> updated =
-                new LinkedHashMap<>(data);
+    /**
+     * إنشاء نسخة من الحدث مع إضافة معلومة.
+     */
+    public JarvisEvent withData(
+            String key,
+            Object value
+    ) {
 
-        updated.put(key, value);
+        Map<String, Object> updated =
+                new LinkedHashMap<>(
+                        data
+                );
+
+        if (key != null &&
+                !key.trim().isEmpty()) {
+
+            updated.put(
+                    key,
+                    value
+            );
+        }
+
+        return new JarvisEvent(
+                id,
+                type,
+                timestamp,
+                source,
+                message,
+                updated
+        );
+    }
+
+    /**
+     * إنشاء نسخة مع Map كامل.
+     */
+    public JarvisEvent withData(
+            Map<String, Object> additionalData
+    ) {
+
+        Map<String, Object> updated =
+                new LinkedHashMap<>(
+                        data
+                );
+
+        if (additionalData != null) {
+
+            updated.putAll(
+                    additionalData
+            );
+        }
 
         return new JarvisEvent(
                 id,
@@ -132,6 +235,7 @@ public final class JarvisEvent {
 
     @Override
     public String toString() {
+
         return "JarvisEvent{" +
                 "id='" + id + '\'' +
                 ", type=" + type +
