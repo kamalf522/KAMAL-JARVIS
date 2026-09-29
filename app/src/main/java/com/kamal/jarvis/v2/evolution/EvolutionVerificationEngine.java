@@ -15,39 +15,57 @@ import java.util.List;
 /**
  * JARVIS V2 - Evolution Verification Engine
  *
- * مسؤول على التحقق من نتيجة التطور.
+ * مسؤول عن التحقق الحقيقي من نتائج Evolution.
  *
- * الفرق بين:
+ * يوجد هنا نوعان من المساحات:
  *
- * "JARVIS كتب الكود"
+ * 1. artifactWorkspaceRoot
+ *    مساحة JARVIS الداخلية التي ينشئ فيها SelfBuilder
+ *    ملفات capability الخاصة به.
+ *
+ * 2. ProjectWorkspaceManager
+ *    المشروع Android الحقيقي الذي يتم عليه:
+ *      - Source Evolution
+ *      - Gradle Build
+ *      - APK verification
+ *
+ * هذا الفصل مهم حتى لا نخلط بين:
+ *
+ * "JARVIS أنشأ ملفات capability"
  *
  * و:
  *
- * "JARVIS عندو دليل أن التغيير صالح."
+ * "مشروع Android الحقيقي تم بناؤه بنجاح."
  *
- * التحقق يتم على عدة مستويات:
- *
- * 1. Workspace
- * 2. الملفات المطلوبة
- * 3. محتوى الملفات
- * 4. ملفات Gradle الأساسية
- * 5. نتيجة Build
- * 6. وجود APK إذا كان Build مطلوباً
- * 7. Success Criteria الخاصة بالقدرة
- *
- * هذا المحرك لا يعلن SUCCESS بدون أدلة.
+ * لا يتم إعلان النجاح النهائي بدون الأدلة المطلوبة.
  */
 public final class EvolutionVerificationEngine {
 
     private static final String ENGINE_ID =
             "v2.evolution_verification_engine";
 
-    private final File workspaceRoot;
+    /*
+     * Workspace الداخلي الخاص بـSelfBuilder.
+     */
+    private final File artifactWorkspaceRoot;
+
+    /*
+     * المشروع Android الحقيقي.
+     *
+     * يمكن أن يكون null في constructor القديم
+     * من أجل المحافظة على compatibility.
+     */
+    private final ProjectWorkspaceManager projectWorkspaceManager;
+
     private final OwnerSecurityBoundary securityBoundary;
 
-    private volatile VerificationReport
-            lastReport;
+    private volatile VerificationReport lastReport;
 
+    /**
+     * Constructor قديم.
+     *
+     * يبقى موجوداً حتى لا نكسر الملفات القديمة.
+     */
     public EvolutionVerificationEngine(
             File workspaceRoot,
             OwnerSecurityBoundary securityBoundary
@@ -65,15 +83,63 @@ public final class EvolutionVerificationEngine {
             );
         }
 
-        this.workspaceRoot =
+        this.artifactWorkspaceRoot =
                 workspaceRoot.getAbsoluteFile();
+
+        this.projectWorkspaceManager =
+                null;
 
         this.securityBoundary =
                 securityBoundary;
     }
 
     /**
-     * التحقق من Capability بعد SelfBuilder.
+     * Constructor الجديد.
+     *
+     * artifactWorkspaceRoot:
+     * workspace الداخلي الذي يستعمله SelfBuilder.
+     *
+     * projectWorkspaceManager:
+     * المشروع Android الحقيقي.
+     */
+    public EvolutionVerificationEngine(
+            File artifactWorkspaceRoot,
+            ProjectWorkspaceManager projectWorkspaceManager,
+            OwnerSecurityBoundary securityBoundary
+    ) {
+
+        if (artifactWorkspaceRoot == null) {
+            throw new IllegalArgumentException(
+                    "artifactWorkspaceRoot cannot be null."
+            );
+        }
+
+        if (projectWorkspaceManager == null) {
+            throw new IllegalArgumentException(
+                    "projectWorkspaceManager cannot be null."
+            );
+        }
+
+        if (securityBoundary == null) {
+            throw new IllegalArgumentException(
+                    "securityBoundary cannot be null."
+            );
+        }
+
+        this.artifactWorkspaceRoot =
+                artifactWorkspaceRoot.getAbsoluteFile();
+
+        this.projectWorkspaceManager =
+                projectWorkspaceManager;
+
+        this.securityBoundary =
+                securityBoundary;
+    }
+
+    /**
+     * التحقق من artifacts بعد SelfBuilder.
+     *
+     * هذه المرحلة لا تدعي أن Android project تم بناؤه.
      */
     public synchronized JarvisResult<VerificationReport>
     verify(
@@ -120,14 +186,14 @@ public final class EvolutionVerificationEngine {
                 System.currentTimeMillis();
 
         /*
-         * 1. Workspace
+         * 1. Artifact workspace.
          */
-        checkWorkspace(
+        checkArtifactWorkspace(
                 checks
         );
 
         /*
-         * 2. Capability directory
+         * 2. Capability directory.
          */
         checkCapabilityDirectory(
                 checks,
@@ -135,7 +201,7 @@ public final class EvolutionVerificationEngine {
         );
 
         /*
-         * 3. Created files
+         * 3. Files created by SelfBuilder.
          */
         checkCreatedFiles(
                 checks,
@@ -143,7 +209,7 @@ public final class EvolutionVerificationEngine {
         );
 
         /*
-         * 4. File contents
+         * 4. Contents.
          */
         checkFileContents(
                 checks,
@@ -151,20 +217,19 @@ public final class EvolutionVerificationEngine {
         );
 
         /*
-         * 5. Gradle project structure
-         *
-         * هذا لا يعني أن Build نجح.
-         * فقط نتأكد أن المشروع قابل للفحص.
+         * 5. If build is required,
+         *    verify the REAL Android project structure.
          */
         if (spec.requiresBuild()) {
 
-            checkGradleStructure(
+            checkRealProjectStructure(
                     checks
             );
         }
 
         /*
-         * 6. Success criteria
+         * Success criteria هنا يتم التحقق من تعريفها،
+         * وليس الادعاء أن الوظيفة نفسها اشتغلت.
          */
         checkSuccessCriteria(
                 checks,
@@ -172,30 +237,25 @@ public final class EvolutionVerificationEngine {
         );
 
         /*
-         * BuildResult نفسه لا يعتبر Build.
-         * لذلك إذا spec.requiresBuild() = true
-         * وBuild لم يتم تمريره لهذه الدالة،
-         * يبقى التحقق النهائي ناقصاً.
+         * Build evidence غير موجود في هذه المرحلة.
+         *
+         * هذا Warning وليس Success نهائي.
          */
         if (spec.requiresBuild()) {
 
             checks.add(
                     VerificationCheck.warning(
                             "BUILD_EVIDENCE",
-                            "Build evidence must be supplied by BuildEngine."
+                            "Real build evidence must be supplied by BuildEngine."
                     )
             );
         }
 
-        long duration =
-                System.currentTimeMillis()
-                        - startedAt;
-
         VerificationReport report =
-                VerificationReport.from(
+                createReport(
                         spec.getCapabilityId(),
                         checks,
-                        duration
+                        startedAt
                 );
 
         lastReport =
@@ -220,7 +280,14 @@ public final class EvolutionVerificationEngine {
     }
 
     /**
-     * تحقق نهائي عندما يكون BuildEngine قد نفذ Build فعلياً.
+     * التحقق النهائي بعد BuildEngine.
+     *
+     * هنا يمكن اعتبار Build دليلاً فقط إذا:
+     *
+     * - BuildRecord success
+     * - exit code = 0
+     * - APK موجود
+     * - APK حجمه > 0
      */
     public synchronized JarvisResult<VerificationReport>
     verifyWithBuild(
@@ -275,7 +342,10 @@ public final class EvolutionVerificationEngine {
         long startedAt =
                 System.currentTimeMillis();
 
-        checkWorkspace(
+        /*
+         * Artifact verification.
+         */
+        checkArtifactWorkspace(
                 checks
         );
 
@@ -294,9 +364,12 @@ public final class EvolutionVerificationEngine {
                 buildResult
         );
 
+        /*
+         * Real Android project.
+         */
         if (spec.requiresBuild()) {
 
-            checkGradleStructure(
+            checkRealProjectStructure(
                     checks
             );
 
@@ -306,20 +379,19 @@ public final class EvolutionVerificationEngine {
             );
         }
 
+        /*
+         * Success criteria.
+         */
         checkSuccessCriteria(
                 checks,
                 spec
         );
 
-        long duration =
-                System.currentTimeMillis()
-                        - startedAt;
-
         VerificationReport report =
-                VerificationReport.from(
+                createReport(
                         spec.getCapabilityId(),
                         checks,
-                        duration
+                        startedAt
                 );
 
         lastReport =
@@ -343,28 +415,51 @@ public final class EvolutionVerificationEngine {
         );
     }
 
-    private void checkWorkspace(
+    /**
+     * إنشاء VerificationReport.
+     */
+    private VerificationReport createReport(
+            String capabilityId,
+            List<VerificationCheck> checks,
+            long startedAt
+    ) {
+
+        long duration =
+                System.currentTimeMillis()
+                        - startedAt;
+
+        return VerificationReport.from(
+                capabilityId,
+                checks,
+                duration
+        );
+    }
+
+    /**
+     * فحص workspace الداخلي.
+     */
+    private void checkArtifactWorkspace(
             List<VerificationCheck> checks
     ) {
 
-        if (!workspaceRoot.exists()) {
+        if (!artifactWorkspaceRoot.exists()) {
 
             checks.add(
                     VerificationCheck.failed(
-                            "WORKSPACE",
-                            "Workspace does not exist."
+                            "ARTIFACT_WORKSPACE",
+                            "JARVIS artifact workspace does not exist."
                     )
             );
 
             return;
         }
 
-        if (!workspaceRoot.isDirectory()) {
+        if (!artifactWorkspaceRoot.isDirectory()) {
 
             checks.add(
                     VerificationCheck.failed(
-                            "WORKSPACE",
-                            "Workspace is not a directory."
+                            "ARTIFACT_WORKSPACE",
+                            "JARVIS artifact workspace is not a directory."
                     )
             );
 
@@ -373,20 +468,22 @@ public final class EvolutionVerificationEngine {
 
         checks.add(
                 VerificationCheck.passed(
-                        "WORKSPACE",
-                        "Workspace exists."
+                        "ARTIFACT_WORKSPACE",
+                        "JARVIS artifact workspace exists."
                 )
         );
     }
 
+    /**
+     * فحص capability directory.
+     */
     private void checkCapabilityDirectory(
             List<VerificationCheck> checks,
             SelfBuilder.BuildResult buildResult
     ) {
 
         File directory =
-                buildResult
-                        .getCapabilityDirectory();
+                buildResult.getCapabilityDirectory();
 
         if (directory == null) {
 
@@ -413,14 +510,12 @@ public final class EvolutionVerificationEngine {
             return;
         }
 
-        if (!isInsideWorkspace(
-                directory
-        )) {
+        if (!isInsideArtifactWorkspace(directory)) {
 
             checks.add(
                     VerificationCheck.failed(
                             "CAPABILITY_DIRECTORY",
-                            "Capability directory is outside workspace."
+                            "Capability directory is outside JARVIS artifact workspace."
                     )
             );
 
@@ -430,11 +525,14 @@ public final class EvolutionVerificationEngine {
         checks.add(
                 VerificationCheck.passed(
                         "CAPABILITY_DIRECTORY",
-                        "Capability directory is valid."
+                        "Capability directory is inside the JARVIS artifact workspace."
                 )
         );
     }
 
+    /**
+     * فحص جميع الملفات التي أنشأها SelfBuilder.
+     */
     private void checkCreatedFiles(
             List<VerificationCheck> checks,
             SelfBuilder.BuildResult buildResult
@@ -449,7 +547,7 @@ public final class EvolutionVerificationEngine {
             checks.add(
                     VerificationCheck.failed(
                             "CREATED_FILES",
-                            "No files were created."
+                            "SelfBuilder did not create any files."
                     )
             );
 
@@ -459,19 +557,15 @@ public final class EvolutionVerificationEngine {
         int valid =
                 0;
 
-        for (File file :
-                files) {
+        for (File file : files) {
 
             if (file == null) {
-
                 continue;
             }
 
             if (file.exists() &&
                     file.isFile() &&
-                    isInsideWorkspace(
-                            file
-                    )) {
+                    isInsideArtifactWorkspace(file)) {
 
                 valid++;
 
@@ -480,7 +574,7 @@ public final class EvolutionVerificationEngine {
                 checks.add(
                         VerificationCheck.failed(
                                 "FILE:" + file,
-                                "Created file is missing or unsafe."
+                                "Created file is missing or outside the artifact workspace."
                         )
                 );
             }
@@ -491,9 +585,10 @@ public final class EvolutionVerificationEngine {
             checks.add(
                     VerificationCheck.passed(
                             "CREATED_FILES",
-                            "All created files exist."
+                            "All created files exist and are inside the artifact workspace."
                     )
             );
+
         } else {
 
             checks.add(
@@ -508,6 +603,9 @@ public final class EvolutionVerificationEngine {
         }
     }
 
+    /**
+     * فحص محتوى الملفات.
+     */
     private void checkFileContents(
             List<VerificationCheck> checks,
             SelfBuilder.BuildResult buildResult
@@ -520,11 +618,11 @@ public final class EvolutionVerificationEngine {
             return;
         }
 
-        for (File file :
-                files) {
+        for (File file : files) {
 
             if (file == null ||
                     !file.isFile()) {
+
                 continue;
             }
 
@@ -541,7 +639,7 @@ public final class EvolutionVerificationEngine {
                     checks.add(
                             VerificationCheck.failed(
                                     "CONTENT:" + file.getName(),
-                                    "File is empty."
+                                    "Created file is empty."
                             )
                     );
 
@@ -550,7 +648,7 @@ public final class EvolutionVerificationEngine {
                     checks.add(
                             VerificationCheck.passed(
                                     "CONTENT:" + file.getName(),
-                                    "File contains data."
+                                    "Created file contains data."
                             )
                     );
                 }
@@ -560,34 +658,100 @@ public final class EvolutionVerificationEngine {
                 checks.add(
                         VerificationCheck.failed(
                                 "CONTENT:" + file.getName(),
-                                "Could not read file."
+                                "Could not read created file."
                         )
                 );
             }
         }
     }
 
-    private void checkGradleStructure(
+    /**
+     * الحصول على المشروع Android الحقيقي.
+     *
+     * إذا كان ProjectWorkspaceManager موجوداً:
+     * نستعمله فقط.
+     *
+     * لا يوجد fallback صامت إلى jarvis_workspace.
+     */
+    private File resolveProjectWorkspace() {
+
+        if (projectWorkspaceManager == null) {
+            return null;
+        }
+
+        if (!projectWorkspaceManager.isReady()) {
+            return null;
+        }
+
+        File root =
+                projectWorkspaceManager.getProjectRoot();
+
+        if (root == null) {
+            return null;
+        }
+
+        return root.getAbsoluteFile();
+    }
+
+    /**
+     * فحص بنية Android/Gradle الحقيقية.
+     */
+    private void checkRealProjectStructure(
             List<VerificationCheck> checks
     ) {
 
+        File projectRoot =
+                resolveProjectWorkspace();
+
+        if (projectRoot == null) {
+
+            checks.add(
+                    VerificationCheck.failed(
+                            "REAL_PROJECT",
+                            "Real Android project workspace is not configured."
+                    )
+            );
+
+            return;
+        }
+
+        if (!projectRoot.exists() ||
+                !projectRoot.isDirectory()) {
+
+            checks.add(
+                    VerificationCheck.failed(
+                            "REAL_PROJECT",
+                            "Real Android project root does not exist."
+                    )
+            );
+
+            return;
+        }
+
+        checks.add(
+                VerificationCheck.passed(
+                        "REAL_PROJECT",
+                        "Real Android project root is available."
+                )
+        );
+
+        /*
+         * settings.gradle / settings.gradle.kts
+         */
         File settingsGradle =
                 new File(
-                        workspaceRoot,
+                        projectRoot,
                         "settings.gradle"
                 );
 
         File settingsKts =
                 new File(
-                        workspaceRoot,
+                        projectRoot,
                         "settings.gradle.kts"
                 );
 
-        boolean hasSettings =
-                settingsGradle.isFile()
-                        || settingsKts.isFile();
-
-        if (!hasSettings) {
+        if (!settingsGradle.isFile() &&
+                !settingsKts.isFile()) {
 
             checks.add(
                     VerificationCheck.failed(
@@ -606,9 +770,47 @@ public final class EvolutionVerificationEngine {
             );
         }
 
+        /*
+         * Root build.gradle.
+         */
+        File rootBuildGradle =
+                new File(
+                        projectRoot,
+                        "build.gradle"
+                );
+
+        File rootBuildKts =
+                new File(
+                        projectRoot,
+                        "build.gradle.kts"
+                );
+
+        if (!rootBuildGradle.isFile() &&
+                !rootBuildKts.isFile()) {
+
+            checks.add(
+                    VerificationCheck.failed(
+                            "ROOT_BUILD_FILE",
+                            "Root Gradle build file is missing."
+                    )
+            );
+
+        } else {
+
+            checks.add(
+                    VerificationCheck.passed(
+                            "ROOT_BUILD_FILE",
+                            "Root Gradle build file exists."
+                    )
+            );
+        }
+
+        /*
+         * Android app module.
+         */
         File app =
                 new File(
-                        workspaceRoot,
+                        projectRoot,
                         "app"
                 );
 
@@ -624,20 +826,30 @@ public final class EvolutionVerificationEngine {
             return;
         }
 
-        File buildGradle =
+        checks.add(
+                VerificationCheck.passed(
+                        "ANDROID_MODULE",
+                        "Android app module exists."
+                )
+        );
+
+        /*
+         * app/build.gradle
+         */
+        File appBuildGradle =
                 new File(
                         app,
                         "build.gradle"
                 );
 
-        File buildKts =
+        File appBuildKts =
                 new File(
                         app,
                         "build.gradle.kts"
                 );
 
-        if (!buildGradle.isFile() &&
-                !buildKts.isFile()) {
+        if (!appBuildGradle.isFile() &&
+                !appBuildKts.isFile()) {
 
             checks.add(
                     VerificationCheck.failed(
@@ -655,8 +867,46 @@ public final class EvolutionVerificationEngine {
                     )
             );
         }
+
+        /*
+         * Gradle Wrapper.
+         */
+        File gradlew =
+                new File(
+                        projectRoot,
+                        "gradlew"
+                );
+
+        File gradlewBat =
+                new File(
+                        projectRoot,
+                        "gradlew.bat"
+                );
+
+        if (!gradlew.isFile() &&
+                !gradlewBat.isFile()) {
+
+            checks.add(
+                    VerificationCheck.failed(
+                            "GRADLE_WRAPPER",
+                            "Gradle Wrapper is missing."
+                    )
+            );
+
+        } else {
+
+            checks.add(
+                    VerificationCheck.passed(
+                            "GRADLE_WRAPPER",
+                            "Gradle Wrapper exists."
+                    )
+            );
+        }
     }
 
+    /**
+     * التحقق من BuildRecord الحقيقي.
+     */
     private void checkBuildResult(
             List<VerificationCheck> checks,
             BuildEngine.BuildRecord buildRecord
@@ -667,7 +917,7 @@ public final class EvolutionVerificationEngine {
             checks.add(
                     VerificationCheck.failed(
                             "BUILD",
-                            "BuildEngine reported build failure."
+                            "BuildEngine reported that the build failed."
                     )
             );
 
@@ -679,7 +929,7 @@ public final class EvolutionVerificationEngine {
             checks.add(
                     VerificationCheck.failed(
                             "BUILD_EXIT_CODE",
-                            "Build exit code is not zero."
+                            "Gradle exit code is not zero."
                     )
             );
 
@@ -689,21 +939,43 @@ public final class EvolutionVerificationEngine {
         checks.add(
                 VerificationCheck.passed(
                         "BUILD_EXIT_CODE",
-                        "Gradle exited successfully."
+                        "Gradle exited with code 0."
                 )
         );
 
         File apk =
                 buildRecord.getApkFile();
 
-        if (apk == null ||
-                !apk.isFile() ||
-                apk.length() <= 0) {
+        if (apk == null) {
 
             checks.add(
                     VerificationCheck.failed(
                             "APK",
-                            "No valid APK was produced."
+                            "BuildRecord contains no APK file."
+                    )
+            );
+
+            return;
+        }
+
+        if (!apk.isFile()) {
+
+            checks.add(
+                    VerificationCheck.failed(
+                            "APK",
+                            "APK file does not exist."
+                    )
+            );
+
+            return;
+        }
+
+        if (apk.length() <= 0) {
+
+            checks.add(
+                    VerificationCheck.failed(
+                            "APK",
+                            "APK file exists but is empty."
                     )
             );
 
@@ -713,20 +985,31 @@ public final class EvolutionVerificationEngine {
         checks.add(
                 VerificationCheck.passed(
                         "APK",
-                        "A valid APK was produced."
+                        "A non-empty APK was produced by the build."
                 )
         );
+
+        /*
+         * APK خاصو يكون داخل المشروع الحقيقي
+         * أو على الأقل BuildEngine هو الذي أنتجه.
+         *
+         * لا نرفضه فقط لأنه قد يكون copy destination
+         * خارج المشروع.
+         */
     }
 
     /**
-     * Success Criteria الحالية في CapabilitySpec
-     * هي شروط نصية.
+     * Success Criteria.
      *
-     * المحرك لا يكذب ويعتبر مجرد وجود النص
-     * دليلاً على أن الوظيفة اشتغلت.
+     * ملاحظة مهمة:
      *
-     * لذلك يتم تسجيلها كمعلومات تحتاج
-     * Runtime/Tool evidence إذا كانت تتطلب تشغيل فعلي.
+     * وجود criterion لا يعني أن الوظيفة اشتغلت.
+     *
+     * لذلك هذا الفحص يتحقق من أن الشروط:
+     * - موجودة
+     * - غير فارغة
+     *
+     * أما إثبات التنفيذ الحقيقي فيحتاج Runtime evidence.
      */
     private void checkSuccessCriteria(
             List<VerificationCheck> checks,
@@ -742,15 +1025,17 @@ public final class EvolutionVerificationEngine {
             checks.add(
                     VerificationCheck.failed(
                             "SUCCESS_CRITERIA",
-                            "No success criteria defined."
+                            "No success criteria are defined."
                     )
             );
 
             return;
         }
 
-        for (String criterion :
-                criteria) {
+        int valid =
+                0;
+
+        for (String criterion : criteria) {
 
             if (criterion == null ||
                     criterion.trim().isEmpty()) {
@@ -758,31 +1043,53 @@ public final class EvolutionVerificationEngine {
                 checks.add(
                         VerificationCheck.failed(
                                 "SUCCESS_CRITERION",
-                                "Empty success criterion."
+                                "An empty success criterion was found."
                         )
                 );
 
             } else {
 
+                valid++;
+
                 checks.add(
                         VerificationCheck.passed(
                                 "SUCCESS_CRITERION",
-                                "Defined: "
+                                "Defined criterion: "
                                         + criterion
                         )
                 );
             }
         }
+
+        if (valid != criteria.size()) {
+
+            checks.add(
+                    VerificationCheck.failed(
+                            "SUCCESS_CRITERIA_VALIDITY",
+                            valid
+                                    + "/"
+                                    + criteria.size()
+                                    + " success criteria are valid."
+                    )
+            );
+        }
     }
 
-    private boolean isInsideWorkspace(
+    /**
+     * هل الملف داخل artifact workspace؟
+     */
+    private boolean isInsideArtifactWorkspace(
             File file
     ) {
+
+        if (file == null) {
+            return false;
+        }
 
         try {
 
             java.nio.file.Path root =
-                    workspaceRoot
+                    artifactWorkspaceRoot
                             .getCanonicalFile()
                             .toPath();
 
@@ -800,18 +1107,37 @@ public final class EvolutionVerificationEngine {
         }
     }
 
-    public VerificationReport
-    getLastReport() {
-
+    /**
+     * آخر تقرير.
+     */
+    public VerificationReport getLastReport() {
         return lastReport;
     }
 
+    /**
+     * Workspace الداخلي.
+     */
     public File getWorkspaceRoot() {
-        return workspaceRoot;
+        return artifactWorkspaceRoot;
+    }
+
+    /**
+     * Workspace المشروع الحقيقي.
+     */
+    public File getProjectWorkspaceRoot() {
+
+        return resolveProjectWorkspace();
+    }
+
+    public ProjectWorkspaceManager
+    getProjectWorkspaceManager() {
+
+        return projectWorkspaceManager;
     }
 
     public OwnerSecurityBoundary
     getSecurityBoundary() {
+
         return securityBoundary;
     }
 
@@ -835,7 +1161,7 @@ public final class EvolutionVerificationEngine {
     }
 
     /**
-     * نتيجة فحص واحد.
+     * نتيجة فحص واحدة.
      */
     public static final class VerificationCheck {
 
@@ -932,10 +1258,16 @@ public final class EvolutionVerificationEngine {
     public static final class VerificationReport {
 
         private final String capabilityId;
-        private final List<VerificationCheck> checks;
+
+        private final List<VerificationCheck>
+                checks;
+
         private final long durationMillis;
+
         private final int passedCount;
+
         private final int failedCount;
+
         private final int warningCount;
 
         private VerificationReport(
@@ -969,11 +1301,20 @@ public final class EvolutionVerificationEngine {
             for (VerificationCheck check :
                     checks) {
 
+                if (check == null) {
+                    continue;
+                }
+
                 if (check.isPassed()) {
+
                     passed++;
+
                 } else if (check.isFailed()) {
+
                     failed++;
-                } else {
+
+                } else if (check.isWarning()) {
+
                     warning++;
                 }
             }
@@ -994,6 +1335,12 @@ public final class EvolutionVerificationEngine {
                 long durationMillis
         ) {
 
+            if (checks == null) {
+
+                checks =
+                        Collections.emptyList();
+            }
+
             return new VerificationReport(
                     capabilityId,
                     checks,
@@ -1005,7 +1352,9 @@ public final class EvolutionVerificationEngine {
             return capabilityId;
         }
 
-        public List<VerificationCheck> getChecks() {
+        public List<VerificationCheck>
+        getChecks() {
+
             return checks;
         }
 
@@ -1025,6 +1374,11 @@ public final class EvolutionVerificationEngine {
             return warningCount;
         }
 
+        /**
+         * Warning لا يفشل التقرير.
+         *
+         * Failed فقط هو الذي يجعل التقرير failed.
+         */
         public boolean isPassed() {
             return failedCount == 0;
         }
@@ -1058,7 +1412,8 @@ public final class EvolutionVerificationEngine {
             for (VerificationCheck check :
                     checks) {
 
-                if (check.isFailed()) {
+                if (check != null &&
+                        check.isFailed()) {
 
                     failures.add(
                             check.getId()
@@ -1070,6 +1425,31 @@ public final class EvolutionVerificationEngine {
 
             return Collections.unmodifiableList(
                     failures
+            );
+        }
+
+        public List<String>
+        getWarnings() {
+
+            List<String> warnings =
+                    new ArrayList<>();
+
+            for (VerificationCheck check :
+                    checks) {
+
+                if (check != null &&
+                        check.isWarning()) {
+
+                    warnings.add(
+                            check.getId()
+                                    + ": "
+                                    + check.getMessage()
+                    );
+                }
+            }
+
+            return Collections.unmodifiableList(
+                    warnings
             );
         }
     }
