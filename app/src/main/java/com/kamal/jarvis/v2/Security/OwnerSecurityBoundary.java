@@ -64,10 +64,6 @@ public final class OwnerSecurityBoundary {
         return initialized;
     }
 
-    /**
-     * Returns true when the security boundary is initialized and active.
-     * This method does not expose or modify the owner identity.
-     */
     public synchronized boolean isActive() {
         return initialized;
     }
@@ -134,7 +130,19 @@ public final class OwnerSecurityBoundary {
         );
     }
 
-    public synchronized JarvisResult<Void> authorizeEvolutionChange(
+    /**
+     * Compatibility-safe authorization method.
+     *
+     * بعض المكونات كتتعامل معها كـ JarvisResult<Void>
+     * وبعضها كـ JarvisResult<Boolean>.
+     *
+     * الدالة كتستعمل generic type باش بجوج الاستعمالات
+     * يبقاو متوافقين بدون تغيير منطق الحماية.
+     *
+     * قيمة النجاح نفسها لا تحتاجها عملية التفويض؛
+     * المهم هو isSuccess().
+     */
+    public synchronized <T> JarvisResult<T> authorizeEvolutionChange(
             String area
     ) {
         if (area == null || area.trim().isEmpty()) {
