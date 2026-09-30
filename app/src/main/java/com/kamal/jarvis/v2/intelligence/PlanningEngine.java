@@ -2,6 +2,7 @@ package com.kamal.jarvis.v2.intelligence;
 
 import com.kamal.jarvis.v2.core.JarvisError;
 import com.kamal.jarvis.v2.core.JarvisResult;
+import com.kamal.jarvis.v2.core.ToolContract;
 import com.kamal.jarvis.v2.evolution.CapabilityDiscovery;
 import com.kamal.jarvis.v2.evolution.CapabilityPlan;
 import com.kamal.jarvis.v2.permissions.CapabilityPermission;
@@ -11,26 +12,24 @@ import com.kamal.jarvis.v2.tools.ToolRegistry;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
  * JARVIS V2 - Planning Engine
  *
- * محرك التخطيط.
+ * التخطيط مبني على الهدف والقدرات،
+ * وليس على لائحة أوامر ثابتة.
  *
- * المسؤوليات:
- * 1. استقبال نتيجة فهم الأمر.
- * 2. تحويل الهدف إلى CapabilityRequirement.
- * 3. اكتشاف الأدوات المتوفرة.
- * 4. معرفة الصلاحيات الناقصة.
- * 5. اختيار المسار المباشر أو البديل.
- * 6. تحديد هل نحتاج Evolution / Build.
- * 7. إنتاج خطة تنفيذ واضحة.
- *
- * PlanningEngine لا ينفذ الأدوات بنفسه.
- * التنفيذ يبقى في Execution/CapabilityExecutor.
+ * المسار:
+ * فهم الطلب
+ * -> تحديد المتطلبات
+ * -> اكتشاف الأدوات
+ * -> إنشاء الخطة
+ * -> تنفيذ / صلاحية / Evolution
  */
 public final class PlanningEngine {
 
@@ -50,7 +49,6 @@ public final class PlanningEngine {
             ToolRegistry toolRegistry,
             PermissionManager permissionManager
     ) {
-
         if (toolRegistry == null) {
             throw new IllegalArgumentException(
                     "toolRegistry cannot be null."
@@ -63,11 +61,8 @@ public final class PlanningEngine {
             );
         }
 
-        this.toolRegistry =
-                toolRegistry;
-
-        this.permissionManager =
-                permissionManager;
+        this.toolRegistry = toolRegistry;
+        this.permissionManager = permissionManager;
 
         this.capabilityDiscovery =
                 new CapabilityDiscovery(
@@ -76,13 +71,9 @@ public final class PlanningEngine {
                 );
     }
 
-    /**
-     * إنشاء خطة انطلاقاً من فهم الأمر.
-     */
     public synchronized JarvisResult<Plan> createPlan(
             CommandUnderstanding.Result understanding
     ) {
-
         if (understanding == null ||
                 !understanding.isValid()) {
 
@@ -97,12 +88,9 @@ public final class PlanningEngine {
         state = PlanningState.ANALYZING;
 
         CapabilityRequirement requirement =
-                createRequirement(
-                        understanding
-                );
+                createRequirement(understanding);
 
         if (requirement == null) {
-
             state = PlanningState.FAILED;
 
             return failure(
@@ -112,12 +100,9 @@ public final class PlanningEngine {
         }
 
         CapabilityDiscovery.DiscoveryResult discovery =
-                capabilityDiscovery.discover(
-                        requirement
-                );
+                capabilityDiscovery.discover(requirement);
 
         if (discovery == null) {
-
             state = PlanningState.FAILED;
 
             return failure(
@@ -127,12 +112,9 @@ public final class PlanningEngine {
         }
 
         CapabilityPlan capabilityPlan =
-                CapabilityPlan.fromDiscovery(
-                        discovery
-                );
+                CapabilityPlan.fromDiscovery(discovery);
 
         if (capabilityPlan == null) {
-
             state = PlanningState.FAILED;
 
             return failure(
@@ -150,7 +132,6 @@ public final class PlanningEngine {
                 );
 
         if (plan == null) {
-
             state = PlanningState.FAILED;
 
             return failure(
@@ -162,24 +143,13 @@ public final class PlanningEngine {
         lastPlan = plan;
 
         if (plan.requiresEvolution()) {
-
-            state =
-                    PlanningState.EVOLUTION_REQUIRED;
-
+            state = PlanningState.EVOLUTION_REQUIRED;
         } else if (plan.requiresPermission()) {
-
-            state =
-                    PlanningState.PERMISSION_REQUIRED;
-
+            state = PlanningState.PERMISSION_REQUIRED;
         } else if (plan.canExecute()) {
-
-            state =
-                    PlanningState.READY;
-
+            state = PlanningState.READY;
         } else {
-
-            state =
-                    PlanningState.UNAVAILABLE;
+            state = PlanningState.UNAVAILABLE;
         }
 
         return JarvisResult.success(
@@ -189,12 +159,14 @@ public final class PlanningEngine {
     }
 
     /**
-     * إنشاء CapabilityRequirement من فهم الأمر.
+     * يحول فهم الطلب إلى متطلبات حقيقية.
+     *
+     * لا توجد لائحة ثابتة تربط Intent
+     * بأداة معينة.
      */
     private CapabilityRequirement createRequirement(
             CommandUnderstanding.Result understanding
     ) {
-
         CapabilityRequirement.Builder builder =
                 CapabilityRequirement.builder(
                         understanding.getCapabilityId(),
@@ -202,30 +174,25 @@ public final class PlanningEngine {
                 );
 
         for (
-                CommandUnderstanding.Requirement requirement
+                CommandUnderstanding.Requirement required
                 : understanding.getRequirements()
         ) {
 
-            switch (requirement) {
+            switch (required) {
 
                 case NOTIFICATIONS:
-
                     builder.requirePermission(
                             CapabilityPermission.NOTIFICATIONS
                     );
-
                     break;
 
                 case BACKGROUND_EXECUTION:
-
                     builder.requirePermission(
                             CapabilityPermission.BACKGROUND_EXECUTION
                     );
-
                     break;
 
                 case FILE_ACCESS:
-
                     builder.requirePermission(
                             CapabilityPermission.FILE_READ
                     );
@@ -233,27 +200,21 @@ public final class PlanningEngine {
                     builder.requirePermission(
                             CapabilityPermission.FILE_WRITE
                     );
-
                     break;
 
                 case NETWORK:
-
                     builder.requirePermission(
                             CapabilityPermission.NETWORK
                     );
-
                     break;
 
                 case MICROPHONE:
-
                     builder.requirePermission(
                             CapabilityPermission.MICROPHONE
                     );
-
                     break;
 
                 case PROJECT_ACCESS:
-
                     builder.requirePermission(
                             CapabilityPermission.PROJECT_READ
                     );
@@ -261,42 +222,23 @@ public final class PlanningEngine {
                     builder.requirePermission(
                             CapabilityPermission.PROJECT_WRITE
                     );
-
                     break;
 
                 case BUILD_ACCESS:
-
                     builder.requirePermission(
                             CapabilityPermission.BUILD_PROJECT
                     );
-
                     break;
 
                 case TEST_ACCESS:
-
                     builder.requirePermission(
                             CapabilityPermission.RUN_TESTS
                     );
-
                     break;
 
                 case OWNER_AUTHORIZATION:
-
-                    builder.requireOwnerAuthorization();
-
-                    break;
-
                 case DESTRUCTIVE_OPERATION:
-
-                    /*
-                     * العمليات الحساسة لا تتحول تلقائياً
-                     * إلى Android permissions.
-                     *
-                     * تبقى مرتبطة بحدود المالك والأمان.
-                     */
-
                     builder.requireOwnerAuthorization();
-
                     break;
 
                 default:
@@ -304,14 +246,25 @@ public final class PlanningEngine {
             }
         }
 
-        addTools(
-                builder,
-                understanding
-        );
+        /*
+         * البحث الديناميكي عن الأدوات الموجودة.
+         */
+        List<ToolMatch> matches =
+                findMatchingTools(understanding);
+
+        for (ToolMatch match : matches) {
+
+            if (match.score >= 0.55d) {
+
+                builder.preferTool(
+                        match.tool.getId()
+                );
+            }
+        }
 
         /*
-         * إذا لم تكن هناك Capability مناسبة،
-         * يسمح هذا لـEvolutionCore بمحاولة بنائها.
+         * إذا ما كانتش القدرة موجودة،
+         * EvolutionCore يقدر يحاول يبنيها.
          */
         builder.allowAlternativeBuilding();
 
@@ -319,150 +272,224 @@ public final class PlanningEngine {
     }
 
     /**
-     * ربط نوع الأمر بالأدوات الموجودة.
+     * البحث الديناميكي داخل ToolRegistry.
+     *
+     * يعتمد على:
+     * ID
+     * الاسم
+     * الوصف
+     * metadata
+     * هدف المستخدم
+     * الأمر الأصلي
      */
-    private void addTools(
-            CapabilityRequirement.Builder builder,
+    private List<ToolMatch> findMatchingTools(
             CommandUnderstanding.Result understanding
     ) {
+        List<ToolMatch> matches =
+                new ArrayList<>();
 
-        switch (understanding.getIntentType()) {
+        String goal =
+                safe(understanding.getGoal());
 
-            case REMINDER:
+        String command =
+                safe(understanding.getOriginalCommand());
 
-                builder.preferTool(
-                        "android.reminders"
+        String normalized =
+                safe(understanding.getNormalizedCommand());
+
+        List<String> requestTokens =
+                tokenize(
+                        goal + " " +
+                        command + " " +
+                        normalized
                 );
 
-                builder.alternativeTool(
-                        "android.notifications"
+        for (ToolContract tool :
+                toolRegistry.getTools()) {
+
+            if (tool == null ||
+                    !tool.isAvailable()) {
+                continue;
+            }
+
+            double score =
+                    scoreTool(
+                            tool,
+                            requestTokens,
+                            goal
+                    );
+
+            if (score > 0d) {
+
+                matches.add(
+                        new ToolMatch(
+                                tool,
+                                score
+                        )
                 );
-
-                break;
-
-            case FILE_OPERATION:
-
-                builder.preferTool(
-                        "android.files"
-                );
-
-                builder.alternativeTool(
-                        "workspace.files"
-                );
-
-                break;
-
-            case APP_ACTION:
-
-                builder.preferTool(
-                        "android.app_launcher"
-                );
-
-                builder.alternativeTool(
-                        "android.intent"
-                );
-
-                break;
-
-            case SEARCH:
-
-                builder.preferTool(
-                        "network.search"
-                );
-
-                builder.alternativeTool(
-                        "network.http"
-                );
-
-                break;
-
-            case VOICE:
-
-                builder.preferTool(
-                        "android.microphone"
-                );
-
-                break;
-
-            case DEVELOPMENT:
-
-                builder.preferTool(
-                        "project.inspector"
-                );
-
-                builder.preferTool(
-                        "project.builder"
-                );
-
-                builder.alternativeTool(
-                        "project.workspace"
-                );
-
-                break;
-
-            case SETTINGS:
-
-                builder.preferTool(
-                        "android.settings"
-                );
-
-                builder.alternativeTool(
-                        "android.intent"
-                );
-
-                break;
-
-            case INFORMATION:
-
-                builder.preferTool(
-                        "jarvis.information"
-                );
-
-                builder.alternativeTool(
-                        "network.search"
-                );
-
-                break;
-
-            case NETWORK:
-
-                builder.preferTool(
-                        "network.http"
-                );
-
-                builder.alternativeTool(
-                        "network.search"
-                );
-
-                break;
-
-            case GENERAL:
-
-            default:
-
-                builder.preferTool(
-                        "jarvis.general"
-                );
-
-                builder.alternativeTool(
-                        "jarvis.capability"
-                );
-
-                break;
+            }
         }
+
+        Collections.sort(
+                matches,
+                new Comparator<ToolMatch>() {
+
+                    @Override
+                    public int compare(
+                            ToolMatch left,
+                            ToolMatch right
+                    ) {
+                        return Double.compare(
+                                right.score,
+                                left.score
+                        );
+                    }
+                }
+        );
+
+        /*
+         * ناخدو غير أحسن 5 أدوات
+         * باش الخطة تبقى واضحة.
+         */
+        if (matches.size() > 5) {
+
+            return new ArrayList<>(
+                    matches.subList(0, 5)
+            );
+        }
+
+        return matches;
     }
 
-    /**
-     * تحويل Discovery + CapabilityPlan
-     * إلى خطة تنفيذ.
-     */
+    private double scoreTool(
+            ToolContract tool,
+            List<String> requestTokens,
+            String goal
+    ) {
+        String searchable =
+                safe(tool.getId()) + " " +
+                safe(tool.getName()) + " " +
+                safe(tool.getDescription());
+
+        Map<String, Object> metadata =
+                tool.getMetadata();
+
+        if (metadata != null &&
+                !metadata.isEmpty()) {
+
+            searchable += " " +
+                    metadata.toString();
+        }
+
+        List<String> toolTokens =
+                tokenize(searchable);
+
+        if (toolTokens.isEmpty() ||
+                requestTokens.isEmpty()) {
+
+            return 0d;
+        }
+
+        int matches = 0;
+
+        for (String token : requestTokens) {
+
+            if (token.length() < 3) {
+                continue;
+            }
+
+            if (toolTokens.contains(token)) {
+                matches++;
+                continue;
+            }
+
+            for (String toolToken : toolTokens) {
+
+                if (toolToken.contains(token) ||
+                        token.contains(toolToken)) {
+
+                    matches++;
+                    break;
+                }
+            }
+        }
+
+        if (matches == 0) {
+            return 0d;
+        }
+
+        double score =
+                (double) matches /
+                        Math.max(
+                                1,
+                                Math.min(
+                                        requestTokens.size(),
+                                        8
+                                )
+                        );
+
+        String lowerGoal =
+                goal.toLowerCase();
+
+        String lowerTool =
+                searchable.toLowerCase();
+
+        /*
+         * إذا كان الهدف كامل موجود
+         * فالوصف ديال الأداة، نزيدو الثقة.
+         */
+        if (!lowerGoal.isEmpty() &&
+                lowerTool.contains(lowerGoal)) {
+
+            score += 0.25d;
+        }
+
+        return Math.min(
+                1.0d,
+                score
+        );
+    }
+
+    private List<String> tokenize(
+            String value
+    ) {
+        if (value == null ||
+                value.trim().isEmpty()) {
+
+            return Collections.emptyList();
+        }
+
+        String normalized =
+                value.toLowerCase()
+                        .replaceAll(
+                                "[^\\p{L}\\p{N}_]+",
+                                " "
+                        );
+
+        String[] parts =
+                normalized
+                        .trim()
+                        .split("\\s+");
+
+        Set<String> unique =
+                new LinkedHashSet<>();
+
+        for (String part : parts) {
+
+            if (part.length() >= 2) {
+                unique.add(part);
+            }
+        }
+
+        return new ArrayList<>(unique);
+    }
+
     private Plan buildPlan(
             CommandUnderstanding.Result understanding,
             CapabilityRequirement requirement,
             CapabilityDiscovery.DiscoveryResult discovery,
             CapabilityPlan capabilityPlan
     ) {
-
         List<String> tools =
                 new ArrayList<>(
                         capabilityPlan.getToolIds()
@@ -515,7 +542,6 @@ public final class PlanningEngine {
     private PlanAction mapAction(
             CapabilityPlan.Action action
     ) {
-
         if (action == null) {
             return PlanAction.UNAVAILABLE;
         }
@@ -535,19 +561,14 @@ public final class PlanningEngine {
                 return PlanAction.BUILD_CAPABILITY;
 
             case UNAVAILABLE:
-
             default:
                 return PlanAction.UNAVAILABLE;
         }
     }
 
-    /**
-     * فحص سريع بدون تنفيذ.
-     */
     public synchronized boolean canPlan(
             CommandUnderstanding.Result understanding
     ) {
-
         if (understanding == null ||
                 !understanding.isValid()) {
 
@@ -555,9 +576,7 @@ public final class PlanningEngine {
         }
 
         CapabilityRequirement requirement =
-                createRequirement(
-                        understanding
-                );
+                createRequirement(understanding);
 
         if (requirement == null) {
             return false;
@@ -572,14 +591,10 @@ public final class PlanningEngine {
                 discovery.isValid();
     }
 
-    /**
-     * معرفة الصلاحيات الناقصة.
-     */
     public Set<CapabilityPermission>
     getMissingPermissions(
             CommandUnderstanding.Result understanding
     ) {
-
         if (understanding == null ||
                 !understanding.isValid()) {
 
@@ -587,9 +602,7 @@ public final class PlanningEngine {
         }
 
         CapabilityRequirement requirement =
-                createRequirement(
-                        understanding
-                );
+                createRequirement(understanding);
 
         if (requirement == null) {
             return Collections.emptySet();
@@ -629,7 +642,8 @@ public final class PlanningEngine {
     }
 
     public boolean isReady() {
-        return state == PlanningState.READY;
+        return state ==
+                PlanningState.READY;
     }
 
     public boolean requiresEvolution() {
@@ -655,7 +669,6 @@ public final class PlanningEngine {
             JarvisError.Type type,
             String message
     ) {
-
         return JarvisResult.failure(
                 JarvisError.of(
                         type,
@@ -665,62 +678,56 @@ public final class PlanningEngine {
         );
     }
 
+    private String safe(String value) {
+        return value == null
+                ? ""
+                : value.trim();
+    }
+
+    private static final class ToolMatch {
+
+        private final ToolContract tool;
+        private final double score;
+
+        private ToolMatch(
+                ToolContract tool,
+                double score
+        ) {
+            this.tool = tool;
+            this.score = score;
+        }
+    }
+
     public enum PlanningState {
-
         IDLE,
-
         ANALYZING,
-
         READY,
-
         PERMISSION_REQUIRED,
-
         EVOLUTION_REQUIRED,
-
         UNAVAILABLE,
-
         FAILED
     }
 
     public enum PlanAction {
-
         EXECUTE_DIRECT,
-
         EXECUTE_ALTERNATIVE,
-
         REQUEST_PERMISSION,
-
         BUILD_CAPABILITY,
-
         UNAVAILABLE
     }
 
-    /**
-     * الخطة النهائية التي تنتقل إلى طبقة التنفيذ.
-     */
     public static final class Plan {
 
         private final CommandUnderstanding.Result understanding;
-
         private final CapabilityRequirement requirement;
-
         private final CapabilityPlan capabilityPlan;
-
         private final PlanAction action;
-
         private final List<String> toolIds;
-
-        private final Set<CapabilityPermission>
-                missingPermissions;
-
+        private final Set<CapabilityPermission> missingPermissions;
         private final boolean requiresEvolution;
-
         private final boolean requiresPermission;
-
         private final boolean executable;
-
         private final boolean ownerAuthorizationRequired;
-
         private final String reason;
 
         private Plan(
@@ -736,18 +743,10 @@ public final class PlanningEngine {
                 boolean ownerAuthorizationRequired,
                 String reason
         ) {
-
-            this.understanding =
-                    understanding;
-
-            this.requirement =
-                    requirement;
-
-            this.capabilityPlan =
-                    capabilityPlan;
-
-            this.action =
-                    action;
+            this.understanding = understanding;
+            this.requirement = requirement;
+            this.capabilityPlan = capabilityPlan;
+            this.action = action;
 
             this.toolIds =
                     Collections.unmodifiableList(
@@ -850,55 +849,33 @@ public final class PlanningEngine {
         }
 
         public String getCapabilityId() {
-
             return requirement == null
                     ? ""
                     : requirement.getCapabilityId();
         }
 
         public String getGoal() {
-
             return requirement == null
                     ? ""
                     : requirement.getDescription();
         }
 
         public String getSummary() {
-
             StringBuilder result =
                     new StringBuilder();
 
-            result.append(
-                    "Plan="
-            );
-
-            result.append(
-                    action.name()
-            );
-
-            result.append(
-                    ", capability="
-            );
-
-            result.append(
-                    getCapabilityId()
-            );
-
-            result.append(
-                    ", tools="
-            );
-
-            result.append(
-                    toolIds
-            );
+            result.append("Plan=")
+                    .append(action.name())
+                    .append(", capability=")
+                    .append(getCapabilityId())
+                    .append(", tools=")
+                    .append(toolIds);
 
             if (!missingPermissions.isEmpty()) {
 
                 result.append(
                         ", missingPermissions="
-                );
-
-                result.append(
+                ).append(
                         missingPermissions
                 );
             }
@@ -915,10 +892,8 @@ public final class PlanningEngine {
 
         @Override
         public String toString() {
-
             return "Plan{" +
-                    "action=" +
-                    action +
+                    "action=" + action +
                     ", capabilityId='" +
                     getCapabilityId() +
                     '\'' +
