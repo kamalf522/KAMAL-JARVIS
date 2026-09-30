@@ -23,23 +23,34 @@ import java.util.List;
  *   ↓
  * Knowledge Memory
  *   ↓
- * Continuous Learning
+ * Evolution Context
+ *   ↓
+ * Continuous Learning / Evolution
  *
  * هذا المحرك لا يحتاج من المستخدم إضافة المصادر.
  *
- * KnowledgeAcquisitionEngine هو المسؤول عن:
+ * KnowledgeAcquisitionEngine:
  * - اكتشاف المصادر
  * - تقييم المصادر
  * - جمع المعرفة
  *
- * KnowledgeVerificationEngine هو المسؤول عن:
+ * KnowledgeVerificationEngine:
  * - التحقق
  * - مقارنة المعرفة
  * - اكتشاف التعارض
  *
- * KnowledgeMemory هو المسؤول عن:
+ * KnowledgeMemory:
  * - حفظ المعرفة المقبولة
  * - استرجاعها
+ *
+ * EvolutionContext:
+ * - يحمل المعرفة الموثقة التي يمكن أن يستفيد منها
+ *   نظام التطور.
+ *
+ * مهم:
+ * هذا المحرك لا يقوم بنفسه بتعديل المشروع.
+ * ولا ينشئ كوداً من معرفة غير موثقة.
+ * نظام Evolution هو الذي يقرر ماذا يجب تطويره.
  */
 public final class KnowledgeLearningEngine {
 
@@ -66,21 +77,18 @@ public final class KnowledgeLearningEngine {
     private LearningResult lastResult;
 
     /*
-     * الوضع الافتراضي:
-     *
-     * VERIFIED فقط تدخل الذاكرة.
+     * VERIFIED فقط تدخل الذاكرة
+     * في الوضع الافتراضي.
      */
     private boolean storeReviewItems = false;
 
     /*
-     * إذا كان true يستطيع JARVIS إعادة فحص
-     * المصادر التي سبق اكتشافها بشكل دوري.
+     * إعادة فحص المصادر المكتشفة بشكل دوري.
      */
     private boolean continuousSourceRevalidation = true;
 
     /*
-     * عدد دورات التعلم التي يجب بعدها
-     * إعادة فحص المصادر.
+     * عدد دورات التعلم بين عمليات إعادة الفحص.
      */
     private long revalidationInterval = 5L;
 
@@ -132,7 +140,7 @@ public final class KnowledgeLearningEngine {
     }
 
     /**
-     * دورة تعلم كاملة.
+     * دورة تعلم كاملة:
      *
      * Internet
      * -> Discovery
@@ -140,6 +148,7 @@ public final class KnowledgeLearningEngine {
      * -> Acquisition
      * -> Verification
      * -> Memory
+     * -> Evolution Context
      */
     public synchronized LearningResult learn(
             String query,
@@ -147,9 +156,7 @@ public final class KnowledgeLearningEngine {
     ) {
 
         String normalizedQuery =
-                normalize(
-                        query
-                );
+                normalize(query);
 
         if (normalizedQuery.isEmpty()) {
 
@@ -176,9 +183,6 @@ public final class KnowledgeLearningEngine {
 
         /*
          * إعادة التحقق من المصادر بشكل دوري.
-         *
-         * هذا لا يضيف مصادر يدوياً.
-         * JARVIS هو الذي يعيد فحصها.
          */
         if (shouldRevalidateSources()) {
 
@@ -188,19 +192,20 @@ public final class KnowledgeLearningEngine {
                         .revalidateSources();
 
             } catch (Exception ignored) {
+
                 /*
-                 * فشل إعادة التحقق لا يمنع دورة
-                 * التعلم الحالية من محاولة اكتشاف
-                 * مصادر جديدة.
+                 * فشل إعادة التحقق لا يمنع
+                 * محاولة التعلم الحالية.
                  */
             }
         }
 
         /*
-         * المرحلة 1:
-         *
-         * اكتشاف المصادر + الثقة + جمع المعرفة.
+         * =========================================
+         * 1. ACQUISITION
+         * =========================================
          */
+
         state =
                 LearningState.ACQUIRING;
 
@@ -257,6 +262,11 @@ public final class KnowledgeLearningEngine {
 
             successfulLearningCount++;
 
+            EvolutionContext evolutionContext =
+                    EvolutionContext.empty(
+                            lastQuery
+                    );
+
             lastResult =
                     LearningResult.success(
                             lastQuery,
@@ -265,17 +275,19 @@ public final class KnowledgeLearningEngine {
                             Collections.emptyList(),
                             Collections.emptyList(),
                             Collections.emptyList(),
-                            0
+                            0,
+                            evolutionContext
                     );
 
             return lastResult;
         }
 
         /*
-         * المرحلة 2:
-         *
-         * التحقق من المعرفة.
+         * =========================================
+         * 2. VERIFICATION
+         * =========================================
          */
+
         state =
                 LearningState.VERIFYING;
 
@@ -334,10 +346,11 @@ public final class KnowledgeLearningEngine {
                 );
 
         /*
-         * المرحلة 3:
-         *
-         * اختيار ما يدخل الذاكرة.
+         * =========================================
+         * 3. MEMORY
+         * =========================================
          */
+
         state =
                 LearningState.STORING;
 
@@ -353,7 +366,7 @@ public final class KnowledgeLearningEngine {
 
         /*
          * المعرفة التي تحتاج مراجعة لا تدخل
-         * إلا إذا طلب النظام ذلك صراحة.
+         * إلا إذا سمح النظام بذلك.
          */
         if (
                 includeReviewItems
@@ -371,10 +384,28 @@ public final class KnowledgeLearningEngine {
                 );
 
         /*
-         * المرحلة 4:
+         * =========================================
+         * 4. EVOLUTION CONTEXT
+         * =========================================
          *
-         * إتمام دورة التعلم.
+         * المعرفة الموثقة تصبح متاحة لنظام التطور.
+         *
+         * لا يتم هنا تعديل أي ملف أو كود.
          */
+        EvolutionContext evolutionContext =
+                createEvolutionContext(
+                        lastQuery,
+                        verifiedItems,
+                        reviewItems,
+                        rejectedItems
+                );
+
+        /*
+         * =========================================
+         * 5. COMPLETE
+         * =========================================
+         */
+
         state =
                 LearningState.COMPLETED;
 
@@ -388,7 +419,8 @@ public final class KnowledgeLearningEngine {
                         verifiedItems,
                         reviewItems,
                         rejectedItems,
-                        storedCount
+                        storedCount,
+                        evolutionContext
                 );
 
         return lastResult;
@@ -396,8 +428,6 @@ public final class KnowledgeLearningEngine {
 
     /**
      * تعلم من معرفة موجودة مسبقاً.
-     *
-     * المعرفة تمر عبر التحقق قبل التخزين.
      */
     public synchronized LearningResult learnItems(
             List<KnowledgeItem> items
@@ -490,6 +520,14 @@ public final class KnowledgeLearningEngine {
                         toStore
                 );
 
+        EvolutionContext evolutionContext =
+                createEvolutionContext(
+                        "",
+                        verified,
+                        review,
+                        rejected
+                );
+
         state =
                 LearningState.COMPLETED;
 
@@ -503,7 +541,8 @@ public final class KnowledgeLearningEngine {
                         verified,
                         review,
                         rejected,
-                        stored
+                        stored,
+                        evolutionContext
                 );
 
         return lastResult;
@@ -556,6 +595,57 @@ public final class KnowledgeLearningEngine {
     }
 
     /**
+     * استرجاع آخر Evolution Context.
+     *
+     * هذا هو الجسر المعماري بين:
+     *
+     * Learning
+     * و
+     * Evolution
+     */
+    public synchronized EvolutionContext
+    getLastEvolutionContext() {
+
+        if (lastResult == null) {
+            return null;
+        }
+
+        return lastResult.getEvolutionContext();
+    }
+
+    /**
+     * هل توجد معرفة موثقة يمكن لنظام التطور
+     * الاستفادة منها؟
+     */
+    public synchronized boolean
+    hasEvolutionKnowledge() {
+
+        EvolutionContext context =
+                getLastEvolutionContext();
+
+        return context != null
+                && context.hasVerifiedKnowledge();
+    }
+
+    /**
+     * الحصول على المعرفة التي يمكن أن يستفيد
+     * منها نظام التطور.
+     */
+    public synchronized List<KnowledgeItem>
+    getEvolutionKnowledge() {
+
+        EvolutionContext context =
+                getLastEvolutionContext();
+
+        if (context == null) {
+
+            return Collections.emptyList();
+        }
+
+        return context.getVerifiedKnowledge();
+    }
+
+    /**
      * تفعيل / تعطيل تخزين العناصر
      * التي تحتاج مراجعة.
      */
@@ -567,7 +657,8 @@ public final class KnowledgeLearningEngine {
                 enabled;
     }
 
-    public synchronized boolean isStoreReviewItemsEnabled() {
+    public synchronized boolean
+    isStoreReviewItemsEnabled() {
 
         return storeReviewItems;
     }
@@ -575,7 +666,8 @@ public final class KnowledgeLearningEngine {
     /**
      * تفعيل / تعطيل إعادة فحص المصادر.
      */
-    public synchronized void setContinuousSourceRevalidation(
+    public synchronized void
+    setContinuousSourceRevalidation(
             boolean enabled
     ) {
 
@@ -606,7 +698,8 @@ public final class KnowledgeLearningEngine {
                 interval;
     }
 
-    public synchronized long getRevalidationInterval() {
+    public synchronized long
+    getRevalidationInterval() {
 
         return revalidationInterval;
     }
@@ -614,7 +707,8 @@ public final class KnowledgeLearningEngine {
     /**
      * إجبار JARVIS على إعادة فحص مصادره الآن.
      */
-    public synchronized KnowledgeSourceTrustEngine.RevalidationResult
+    public synchronized
+    KnowledgeSourceTrustEngine.RevalidationResult
     revalidateSourcesNow() {
 
         return acquisitionEngine
@@ -626,7 +720,8 @@ public final class KnowledgeLearningEngine {
      */
     public synchronized List<
             KnowledgeSourceTrustEngine.SourceProfile
-            > getDiscoveredSources() {
+            >
+    getDiscoveredSources() {
 
         return acquisitionEngine
                 .getDiscoveredSourceProfiles();
@@ -637,7 +732,8 @@ public final class KnowledgeLearningEngine {
      */
     public synchronized List<
             KnowledgeSourceTrustEngine.SourceProfile
-            > getUsableSources() {
+            >
+    getUsableSources() {
 
         return acquisitionEngine
                 .getUsableSourceProfiles();
@@ -692,17 +788,20 @@ public final class KnowledgeLearningEngine {
         return learningCount;
     }
 
-    public synchronized long getSuccessfulLearningCount() {
+    public synchronized long
+    getSuccessfulLearningCount() {
 
         return successfulLearningCount;
     }
 
-    public synchronized long getFailedLearningCount() {
+    public synchronized long
+    getFailedLearningCount() {
 
         return failedLearningCount;
     }
 
-    public synchronized LearningResult getLastResult() {
+    public synchronized LearningResult
+    getLastResult() {
 
         return lastResult;
     }
@@ -746,6 +845,27 @@ public final class KnowledgeLearningEngine {
                 learningCount
                         % revalidationInterval
                         == 0L
+        );
+    }
+
+    /**
+     * بناء السياق الذي سيمر لاحقاً
+     * إلى نظام التطور.
+     */
+    private EvolutionContext
+    createEvolutionContext(
+            String query,
+            List<KnowledgeItem> verifiedItems,
+            List<KnowledgeItem> reviewItems,
+            List<KnowledgeItem> rejectedItems
+    ) {
+
+        return new EvolutionContext(
+                query,
+                verifiedItems,
+                reviewItems,
+                rejectedItems,
+                System.currentTimeMillis()
         );
     }
 
@@ -800,6 +920,153 @@ public final class KnowledgeLearningEngine {
     }
 
     /**
+     * السياق المعرفي الذي ينتقل من Learning
+     * إلى Evolution.
+     *
+     * لا ينفذ أي تغيير بنفسه.
+     */
+    public static final class EvolutionContext {
+
+        private final String query;
+
+        private final List<KnowledgeItem>
+                verifiedKnowledge;
+
+        private final List<KnowledgeItem>
+                reviewKnowledge;
+
+        private final List<KnowledgeItem>
+                rejectedKnowledge;
+
+        private final long createdAt;
+
+        private EvolutionContext(
+                String query,
+                List<KnowledgeItem> verifiedKnowledge,
+                List<KnowledgeItem> reviewKnowledge,
+                List<KnowledgeItem> rejectedKnowledge,
+                long createdAt
+        ) {
+
+            this.query =
+                    query == null
+                            ? ""
+                            : query;
+
+            this.verifiedKnowledge =
+                    immutableList(
+                            verifiedKnowledge
+                    );
+
+            this.reviewKnowledge =
+                    immutableList(
+                            reviewKnowledge
+                    );
+
+            this.rejectedKnowledge =
+                    immutableList(
+                            rejectedKnowledge
+                    );
+
+            this.createdAt =
+                    createdAt;
+        }
+
+        public static EvolutionContext empty(
+                String query
+        ) {
+
+            return new EvolutionContext(
+                    query,
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    System.currentTimeMillis()
+            );
+        }
+
+        public String getQuery() {
+
+            return query;
+        }
+
+        public List<KnowledgeItem>
+        getVerifiedKnowledge() {
+
+            return verifiedKnowledge;
+        }
+
+        public List<KnowledgeItem>
+        getReviewKnowledge() {
+
+            return reviewKnowledge;
+        }
+
+        public List<KnowledgeItem>
+        getRejectedKnowledge() {
+
+            return rejectedKnowledge;
+        }
+
+        public int getVerifiedCount() {
+
+            return verifiedKnowledge.size();
+        }
+
+        public int getReviewCount() {
+
+            return reviewKnowledge.size();
+        }
+
+        public int getRejectedCount() {
+
+            return rejectedKnowledge.size();
+        }
+
+        public boolean hasVerifiedKnowledge() {
+
+            return !verifiedKnowledge.isEmpty();
+        }
+
+        public boolean hasReviewKnowledge() {
+
+            return !reviewKnowledge.isEmpty();
+        }
+
+        public boolean isEmpty() {
+
+            return verifiedKnowledge.isEmpty()
+                    && reviewKnowledge.isEmpty()
+                    && rejectedKnowledge.isEmpty();
+        }
+
+        public long getCreatedAt() {
+
+            return createdAt;
+        }
+
+        private static List<KnowledgeItem>
+        immutableList(
+                List<KnowledgeItem> items
+        ) {
+
+            if (
+                    items == null
+                            || items.isEmpty()
+            ) {
+
+                return Collections.emptyList();
+            }
+
+            return Collections.unmodifiableList(
+                    new ArrayList<>(
+                            items
+                    )
+            );
+        }
+    }
+
+    /**
      * نتيجة دورة التعلم.
      */
     public static final class LearningResult {
@@ -827,6 +1094,12 @@ public final class KnowledgeLearningEngine {
 
         private final String message;
 
+        /*
+         * الجسر المعرفي نحو Evolution.
+         */
+        private final EvolutionContext
+                evolutionContext;
+
         private LearningResult(
                 boolean success,
                 String query,
@@ -838,7 +1111,8 @@ public final class KnowledgeLearningEngine {
                 List<KnowledgeItem> reviewItems,
                 List<KnowledgeItem> rejectedItems,
                 int storedCount,
-                String message
+                String message,
+                EvolutionContext evolutionContext
         ) {
 
             this.success =
@@ -880,9 +1154,13 @@ public final class KnowledgeLearningEngine {
                     message == null
                             ? ""
                             : message;
+
+            this.evolutionContext =
+                    evolutionContext;
         }
 
-        private static List<KnowledgeItem> immutableList(
+        private static List<KnowledgeItem>
+        immutableList(
                 List<KnowledgeItem> items
         ) {
 
@@ -910,7 +1188,8 @@ public final class KnowledgeLearningEngine {
                 List<KnowledgeItem> verifiedItems,
                 List<KnowledgeItem> reviewItems,
                 List<KnowledgeItem> rejectedItems,
-                int storedCount
+                int storedCount,
+                EvolutionContext evolutionContext
         ) {
 
             return new LearningResult(
@@ -922,7 +1201,8 @@ public final class KnowledgeLearningEngine {
                     reviewItems,
                     rejectedItems,
                     storedCount,
-                    "Knowledge learning cycle completed."
+                    "Knowledge learning cycle completed.",
+                    evolutionContext
             );
         }
 
@@ -940,7 +1220,8 @@ public final class KnowledgeLearningEngine {
                     Collections.emptyList(),
                     Collections.emptyList(),
                     0,
-                    message
+                    message,
+                    null
             );
         }
 
@@ -964,7 +1245,8 @@ public final class KnowledgeLearningEngine {
                     Collections.emptyList(),
                     Collections.emptyList(),
                     0,
-                    message
+                    message,
+                    null
             );
         }
 
@@ -990,19 +1272,23 @@ public final class KnowledgeLearningEngine {
                     Collections.emptyList(),
                     Collections.emptyList(),
                     0,
-                    message
+                    message,
+                    null
             );
         }
 
         public boolean isSuccess() {
+
             return success;
         }
 
         public boolean isFailure() {
+
             return !success;
         }
 
         public String getQuery() {
+
             return query;
         }
 
@@ -1018,44 +1304,74 @@ public final class KnowledgeLearningEngine {
             return verificationReport;
         }
 
-        public List<KnowledgeItem> getVerifiedItems() {
+        public List<KnowledgeItem>
+        getVerifiedItems() {
+
             return verifiedItems;
         }
 
-        public List<KnowledgeItem> getReviewItems() {
+        public List<KnowledgeItem>
+        getReviewItems() {
+
             return reviewItems;
         }
 
-        public List<KnowledgeItem> getRejectedItems() {
+        public List<KnowledgeItem>
+        getRejectedItems() {
+
             return rejectedItems;
         }
 
         public int getVerifiedCount() {
+
             return verifiedItems.size();
         }
 
         public int getReviewCount() {
+
             return reviewItems.size();
         }
 
         public int getRejectedCount() {
+
             return rejectedItems.size();
         }
 
         public int getStoredCount() {
+
             return storedCount;
         }
 
         public String getMessage() {
+
             return message;
         }
 
         public boolean hasNewKnowledge() {
+
             return storedCount > 0;
         }
 
         public boolean needsReview() {
+
             return !reviewItems.isEmpty();
+        }
+
+        /**
+         * السياق الذي يمكن لنظام Evolution استعماله.
+         */
+        public EvolutionContext
+        getEvolutionContext() {
+
+            return evolutionContext;
+        }
+
+        public boolean
+        hasEvolutionKnowledge() {
+
+            return evolutionContext != null
+                    && evolutionContext
+                    .hasVerifiedKnowledge();
         }
     }
 }
