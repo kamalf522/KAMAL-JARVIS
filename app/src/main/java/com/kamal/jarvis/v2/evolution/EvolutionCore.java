@@ -5,6 +5,7 @@ import com.kamal.jarvis.v2.core.JarvisResult;
 import com.kamal.jarvis.v2.core.ToolContract;
 import com.kamal.jarvis.v2.permissions.CapabilityPermission;
 import com.kamal.jarvis.v2.permissions.CapabilityRequirement;
+import com.kamal.jarvis.v2.tools.ToolRegistry;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -18,20 +19,33 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * العقل المركزي لمنظومة Evolution.
  *
- * المسؤوليات:
+ * دورة العمل:
  *
- * 1. استقبال الهدف المطلوب.
- * 2. تحليل القدرات الموجودة.
- * 3. اختيار مسار التنفيذ.
- * 4. اختيار البديل عند توفره.
- * 5. تحديد الصلاحيات الناقصة.
- * 6. إنشاء CapabilitySpec عند الحاجة.
- * 7. إطلاق EvolutionOrchestrator.
- * 8. استقبال نتيجة Build/Test/Recovery.
- * 9. تسجيل نتائج Evolution.
+ * REQUEST
+ *    ↓
+ * DISCOVERY
+ *    ↓
+ * PLANNING
+ *    ↓
+ * DIRECT / ALTERNATIVE / PERMISSION / BUILD
+ *    ↓
+ * EVOLUTION
+ *    ↓
+ * VERIFICATION
+ *    ↓
+ * ACTIVATION
+ *    ↓
+ * READY
  *
- * EvolutionCore لا يمنح Android permissions بنفسه
- * ولا يغير OwnerSecurityBoundary.
+ * ملاحظات مهمة:
+ *
+ * - EvolutionCore لا يمنح Android permissions بنفسه.
+ * - EvolutionCore لا يغير OwnerSecurityBoundary.
+ * - EvolutionCore لا ينشئ Tool وهمية.
+ * - CapabilityActivation لا يتم استعمالها إلا عندما
+ *   تكون Tool حقيقية وقابلة للتنفيذ.
+ * - إنشاء source code وبناء المشروع يبقى من اختصاص
+ *   EvolutionOrchestrator / SourceEvolutionEngine.
  */
 public final class EvolutionCore {
 
@@ -42,6 +56,15 @@ public final class EvolutionCore {
     private final CapabilityExecutor executor;
     private final EvolutionOrchestrator orchestrator;
 
+    /*
+     * Activation اختيارية للحفاظ على توافق constructors
+     * القديمة.
+     *
+     * عندما يتم إنشاء EvolutionCore مع ToolRegistry،
+     * يصبح Core قادراً على ربط Evolution مع Runtime activation.
+     */
+    private final CapabilityActivation activation;
+
     private final Map<String, EvolutionRecord> records =
             new ConcurrentHashMap<>();
 
@@ -50,10 +73,36 @@ public final class EvolutionCore {
 
     private volatile EvolutionRecord lastRecord;
 
+    /**
+     * Constructor قديم للحفاظ على compatibility.
+     *
+     * لا يتم إنشاء Activation بدون ToolRegistry.
+     */
     public EvolutionCore(
             CapabilityDiscovery discovery,
             CapabilityExecutor executor,
             EvolutionOrchestrator orchestrator
+    ) {
+
+        this(
+                discovery,
+                executor,
+                orchestrator,
+                null
+        );
+    }
+
+    /**
+     * Constructor الكامل.
+     *
+     * هذا هو المسار المفضل عندما يكون EvolutionCore
+     * مربوطاً بالـRuntime ToolRegistry.
+     */
+    public EvolutionCore(
+            CapabilityDiscovery discovery,
+            CapabilityExecutor executor,
+            EvolutionOrchestrator orchestrator,
+            ToolRegistry toolRegistry
     ) {
 
         if (discovery == null) {
@@ -74,9 +123,21 @@ public final class EvolutionCore {
             );
         }
 
-        this.discovery = discovery;
-        this.executor = executor;
-        this.orchestrator = orchestrator;
+        this.discovery =
+                discovery;
+
+        this.executor =
+                executor;
+
+        this.orchestrator =
+                orchestrator;
+
+        this.activation =
+                toolRegistry == null
+                        ? null
+                        : new CapabilityActivation(
+                                toolRegistry
+                        );
     }
 
     /**
@@ -100,13 +161,6 @@ public final class EvolutionCore {
         state =
                 EvolutionState.ANALYZING;
 
-        /*
-         * مهم:
-         *
-         * CapabilityDiscovery.discover()
-         * كيرجع DiscoveryResult مباشرة،
-         * ماشي JarvisResult.
-         */
         CapabilityDiscovery.DiscoveryResult discovered =
                 discovery.discover(
                         requirement
@@ -198,13 +252,6 @@ public final class EvolutionCore {
 
     /**
      * تنفيذ CapabilityRequirement.
-     *
-     * المسارات:
-     *
-     * Direct
-     * Alternative
-     * Permission
-     * Evolution
      */
     public synchronized JarvisResult<EvolutionExecutionResult> execute(
             CapabilityRequirement requirement,
@@ -395,6 +442,9 @@ public final class EvolutionCore {
                 );
             }
 
+            /*
+             * إطلاق Evolution pipeline.
+             */
             JarvisResult<
                     EvolutionOrchestrator.EvolutionRecord
                     > evolutionResult =
@@ -444,19 +494,93 @@ public final class EvolutionCore {
                 );
             }
 
-            state =
-                    EvolutionState.COMPLETED;
+            /*
+             * =========================================
+             * ACTIVATION
+             * =========================================
+             *
+             * مهم:
+             *
+             * EvolutionOrchestrator الحالي لا ينتج
+             * ToolContract جديدة executable من تلقاء نفسه.
+             *
+             * لذلك لا ننشئ Tool وهمية.
+             *
+             * إذا كانت Tool المطلوبة موجودة فعلاً في
+             * ToolRegistry، نحاول تفعيل Capability.
+             *
+             * إذا لم تكن موجودة، نسجل أن Evolution وصل
+             * إلى READY لكن activation executable
+             * مازال ينتظر Tool حقيقية.
+             */
+            CapabilityActivation.ActivationRecord
+                    activationRecord = null;
+
+            if (activation != null) {
+
+                JarvisResult<
+                        CapabilityActivation.ActivationRecord
+                        > activationResult =
+                        activation.activate(
+                                spec
+                        );
+
+                if (activationResult != null &&
+                        activationResult.isSuccess()) {
+
+                    activationRecord =
+                            activationResult.getData();
+
+                    if (activationRecord == null ||
+                            !activationRecord.isActive()) {
+
+                        state =
+                                EvolutionState.FAILED;
+
+                        return failure(
+                                JarvisError.Type.EVOLUTION_FAILED,
+                                "Capability activation returned an invalid active state."
+                        );
+                    }
+
+                    state =
+                            EvolutionState.ACTIVATED;
+
+                } else {
+
+                    /*
+                     * لا نفشل Evolution نفسه فقط لأن
+                     * لا توجد Tool executable حالياً.
+                     *
+                     * Build/verification نجحو،
+                     * ولكن Runtime activation غير ممكن
+                     * بدون Tool حقيقية.
+                     */
+                    state =
+                            EvolutionState.READY;
+                }
+
+            } else {
+
+                state =
+                        EvolutionState.READY;
+            }
 
             saveRecord(
                     requirement.getCapabilityId(),
-                    evolutionRecord
+                    evolutionRecord,
+                    activationRecord
             );
 
             EvolutionExecutionResult built =
                     EvolutionExecutionResult.built(
                             plan,
                             evolutionRecord,
-                            "Capability was built and passed the current evolution checks."
+                            activationRecord,
+                            activationRecord != null
+                                    && activationRecord.isActive()
+                                    ? "Capability was built, verified and activated."
+                                    : "Capability was built and verified. Runtime activation is waiting for an executable tool."
                     );
 
             return JarvisResult.success(
@@ -481,6 +605,91 @@ public final class EvolutionCore {
     }
 
     /**
+     * تفعيل Tool حقيقية مرتبطة بـCapability
+     * بعد أن تكون قد تم إنشاؤها والتحقق منها
+     * بواسطة طبقة Evolution أخرى.
+     */
+    public synchronized JarvisResult<
+            CapabilityActivation.ActivationRecord>
+    activateGeneratedTool(
+            CapabilitySpec spec,
+            ToolContract generatedTool
+    ) {
+
+        if (activation == null) {
+
+            return failure(
+                    JarvisError.Type.EVOLUTION_FAILED,
+                    "Capability activation is not connected to a ToolRegistry."
+            );
+        }
+
+        if (spec == null) {
+
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "CapabilitySpec cannot be null."
+            );
+        }
+
+        if (generatedTool == null) {
+
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "Generated Tool cannot be null."
+            );
+        }
+
+        state =
+                EvolutionState.ACTIVATING;
+
+        JarvisResult<
+                CapabilityActivation.ActivationRecord>
+                result =
+                activation.activate(
+                        spec,
+                        generatedTool
+                );
+
+        if (result == null ||
+                !result.isSuccess()) {
+
+            state =
+                    EvolutionState.FAILED;
+
+            return result == null
+                    ? failure(
+                            JarvisError.Type.EVOLUTION_FAILED,
+                            "Capability activation returned no result."
+                    )
+                    : JarvisResult.failure(
+                            result.getError()
+                    );
+        }
+
+        CapabilityActivation.ActivationRecord
+                record =
+                result.getData();
+
+        if (record == null ||
+                !record.isActive()) {
+
+            state =
+                    EvolutionState.FAILED;
+
+            return failure(
+                    JarvisError.Type.EVOLUTION_FAILED,
+                    "Generated capability was not activated."
+            );
+        }
+
+        state =
+                EvolutionState.ACTIVATED;
+
+        return result;
+    }
+
+    /**
      * إنشاء CapabilitySpec كاملة.
      */
     private CapabilitySpec createCapabilitySpec(
@@ -494,23 +703,14 @@ public final class EvolutionCore {
                         requirement.getCapabilityId()
                 );
 
-        /*
-         * الهدف.
-         */
         builder.goal(
                 requirement.getDescription()
         );
 
-        /*
-         * الوصف.
-         */
         builder.description(
                 "Capability generated by JARVIS Evolution Core."
         );
 
-        /*
-         * Permissions.
-         */
         Set<CapabilityPermission>
                 requiredPermissions =
                 requirement.getRequiredPermissions();
@@ -526,9 +726,6 @@ public final class EvolutionCore {
             }
         }
 
-        /*
-         * Preferred tools.
-         */
         List<String> preferredTools =
                 requirement.getPreferredToolIds();
 
@@ -543,9 +740,6 @@ public final class EvolutionCore {
             }
         }
 
-        /*
-         * Alternative tools.
-         */
         List<String> alternativeTools =
                 requirement.getAlternativeToolIds();
 
@@ -560,10 +754,6 @@ public final class EvolutionCore {
             }
         }
 
-        /*
-         * Tools الموجودة في الخطة
-         * تصبح required tools.
-         */
         if (plan != null &&
                 plan.getToolIds() != null) {
 
@@ -576,31 +766,19 @@ public final class EvolutionCore {
             }
         }
 
-        /*
-         * Owner authorization.
-         */
         if (requirement.isOwnerAuthorizationRequired()) {
 
             builder.requireOwnerAuthorization();
         }
 
-        /*
-         * Project modification.
-         */
         if (requirement.canBuildAlternative()) {
 
             builder.allowProjectModification();
         }
 
-        /*
-         * Build + Tests.
-         */
         builder.requireBuild();
         builder.requireTests();
 
-        /*
-         * Success criteria.
-         */
         builder.successCriterion(
                 "Generated capability specification exists."
         );
@@ -621,6 +799,19 @@ public final class EvolutionCore {
             EvolutionOrchestrator.EvolutionRecord record
     ) {
 
+        saveRecord(
+                capabilityId,
+                record,
+                null
+        );
+    }
+
+    private void saveRecord(
+            String capabilityId,
+            EvolutionOrchestrator.EvolutionRecord record,
+            CapabilityActivation.ActivationRecord activationRecord
+    ) {
+
         if (capabilityId == null ||
                 capabilityId.trim().isEmpty() ||
                 record == null) {
@@ -631,7 +822,8 @@ public final class EvolutionCore {
         EvolutionRecord wrapper =
                 new EvolutionRecord(
                         capabilityId,
-                        record
+                        record,
+                        activationRecord
                 );
 
         records.put(
@@ -696,7 +888,10 @@ public final class EvolutionCore {
                 EvolutionState.EXECUTING
                 ||
                 state ==
-                EvolutionState.BUILDING;
+                EvolutionState.BUILDING
+                ||
+                state ==
+                EvolutionState.ACTIVATING;
     }
 
     public boolean isReady() {
@@ -705,7 +900,21 @@ public final class EvolutionCore {
                 EvolutionState.READY_TO_EXECUTE
                 ||
                 state ==
+                EvolutionState.READY
+                ||
+                state ==
+                EvolutionState.ACTIVATED
+                ||
+                state ==
                 EvolutionState.COMPLETED;
+    }
+
+    public boolean isActivationConnected() {
+        return activation != null;
+    }
+
+    public CapabilityActivation getActivation() {
+        return activation;
     }
 
     public CapabilityDiscovery getDiscovery() {
@@ -738,6 +947,12 @@ public final class EvolutionCore {
 
         BUILDING,
 
+        ACTIVATING,
+
+        ACTIVATED,
+
+        READY,
+
         EXECUTING,
 
         COMPLETED,
@@ -751,10 +966,7 @@ public final class EvolutionCore {
     public static final class EvolutionAnalysis {
 
         private final CapabilityRequirement requirement;
-
-        private final CapabilityDiscovery.DiscoveryResult
-                discovery;
-
+        private final CapabilityDiscovery.DiscoveryResult discovery;
         private final CapabilityPlan plan;
 
         private EvolutionAnalysis(
@@ -850,18 +1062,11 @@ public final class EvolutionCore {
     public static final class EvolutionExecutionResult {
 
         private final ExecutionOutcome outcome;
-
         private final CapabilityPlan plan;
-
-        private final ToolContract.ToolOutput
-                toolOutput;
-
-        private final EvolutionOrchestrator.EvolutionRecord
-                evolutionRecord;
-
-        private final List<CapabilityPermission>
-                missingPermissions;
-
+        private final ToolContract.ToolOutput toolOutput;
+        private final EvolutionOrchestrator.EvolutionRecord evolutionRecord;
+        private final CapabilityActivation.ActivationRecord activationRecord;
+        private final List<CapabilityPermission> missingPermissions;
         private final String message;
 
         private EvolutionExecutionResult(
@@ -869,6 +1074,7 @@ public final class EvolutionCore {
                 CapabilityPlan plan,
                 ToolContract.ToolOutput toolOutput,
                 EvolutionOrchestrator.EvolutionRecord evolutionRecord,
+                CapabilityActivation.ActivationRecord activationRecord,
                 List<CapabilityPermission> missingPermissions,
                 String message
         ) {
@@ -884,6 +1090,9 @@ public final class EvolutionCore {
 
             this.evolutionRecord =
                     evolutionRecord;
+
+            this.activationRecord =
+                    activationRecord;
 
             List<CapabilityPermission> copy =
                     missingPermissions == null
@@ -914,6 +1123,7 @@ public final class EvolutionCore {
                     plan,
                     output,
                     null,
+                    null,
                     Collections.emptyList(),
                     message
             );
@@ -938,6 +1148,7 @@ public final class EvolutionCore {
                     plan,
                     null,
                     null,
+                    null,
                     list,
                     "Permission or capability is required."
             );
@@ -946,14 +1157,19 @@ public final class EvolutionCore {
         private static EvolutionExecutionResult built(
                 CapabilityPlan plan,
                 EvolutionOrchestrator.EvolutionRecord record,
+                CapabilityActivation.ActivationRecord activationRecord,
                 String message
         ) {
 
             return new EvolutionExecutionResult(
-                    ExecutionOutcome.BUILT,
+                    activationRecord != null
+                            && activationRecord.isActive()
+                            ? ExecutionOutcome.ACTIVATED
+                            : ExecutionOutcome.BUILT,
                     plan,
                     null,
                     record,
+                    activationRecord,
                     Collections.emptyList(),
                     message
             );
@@ -977,6 +1193,11 @@ public final class EvolutionCore {
             return evolutionRecord;
         }
 
+        public CapabilityActivation.ActivationRecord
+        getActivationRecord() {
+            return activationRecord;
+        }
+
         public List<CapabilityPermission>
         getMissingPermissions() {
             return missingPermissions;
@@ -995,7 +1216,16 @@ public final class EvolutionCore {
         public boolean wasBuilt() {
 
             return outcome ==
-                    ExecutionOutcome.BUILT;
+                    ExecutionOutcome.BUILT
+                    ||
+                    outcome ==
+                    ExecutionOutcome.ACTIVATED;
+        }
+
+        public boolean wasActivated() {
+
+            return outcome ==
+                    ExecutionOutcome.ACTIVATED;
         }
 
         public boolean needsPermission() {
@@ -1023,6 +1253,8 @@ public final class EvolutionCore {
 
         BUILT,
 
+        ACTIVATED,
+
         PERMISSION_REQUIRED
     }
 
@@ -1036,10 +1268,15 @@ public final class EvolutionCore {
         private final EvolutionOrchestrator.EvolutionRecord
                 orchestratorRecord;
 
+        private final CapabilityActivation.ActivationRecord
+                activationRecord;
+
         private EvolutionRecord(
                 String capabilityId,
                 EvolutionOrchestrator.EvolutionRecord
-                        orchestratorRecord
+                        orchestratorRecord,
+                CapabilityActivation.ActivationRecord
+                        activationRecord
         ) {
 
             this.capabilityId =
@@ -1047,6 +1284,9 @@ public final class EvolutionCore {
 
             this.orchestratorRecord =
                     orchestratorRecord;
+
+            this.activationRecord =
+                    activationRecord;
         }
 
         public String getCapabilityId() {
@@ -1056,6 +1296,18 @@ public final class EvolutionCore {
         public EvolutionOrchestrator.EvolutionRecord
         getOrchestratorRecord() {
             return orchestratorRecord;
+        }
+
+        public CapabilityActivation.ActivationRecord
+        getActivationRecord() {
+            return activationRecord;
+        }
+
+        public boolean isActivated() {
+
+            return activationRecord != null
+                    &&
+                    activationRecord.isActive();
         }
 
         public boolean isReady() {
@@ -1088,6 +1340,8 @@ public final class EvolutionCore {
                     '\'' +
                     ", ready=" +
                     isReady() +
+                    ", activated=" +
+                    isActivated() +
                     '}';
         }
     }
