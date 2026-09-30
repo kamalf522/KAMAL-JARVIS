@@ -252,37 +252,33 @@ public final class JarvisSystem {
         // =====================================================
         // EVOLUTION CORE
         // =====================================================
+        //
+        // مهم:
+        //
+        // نفس ToolRegistry المركزي كيتعطى لـ EvolutionCore.
+        //
+        // EvolutionCore
+        //      ↓
+        // CapabilityActivation
+        //      ↓
+        // ToolRegistry
+        //      ↓
+        // Runtime
+        //
+        // هكذا ما عندناش Registry ثاني منفصل.
+        //
 
         this.evolutionCore =
                 new EvolutionCore(
                         this.capabilityDiscovery,
                         this.capabilityExecutor,
-                        this.evolutionOrchestrator
+                        this.evolutionOrchestrator,
+                        this.toolRegistry
                 );
 
         // =====================================================
         // KNOWLEDGE / CONTINUOUS LEARNING
         // =====================================================
-        //
-        // JARVIS الآن عندو محرك تعلم واحد مركزي:
-        //
-        // Internet / Sources
-        //        ↓
-        // Acquisition
-        //        ↓
-        // Verification
-        //        ↓
-        // Memory
-        //        ↓
-        // Learning
-        //        ↓
-        // Brain
-        //
-        // ما كنضيفوش مصادر يدوياً هنا.
-        // KnowledgeAcquisitionEngine كيتعامل مع
-        // KnowledgeSourceTrustEngine لاكتشاف المصادر
-        // وتقييمها.
-        //
 
         KnowledgeAcquisitionEngine
                 knowledgeAcquisitionEngine =
@@ -306,10 +302,6 @@ public final class JarvisSystem {
         // =====================================================
         // BRAIN
         // =====================================================
-        //
-        // نفس LearningEngine كيدخل للـ Brain.
-        // هكذا ما عندناش جوج أنظمة تعلم منفصلين.
-        //
 
         this.brain =
                 new JarvisBrain(
@@ -378,8 +370,6 @@ public final class JarvisSystem {
 
             // -------------------------------------------------
             // 3. PROJECT WORKSPACE
-            //
-            // المشروع الخارجي ماشي شرط باش JARVIS يخدم.
             // -------------------------------------------------
 
             JarvisResult<ProjectWorkspaceManager.ProjectInspection>
@@ -595,8 +585,6 @@ public final class JarvisSystem {
                             + toolId
             );
         }
-
-        // تنظيف أي حالة جزئية.
 
         if (toolRegistry.contains(toolId)
                 || runtime.containsTool(toolId)) {
@@ -1131,21 +1119,13 @@ public final class JarvisSystem {
     public static final class SystemStatus {
 
         private final boolean initialized;
-
         private final boolean securityActive;
-
         private final boolean runtimeRunning;
-
         private final boolean workspaceAvailable;
-
         private final boolean projectWorkspaceReady;
-
         private final int toolCount;
-
         private final int grantedPermissionCount;
-
         private final int requestedPermissionCount;
-
         private final String evolutionState;
 
         private SystemStatus(
