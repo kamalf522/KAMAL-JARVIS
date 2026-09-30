@@ -7,6 +7,7 @@ import com.kamal.jarvis.v2.core.JarvisError;
 import com.kamal.jarvis.v2.core.JarvisResult;
 import com.kamal.jarvis.v2.core.JarvisRuntime;
 import com.kamal.jarvis.v2.core.ToolContract;
+
 import com.kamal.jarvis.v2.evolution.BuildEngine;
 import com.kamal.jarvis.v2.evolution.CapabilityDiscovery;
 import com.kamal.jarvis.v2.evolution.CapabilityExecutor;
@@ -19,10 +20,18 @@ import com.kamal.jarvis.v2.evolution.RecoveryEngine;
 import com.kamal.jarvis.v2.evolution.SelfBuilder;
 import com.kamal.jarvis.v2.evolution.SelfTestEngine;
 import com.kamal.jarvis.v2.evolution.SourceEvolutionEngine;
+
 import com.kamal.jarvis.v2.intelligence.JarvisBrain;
+import com.kamal.jarvis.v2.intelligence.learning.KnowledgeAcquisitionEngine;
+import com.kamal.jarvis.v2.intelligence.learning.KnowledgeLearningEngine;
+import com.kamal.jarvis.v2.intelligence.learning.KnowledgeMemory;
+import com.kamal.jarvis.v2.intelligence.learning.KnowledgeVerificationEngine;
+
 import com.kamal.jarvis.v2.permissions.AndroidPermissionBridge;
 import com.kamal.jarvis.v2.permissions.PermissionManager;
+
 import com.kamal.jarvis.v2.security.OwnerSecurityBoundary;
+
 import com.kamal.jarvis.v2.tools.AndroidIntentTool;
 import com.kamal.jarvis.v2.tools.ToolRegistry;
 
@@ -77,6 +86,8 @@ public final class JarvisSystem {
 
     private final EvolutionCore evolutionCore;
 
+    private final KnowledgeLearningEngine learningEngine;
+
     private final JarvisBrain brain;
 
     private final AndroidIntentTool androidIntentTool;
@@ -100,16 +111,32 @@ public final class JarvisSystem {
                         "jarvis_workspace"
                 );
 
+        // =====================================================
+        // OWNER SECURITY
+        // =====================================================
+
         this.securityBoundary =
                 new OwnerSecurityBoundary();
+
+        // =====================================================
+        // PROJECT WORKSPACE
+        // =====================================================
 
         this.projectWorkspaceManager =
                 new ProjectWorkspaceManager(
                         this.securityBoundary
                 );
 
+        // =====================================================
+        // RUNTIME
+        // =====================================================
+
         this.runtime =
                 new JarvisRuntime();
+
+        // =====================================================
+        // TOOLS
+        // =====================================================
 
         this.toolRegistry =
                 new ToolRegistry();
@@ -119,6 +146,10 @@ public final class JarvisSystem {
                         this.context
                 );
 
+        // =====================================================
+        // PERMISSIONS
+        // =====================================================
+
         this.permissionManager =
                 new PermissionManager();
 
@@ -126,6 +157,10 @@ public final class JarvisSystem {
                 new AndroidPermissionBridge(
                         this.context
                 );
+
+        // =====================================================
+        // CODE EVOLUTION
+        // =====================================================
 
         this.codeEvolutionEngine =
                 new CodeEvolutionEngine(
@@ -137,6 +172,10 @@ public final class JarvisSystem {
                 new SourceEvolutionEngine(
                         this.codeEvolutionEngine
                 );
+
+        // =====================================================
+        // SELF BUILD
+        // =====================================================
 
         this.selfBuilder =
                 new SelfBuilder(
@@ -152,11 +191,19 @@ public final class JarvisSystem {
                         this.workspaceRoot
                 );
 
+        // =====================================================
+        // BUILD
+        // =====================================================
+
         this.buildEngine =
                 new BuildEngine(
                         this.projectWorkspaceManager,
                         this.securityBoundary
                 );
+
+        // =====================================================
+        // EVOLUTION VERIFICATION
+        // =====================================================
 
         this.verificationEngine =
                 new EvolutionVerificationEngine(
@@ -164,6 +211,10 @@ public final class JarvisSystem {
                         this.projectWorkspaceManager,
                         this.securityBoundary
                 );
+
+        // =====================================================
+        // EVOLUTION ORCHESTRATOR
+        // =====================================================
 
         this.evolutionOrchestrator =
                 new EvolutionOrchestrator(
@@ -177,11 +228,19 @@ public final class JarvisSystem {
                         this.verificationEngine
                 );
 
+        // =====================================================
+        // CAPABILITY DISCOVERY
+        // =====================================================
+
         this.capabilityDiscovery =
                 new CapabilityDiscovery(
                         this.toolRegistry,
                         this.permissionManager
                 );
+
+        // =====================================================
+        // CAPABILITY EXECUTION
+        // =====================================================
 
         this.capabilityExecutor =
                 new CapabilityExecutor(
@@ -190,6 +249,10 @@ public final class JarvisSystem {
                         this.permissionManager
                 );
 
+        // =====================================================
+        // EVOLUTION CORE
+        // =====================================================
+
         this.evolutionCore =
                 new EvolutionCore(
                         this.capabilityDiscovery,
@@ -197,10 +260,62 @@ public final class JarvisSystem {
                         this.evolutionOrchestrator
                 );
 
+        // =====================================================
+        // KNOWLEDGE / CONTINUOUS LEARNING
+        // =====================================================
+        //
+        // JARVIS الآن عندو محرك تعلم واحد مركزي:
+        //
+        // Internet / Sources
+        //        ↓
+        // Acquisition
+        //        ↓
+        // Verification
+        //        ↓
+        // Memory
+        //        ↓
+        // Learning
+        //        ↓
+        // Brain
+        //
+        // ما كنضيفوش مصادر يدوياً هنا.
+        // KnowledgeAcquisitionEngine كيتعامل مع
+        // KnowledgeSourceTrustEngine لاكتشاف المصادر
+        // وتقييمها.
+        //
+
+        KnowledgeAcquisitionEngine
+                knowledgeAcquisitionEngine =
+                new KnowledgeAcquisitionEngine();
+
+        KnowledgeVerificationEngine
+                knowledgeVerificationEngine =
+                new KnowledgeVerificationEngine();
+
+        KnowledgeMemory
+                knowledgeMemory =
+                new KnowledgeMemory();
+
+        this.learningEngine =
+                new KnowledgeLearningEngine(
+                        knowledgeAcquisitionEngine,
+                        knowledgeVerificationEngine,
+                        knowledgeMemory
+                );
+
+        // =====================================================
+        // BRAIN
+        // =====================================================
+        //
+        // نفس LearningEngine كيدخل للـ Brain.
+        // هكذا ما عندناش جوج أنظمة تعلم منفصلين.
+        //
+
         this.brain =
                 new JarvisBrain(
                         this.evolutionCore,
-                        this.runtime
+                        this.runtime,
+                        this.learningEngine
                 );
 
         this.initialized =
@@ -264,7 +379,7 @@ public final class JarvisSystem {
             // -------------------------------------------------
             // 3. PROJECT WORKSPACE
             //
-            // وجود مشروع خارجي ليس شرطاً لتشغيل JARVIS.
+            // المشروع الخارجي ماشي شرط باش JARVIS يخدم.
             // -------------------------------------------------
 
             JarvisResult<ProjectWorkspaceManager.ProjectInspection>
@@ -278,9 +393,6 @@ public final class JarvisSystem {
 
             // -------------------------------------------------
             // 4. EVOLUTION ENGINES
-            //
-            // إذا كان المشروع الحقيقي جاهزاً، نهيئو محركات
-            // التطور. إذا لم يكن جاهزاً، لا نوقفوش JARVIS.
             // -------------------------------------------------
 
             if (projectReady) {
@@ -349,14 +461,15 @@ public final class JarvisSystem {
                 return JarvisResult.success(
                         true,
                         "JARVIS V2 started successfully. "
-                                + "Core, Runtime and Evolution workspace are ready."
+                                + "Core, Runtime, Learning and "
+                                + "Evolution workspace are ready."
                 );
             }
 
             return JarvisResult.success(
                     true,
                     "JARVIS V2 started successfully. "
-                            + "Core and Runtime are ready. "
+                            + "Core, Runtime and Learning are ready. "
                             + "Project Evolution workspace is not configured yet."
             );
 
@@ -879,6 +992,12 @@ public final class JarvisSystem {
 
     public EvolutionCore getEvolutionCore() {
         return evolutionCore;
+    }
+
+    public KnowledgeLearningEngine
+    getLearningEngine() {
+
+        return learningEngine;
     }
 
     public JarvisBrain getBrain() {
