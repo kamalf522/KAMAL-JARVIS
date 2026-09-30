@@ -22,8 +22,6 @@ import java.util.Map;
 /**
  * JARVIS V2 - Central Brain
  *
- * المسار المركزي:
- *
  * User
  *   ↓
  * CommandUnderstanding
@@ -62,9 +60,6 @@ public final class JarvisBrain {
 
     private volatile BrainResponse lastResponse;
 
-    /**
-     * Constructor كامل.
-     */
     public JarvisBrain(
             EvolutionCore evolutionCore,
             JarvisRuntime runtime,
@@ -108,12 +103,6 @@ public final class JarvisBrain {
                 executionEngine;
     }
 
-    /**
-     * إنشاء نظام التعلم الافتراضي.
-     *
-     * المصادر يتم اكتشافها من طرف
-     * KnowledgeAcquisitionEngine.
-     */
     private static KnowledgeLearningEngine
     createDefaultLearningEngine() {
 
@@ -235,16 +224,6 @@ public final class JarvisBrain {
          * ==========================================
          * 3. سؤال معرفي
          * ==========================================
-         *
-         * الإنترنت
-         * ↓
-         * اكتشاف المصادر
-         * ↓
-         * Trust
-         * ↓
-         * Verification
-         * ↓
-         * Memory
          */
 
         if (understood.getIntentType() ==
@@ -279,7 +258,7 @@ public final class JarvisBrain {
 
         /*
          * ==========================================
-         * 4. إنشاء ToolInput غني
+         * 4. إنشاء ToolInput
          * ==========================================
          */
 
@@ -293,16 +272,8 @@ public final class JarvisBrain {
 
         /*
          * ==========================================
-         * 5. ExecutionEngine
+         * 5. التنفيذ الأول
          * ==========================================
-         *
-         * ExecutionEngine هو المسؤول عن:
-         *
-         * Planning
-         * ↓
-         * Direct execution
-         * أو
-         * EvolutionCore
          */
 
         state =
@@ -323,10 +294,14 @@ public final class JarvisBrain {
 
         /*
          * ==========================================
-         * 6. إذا لم توجد القدرة
+         * 6. التعلم عند غياب القدرة
          * ==========================================
          *
-         * نتعلم من الإنترنت ثم نحاول مرة ثانية.
+         * JARVIS يتعلم من الإنترنت.
+         *
+         * المعرفة الموثقة لا تبقى فقط في Memory.
+         * بل تدخل كذلك إلى Evolution Context
+         * ثم يتم تمريرها داخل ToolInput.
          */
 
         if (shouldLearnBeforeRetry(executionResult)) {
@@ -341,9 +316,29 @@ public final class JarvisBrain {
 
             try {
 
-                learningEngine.learn(
-                        goal
-                );
+                KnowledgeLearningEngine.LearningResult
+                        learningResult =
+                        learningEngine.learn(
+                                goal
+                        );
+
+                /*
+                 * ==================================
+                 * تمرير Evolution Context
+                 * ==================================
+                 */
+
+                input =
+                        addEvolutionContextToInput(
+                                input,
+                                learningResult
+                        );
+
+                /*
+                 * ==================================
+                 * إضافة أفضل معرفة مباشرة
+                 * ==================================
+                 */
 
                 KnowledgeItem learned =
                         learningEngine.recallBest(
@@ -358,30 +353,38 @@ public final class JarvisBrain {
                                     input,
                                     learned
                             );
+                }
 
-                    state =
-                            BrainState.EXECUTING;
+                /*
+                 * ==================================
+                 * إعادة التنفيذ
+                 * ==================================
+                 */
 
-                    JarvisResult<
-                            ExecutionEngine.ExecutionRecord
-                            > retryResult =
-                            executionEngine.execute(
-                                    understood,
-                                    input
-                            );
+                state =
+                        BrainState.EXECUTING;
 
-                    if (retryResult != null &&
-                            retryResult.isSuccess()) {
+                JarvisResult<
+                        ExecutionEngine.ExecutionRecord
+                        > retryResult =
+                        executionEngine.execute(
+                                understood,
+                                input
+                        );
 
-                        executionResult =
-                                retryResult;
-                    }
+                if (retryResult != null &&
+                        retryResult.isSuccess()) {
+
+                    executionResult =
+                            retryResult;
                 }
 
             } catch (Exception ignored) {
 
                 /*
                  * فشل التعلم لا يوقف العقل.
+                 *
+                 * النتيجة الأصلية تبقى متاحة.
                  */
             }
         }
@@ -460,7 +463,7 @@ public final class JarvisBrain {
 
         /*
          * ==========================================
-         * 8. تحويل ExecutionRecord إلى BrainResponse
+         * 8. BrainResponse
          * ==========================================
          */
 
@@ -501,7 +504,7 @@ public final class JarvisBrain {
     }
 
     /**
-     * إنشاء ToolInput موحد لكل الطلبات.
+     * إنشاء ToolInput موحد.
      */
     private ToolContract.ToolInput
     createToolInput(
@@ -597,7 +600,142 @@ public final class JarvisBrain {
     }
 
     /**
-     * إضافة المعرفة الموثوقة إلى الطلب.
+     * إضافة EvolutionContext إلى الطلب.
+     *
+     * هذا هو الجسر بين:
+     *
+     * Learning
+     * ↓
+     * Brain
+     * ↓
+     * ExecutionEngine
+     * ↓
+     * EvolutionCore
+     */
+    private ToolContract.ToolInput
+    addEvolutionContextToInput(
+            ToolContract.ToolInput input,
+            KnowledgeLearningEngine.LearningResult
+                    learningResult
+    ) {
+
+        if (input == null ||
+                learningResult == null) {
+
+            return input;
+        }
+
+        KnowledgeLearningEngine.EvolutionContext
+                context =
+                learningResult
+                        .getEvolutionContext();
+
+        if (context == null) {
+            return input;
+        }
+
+        Map<String, Object> parameters =
+                new LinkedHashMap<>();
+
+        Map<String, Object> existing =
+                input.getParameters();
+
+        if (existing != null) {
+
+            parameters.putAll(
+                    existing
+            );
+        }
+
+        /*
+         * Query الذي أدى إلى التعلم.
+         */
+        parameters.put(
+                "learning_query",
+                context.getQuery()
+        );
+
+        /*
+         * المعرفة الموثقة كاملة.
+         *
+         * لا نرسل KnowledgeItem objects
+         * مباشرة؛ نمرر بياناتها الأساسية
+         * حتى تبقى ToolInput مستقلة.
+         */
+        List<Map<String, Object>>
+                verifiedKnowledge =
+                new ArrayList<>();
+
+        for (
+                KnowledgeItem item
+                : context.getVerifiedKnowledge()
+        ) {
+
+            if (item == null) {
+                continue;
+            }
+
+            Map<String, Object> knowledge =
+                    new LinkedHashMap<>();
+
+            knowledge.put(
+                    "content",
+                    item.getContent()
+            );
+
+            knowledge.put(
+                    "source_id",
+                    item.getSourceId()
+            );
+
+            knowledge.put(
+                    "source_location",
+                    item.getSourceLocation()
+            );
+
+            knowledge.put(
+                    "confidence",
+                    item.getConfidence()
+            );
+
+            knowledge.put(
+                    "status",
+                    item.getStatus().name()
+            );
+
+            verifiedKnowledge.add(
+                    knowledge
+            );
+        }
+
+        parameters.put(
+                "verified_knowledge_items",
+                verifiedKnowledge
+        );
+
+        parameters.put(
+                "verified_knowledge_count",
+                verifiedKnowledge.size()
+        );
+
+        parameters.put(
+                "learning_completed",
+                learningResult.isSuccess()
+        );
+
+        parameters.put(
+                "learning_message",
+                learningResult.getMessage()
+        );
+
+        return new ToolContract.ToolInput(
+                input.getAction(),
+                parameters
+        );
+    }
+
+    /**
+     * إضافة أفضل معرفة موثوقة.
      */
     private ToolContract.ToolInput
     addKnowledgeToInput(
@@ -618,6 +756,7 @@ public final class JarvisBrain {
                 input.getParameters();
 
         if (existing != null) {
+
             parameters.putAll(
                     existing
             );
@@ -655,7 +794,7 @@ public final class JarvisBrain {
     }
 
     /**
-     * واش خاصنا نتعلم قبل إعادة المحاولة؟
+     * هل نحتاج إلى التعلم قبل إعادة المحاولة؟
      */
     private boolean shouldLearnBeforeRetry(
             JarvisResult<
@@ -1238,18 +1377,15 @@ public final class JarvisBrain {
                     "intentType=" +
                     intentType +
                     ", action='" +
-                    action +
-                    '\'' +
+                    action + '\'' +
                     ", capabilityId='" +
-                    capabilityId +
-                    '\'' +
+                    capabilityId + '\'' +
                     ", outcome=" +
                     outcome +
                     ", successful=" +
                     successful +
                     ", message='" +
-                    message +
-                    '\'' +
+                    message + '\'' +
                     '}';
         }
     }
