@@ -21,7 +21,9 @@ import com.kamal.jarvis.v2.evolution.SelfBuilder;
 import com.kamal.jarvis.v2.evolution.SelfTestEngine;
 import com.kamal.jarvis.v2.evolution.SourceEvolutionEngine;
 
+import com.kamal.jarvis.v2.intelligence.ExecutionEngine;
 import com.kamal.jarvis.v2.intelligence.JarvisBrain;
+import com.kamal.jarvis.v2.intelligence.PlanningEngine;
 import com.kamal.jarvis.v2.intelligence.learning.KnowledgeAcquisitionEngine;
 import com.kamal.jarvis.v2.intelligence.learning.KnowledgeLearningEngine;
 import com.kamal.jarvis.v2.intelligence.learning.KnowledgeMemory;
@@ -49,44 +51,34 @@ public final class JarvisSystem {
             "KAMAL_OWNER";
 
     private final Context context;
-
     private final File workspaceRoot;
 
     private final ProjectWorkspaceManager projectWorkspaceManager;
-
     private final OwnerSecurityBoundary securityBoundary;
-
     private final JarvisRuntime runtime;
-
     private final ToolRegistry toolRegistry;
 
     private final PermissionManager permissionManager;
-
     private final AndroidPermissionBridge permissionBridge;
 
     private final CapabilityDiscovery capabilityDiscovery;
-
     private final CapabilityExecutor capabilityExecutor;
 
     private final CodeEvolutionEngine codeEvolutionEngine;
-
     private final SourceEvolutionEngine sourceEvolutionEngine;
 
     private final SelfBuilder selfBuilder;
-
     private final SelfTestEngine selfTestEngine;
-
     private final RecoveryEngine recoveryEngine;
-
     private final BuildEngine buildEngine;
-
     private final EvolutionVerificationEngine verificationEngine;
-
     private final EvolutionOrchestrator evolutionOrchestrator;
-
     private final EvolutionCore evolutionCore;
 
     private final KnowledgeLearningEngine learningEngine;
+
+    private final PlanningEngine planningEngine;
+    private final ExecutionEngine executionEngine;
 
     private final JarvisBrain brain;
 
@@ -252,21 +244,6 @@ public final class JarvisSystem {
         // =====================================================
         // EVOLUTION CORE
         // =====================================================
-        //
-        // مهم:
-        //
-        // نفس ToolRegistry المركزي كيتعطى لـ EvolutionCore.
-        //
-        // EvolutionCore
-        //      ↓
-        // CapabilityActivation
-        //      ↓
-        // ToolRegistry
-        //      ↓
-        // Runtime
-        //
-        // هكذا ما عندناش Registry ثاني منفصل.
-        //
 
         this.evolutionCore =
                 new EvolutionCore(
@@ -300,6 +277,28 @@ public final class JarvisSystem {
                 );
 
         // =====================================================
+        // PLANNING
+        // =====================================================
+
+        this.planningEngine =
+                new PlanningEngine(
+                        this.toolRegistry,
+                        this.permissionManager
+                );
+
+        // =====================================================
+        // EXECUTION
+        // =====================================================
+
+        this.executionEngine =
+                new ExecutionEngine(
+                        this.planningEngine,
+                        this.capabilityExecutor,
+                        this.evolutionCore,
+                        this.runtime
+                );
+
+        // =====================================================
         // BRAIN
         // =====================================================
 
@@ -307,7 +306,8 @@ public final class JarvisSystem {
                 new JarvisBrain(
                         this.evolutionCore,
                         this.runtime,
-                        this.learningEngine
+                        this.learningEngine,
+                        this.executionEngine
                 );
 
         this.initialized =
@@ -330,10 +330,6 @@ public final class JarvisSystem {
 
         try {
 
-            // -------------------------------------------------
-            // 1. OWNER SECURITY
-            // -------------------------------------------------
-
             JarvisResult<Boolean> ownerResult =
                     initializeOwner();
 
@@ -344,10 +340,6 @@ public final class JarvisSystem {
                         ownerResult.getMessage()
                 );
             }
-
-            // -------------------------------------------------
-            // 2. INTERNAL WORKSPACE
-            // -------------------------------------------------
 
             if (!workspaceRoot.exists()) {
 
@@ -368,10 +360,6 @@ public final class JarvisSystem {
                 );
             }
 
-            // -------------------------------------------------
-            // 3. PROJECT WORKSPACE
-            // -------------------------------------------------
-
             JarvisResult<ProjectWorkspaceManager.ProjectInspection>
                     workspaceResult =
                     projectWorkspaceManager.revalidate();
@@ -381,10 +369,6 @@ public final class JarvisSystem {
                             && workspaceResult.isSuccess()
                             && projectWorkspaceManager.isReady();
 
-            // -------------------------------------------------
-            // 4. EVOLUTION ENGINES
-            // -------------------------------------------------
-
             if (projectReady) {
 
                 codeEvolutionEngine.initialize();
@@ -392,17 +376,9 @@ public final class JarvisSystem {
                 sourceEvolutionEngine.initialize();
             }
 
-            // -------------------------------------------------
-            // 5. ANDROID PERMISSIONS
-            // -------------------------------------------------
-
             permissionBridge.synchronize(
                     permissionManager
             );
-
-            // -------------------------------------------------
-            // 6. ANDROID INTENT TOOL
-            // -------------------------------------------------
 
             JarvisResult<Boolean> toolResult =
                     registerTool(
@@ -416,10 +392,6 @@ public final class JarvisSystem {
                         toolResult.getMessage()
                 );
             }
-
-            // -------------------------------------------------
-            // 7. RUNTIME
-            // -------------------------------------------------
 
             JarvisResult<Boolean> runtimeResult =
                     runtime.start();
@@ -439,10 +411,6 @@ public final class JarvisSystem {
                         runtimeResult.getMessage()
                 );
             }
-
-            // -------------------------------------------------
-            // 8. FINAL STATE
-            // -------------------------------------------------
 
             initialized = true;
 
@@ -986,6 +954,18 @@ public final class JarvisSystem {
     getLearningEngine() {
 
         return learningEngine;
+    }
+
+    public PlanningEngine
+    getPlanningEngine() {
+
+        return planningEngine;
+    }
+
+    public ExecutionEngine
+    getExecutionEngine() {
+
+        return executionEngine;
     }
 
     public JarvisBrain getBrain() {
