@@ -7,6 +7,7 @@ import com.kamal.jarvis.v2.core.JarvisRuntime;
 import com.kamal.jarvis.v2.core.ToolContract;
 import com.kamal.jarvis.v2.evolution.CapabilityExecutor;
 import com.kamal.jarvis.v2.evolution.CapabilityPlan;
+import com.kamal.jarvis.v2.evolution.EvolutionCore;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -14,8 +15,6 @@ import java.util.List;
 
 /**
  * JARVIS V2 - Execution Engine
- *
- * طبقة التنفيذ العليا.
  *
  * المسار:
  *
@@ -27,18 +26,18 @@ import java.util.List;
  *      ↓
  * ExecutionEngine
  *      ↓
- * CapabilityExecutor
- *      ↓
- * ToolRegistry / JarvisRuntime
- *      ↓
- * Tool
+ * ┌─────────────────────────────┐
+ * │ DIRECT / ALTERNATIVE        │
+ * │        ↓                    │
+ * │ CapabilityExecutor          │
+ * │                             │
+ * │ BUILD / EVOLUTION           │
+ * │        ↓                    │
+ * │ EvolutionCore               │
+ * └─────────────────────────────┘
  *
- * ExecutionEngine لا يتجاوز Security
- * ولا يمنح صلاحيات بنفسه.
- *
- * مهم:
- * لا يتم اعتبار العملية ناجحة إلا إذا
- * رجعت CapabilityExecutor بنتيجة نجاح حقيقية.
+ * ExecutionEngine لا يمنح صلاحيات بنفسه،
+ * ولا ينشئ أدوات وهمية.
  */
 public final class ExecutionEngine {
 
@@ -47,6 +46,7 @@ public final class ExecutionEngine {
 
     private final PlanningEngine planningEngine;
     private final CapabilityExecutor capabilityExecutor;
+    private final EvolutionCore evolutionCore;
     private final JarvisRuntime runtime;
 
     private volatile ExecutionState state =
@@ -57,6 +57,7 @@ public final class ExecutionEngine {
     public ExecutionEngine(
             PlanningEngine planningEngine,
             CapabilityExecutor capabilityExecutor,
+            EvolutionCore evolutionCore,
             JarvisRuntime runtime
     ) {
 
@@ -72,6 +73,12 @@ public final class ExecutionEngine {
             );
         }
 
+        if (evolutionCore == null) {
+            throw new IllegalArgumentException(
+                    "evolutionCore cannot be null."
+            );
+        }
+
         if (runtime == null) {
             throw new IllegalArgumentException(
                     "runtime cannot be null."
@@ -84,18 +91,21 @@ public final class ExecutionEngine {
         this.capabilityExecutor =
                 capabilityExecutor;
 
+        this.evolutionCore =
+                evolutionCore;
+
         this.runtime =
                 runtime;
     }
 
     /**
-     * إنشاء الخطة ثم تنفيذها.
+     * المسار الرئيسي:
      *
-     * هذه هي الطريقة الرئيسية التي يستعملها
-     * المستوى الأعلى من JARVIS.
+     * فهم الطلب
+     * → تخطيط
+     * → تنفيذ أو Evolution
      */
-    public synchronized JarvisResult<ExecutionRecord>
-    execute(
+    public synchronized JarvisResult<ExecutionRecord> execute(
             CommandUnderstanding.Result understanding,
             ToolContract.ToolInput input
     ) {
@@ -103,55 +113,25 @@ public final class ExecutionEngine {
         if (understanding == null ||
                 !understanding.isValid()) {
 
-            state = ExecutionState.FAILED;
-
-            ExecutionRecord record =
-                    createFailureRecord(
-                            null,
-                            JarvisError.of(
-                                    JarvisError.Type.INVALID_REQUEST,
-                                    "Invalid command understanding.",
-                                    ENGINE_ID
-                            )
-                    );
-
-            lastRecord = record;
-
-            publish(
-                    JarvisEvent.Type.COMMAND_FAILED,
-                    record.getMessage()
-            );
-
-            return JarvisResult.failure(
-                    record.getError(),
-                    record.getMessage()
+            return fail(
+                    null,
+                    JarvisError.of(
+                            JarvisError.Type.INVALID_REQUEST,
+                            "Invalid command understanding.",
+                            ENGINE_ID
+                    )
             );
         }
 
         if (input == null) {
 
-            state = ExecutionState.FAILED;
-
-            ExecutionRecord record =
-                    createFailureRecord(
-                            null,
-                            JarvisError.of(
-                                    JarvisError.Type.INVALID_REQUEST,
-                                    "Tool input cannot be null.",
-                                    ENGINE_ID
-                            )
-                    );
-
-            lastRecord = record;
-
-            publish(
-                    JarvisEvent.Type.COMMAND_FAILED,
-                    record.getMessage()
-            );
-
-            return JarvisResult.failure(
-                    record.getError(),
-                    record.getMessage()
+            return fail(
+                    null,
+                    JarvisError.of(
+                            JarvisError.Type.INVALID_REQUEST,
+                            "Tool input cannot be null.",
+                            ENGINE_ID
+                    )
             );
         }
 
@@ -217,29 +197,63 @@ public final class ExecutionEngine {
             );
         }
 
-        state =
-                ExecutionState.VALIDATING;
+        return executePlan(
+                plan,
+                input
+        );
+    }
 
-        JarvisResult<ExecutionRecord>
-                validation =
-                validatePlan(plan);
+    /**
+     * تنفيذ Plan موجودة مسبقاً.
+     */
+    public synchronized JarvisResult<ExecutionRecord> executePlan(
+            PlanningEngine.Plan plan,
+            ToolContract.ToolInput input
+    ) {
 
-        if (validation == null) {
+        if (plan == null) {
 
             return fail(
-                    plan,
+                    null,
                     JarvisError.of(
-                            JarvisError.Type.VALIDATION_FAILED,
-                            "Execution plan validation failed.",
+                            JarvisError.Type.INVALID_REQUEST,
+                            "Plan cannot be null.",
                             ENGINE_ID
                     )
             );
         }
 
-        if (!validation.isSuccess()) {
+        if (input == null) {
+
+            return fail(
+                    plan,
+                    JarvisError.of(
+                            JarvisError.Type.INVALID_REQUEST,
+                            "Tool input cannot be null.",
+                            ENGINE_ID
+                    )
+            );
+        }
+
+        state =
+                ExecutionState.VALIDATING;
+
+        JarvisResult<Void> validation =
+                validatePlan(
+                        plan
+                );
+
+        if (validation == null ||
+                !validation.isSuccess()) {
 
             JarvisError error =
-                    validation.getError();
+                    validation == null
+                            ? JarvisError.of(
+                                    JarvisError.Type.VALIDATION_FAILED,
+                                    "Plan validation returned no result.",
+                                    ENGINE_ID
+                            )
+                            : validation.getError();
 
             if (error == null) {
 
@@ -258,13 +272,11 @@ public final class ExecutionEngine {
         }
 
         /*
-         * طلب الصلاحية لا يتم اعتباره نجاحاً.
-         *
-         * وكذلك BUILD_CAPABILITY لا يتم تنفيذه
-         * هنا بشكل مزيف.
-         *
-         * EvolutionCore هو المسؤول عن مسار البناء.
+         * ==========================================
+         * PERMISSION
+         * ==========================================
          */
+
         if (plan.requiresPermission()) {
 
             return fail(
@@ -279,17 +291,31 @@ public final class ExecutionEngine {
             );
         }
 
-        if (plan.requiresEvolution()) {
+        /*
+         * ==========================================
+         * EVOLUTION
+         * ==========================================
+         *
+         * هنا كان ExecutionEngine القديم
+         * كيتوقف.
+         *
+         * دابا كنمررو الطلب لـ EvolutionCore.
+         */
 
-            return fail(
+        if (plan.requiresEvolution() ||
+                plan.isBuildRequired()) {
+
+            return executeThroughEvolution(
                     plan,
-                    JarvisError.of(
-                            JarvisError.Type.EVOLUTION_FAILED,
-                            "This plan requires the evolution pipeline before execution.",
-                            ENGINE_ID
-                    )
+                    input
             );
         }
+
+        /*
+         * ==========================================
+         * DIRECT / ALTERNATIVE
+         * ==========================================
+         */
 
         if (!plan.canExecute()) {
 
@@ -327,9 +353,8 @@ public final class ExecutionEngine {
                         + plan.getCapabilityId()
         );
 
-        JarvisResult<
-                ToolContract.ToolOutput
-                > executionResult =
+        JarvisResult<ToolContract.ToolOutput>
+                executionResult =
                 capabilityExecutor.execute(
                         capabilityPlan,
                         input
@@ -362,38 +387,15 @@ public final class ExecutionEngine {
                         );
             }
 
-            ExecutionRecord record =
-                    createFailureRecord(
-                            plan,
-                            error
-                    );
-
-            lastRecord = record;
-            state =
-                    ExecutionState.FAILED;
-
-            publish(
-                    JarvisEvent.Type.COMMAND_FAILED,
-                    record.getMessage()
-            );
-
-            return JarvisResult.failure(
-                    error,
-                    record.getMessage()
+            return fail(
+                    plan,
+                    error
             );
         }
 
-        ToolContract.ToolOutput
-                output =
+        ToolContract.ToolOutput output =
                 executionResult.getData();
 
-        /*
-         * النجاح الحقيقي يحتاج Output.
-         *
-         * إذا كان الـExecutor قال success لكن أعطى
-         * output فارغ، لا نخلي Brain يعتقد أن كل شيء
-         * تنفذ بلا دليل.
-         */
         if (output == null) {
 
             return fail(
@@ -412,7 +414,8 @@ public final class ExecutionEngine {
         ExecutionRecord record =
                 createSuccessRecord(
                         plan,
-                        output
+                        output,
+                        ExecutionMode.DIRECT
                 );
 
         lastRecord =
@@ -430,51 +433,103 @@ public final class ExecutionEngine {
     }
 
     /**
-     * تنفيذ خطة جاهزة بدون إعادة التخطيط.
+     * يرسل Capability التي تحتاج Evolution
+     * إلى EvolutionCore.
      */
-    public synchronized JarvisResult<ExecutionRecord>
-    executePlan(
+    private JarvisResult<ExecutionRecord>
+    executeThroughEvolution(
             PlanningEngine.Plan plan,
             ToolContract.ToolInput input
     ) {
 
-        if (plan == null) {
+        state =
+                ExecutionState.EVOLVING;
+
+        publish(
+                JarvisEvent.Type.EVOLUTION_STARTED,
+                "Evolution required for capability: "
+                        + plan.getCapabilityId()
+        );
+
+        if (plan.getRequirement() == null) {
 
             return fail(
-                    null,
+                    plan,
                     JarvisError.of(
-                            JarvisError.Type.INVALID_REQUEST,
-                            "Plan cannot be null.",
+                            JarvisError.Type.EVOLUTION_FAILED,
+                            "CapabilityRequirement is missing.",
                             ENGINE_ID
                     )
             );
         }
 
-        if (input == null) {
+        JarvisResult<
+                EvolutionCore.EvolutionExecutionResult
+                > evolutionResult =
+                evolutionCore.execute(
+                        plan.getRequirement(),
+                        input
+                );
+
+        if (evolutionResult == null) {
 
             return fail(
                     plan,
                     JarvisError.of(
-                            JarvisError.Type.INVALID_REQUEST,
-                            "Tool input cannot be null.",
+                            JarvisError.Type.EVOLUTION_FAILED,
+                            "EvolutionCore returned no result.",
                             ENGINE_ID
                     )
             );
         }
 
-        JarvisResult<ExecutionRecord>
-                validation =
-                validatePlan(plan);
+        if (!evolutionResult.isSuccess()) {
 
-        if (!validation.isSuccess()) {
+            JarvisError error =
+                    evolutionResult.getError();
+
+            if (error == null) {
+
+                error =
+                        JarvisError.of(
+                                JarvisError.Type.EVOLUTION_FAILED,
+                                evolutionResult.getMessage(),
+                                ENGINE_ID
+                        );
+            }
 
             return fail(
                     plan,
-                    validation.getError()
+                    error
             );
         }
 
-        if (plan.requiresPermission()) {
+        EvolutionCore.EvolutionExecutionResult
+                result =
+                evolutionResult.getData();
+
+        if (result == null) {
+
+            return fail(
+                    plan,
+                    JarvisError.of(
+                            JarvisError.Type.EVOLUTION_FAILED,
+                            "EvolutionCore returned empty execution data.",
+                            ENGINE_ID
+                    )
+            );
+        }
+
+        /*
+         * Evolution قد تكون:
+         *
+         * EXECUTED
+         * BUILT
+         * ACTIVATED
+         * PERMISSION_REQUIRED
+         */
+
+        if (result.needsPermission()) {
 
             return fail(
                     plan,
@@ -488,132 +543,140 @@ public final class ExecutionEngine {
             );
         }
 
-        if (plan.requiresEvolution()) {
+        /*
+         * إذا Evolution نفذت Tool مباشرة.
+         */
+        if (result.wasExecuted()) {
 
-            return fail(
-                    plan,
-                    JarvisError.of(
-                            JarvisError.Type.EVOLUTION_FAILED,
-                            "Plan requires evolution before execution.",
-                            ENGINE_ID
-                    )
-            );
-        }
+            ToolContract.ToolOutput output =
+                    result.getToolOutput();
 
-        if (!plan.canExecute()) {
+            if (output == null) {
 
-            return fail(
-                    plan,
-                    JarvisError.of(
-                            JarvisError.Type.TOOL_UNAVAILABLE,
-                            "Plan cannot currently be executed.",
-                            ENGINE_ID
-                    )
-            );
-        }
-
-        CapabilityPlan capabilityPlan =
-                plan.getCapabilityPlan();
-
-        if (capabilityPlan == null) {
-
-            return fail(
-                    plan,
-                    JarvisError.of(
-                            JarvisError.Type.VALIDATION_FAILED,
-                            "CapabilityPlan is missing.",
-                            ENGINE_ID
-                    )
-            );
-        }
-
-        state =
-                ExecutionState.EXECUTING;
-
-        JarvisResult<
-                ToolContract.ToolOutput
-                > result =
-                capabilityExecutor.execute(
-                        capabilityPlan,
-                        input
-                );
-
-        if (result == null) {
-
-            return fail(
-                    plan,
-                    JarvisError.of(
-                            JarvisError.Type.EXECUTION_FAILED,
-                            "CapabilityExecutor returned no result.",
-                            ENGINE_ID
-                    )
-            );
-        }
-
-        if (!result.isSuccess()) {
-
-            JarvisError error =
-                    result.getError();
-
-            if (error == null) {
-
-                error =
+                return fail(
+                        plan,
                         JarvisError.of(
                                 JarvisError.Type.EXECUTION_FAILED,
-                                result.getMessage(),
+                                "Evolution executed capability without output.",
                                 ENGINE_ID
-                        );
+                        )
+                );
             }
 
-            return fail(
-                    plan,
-                    error
+            state =
+                    ExecutionState.COMPLETED;
+
+            ExecutionRecord record =
+                    createSuccessRecord(
+                            plan,
+                            output,
+                            ExecutionMode.EVOLUTION_EXECUTED
+                    );
+
+            lastRecord =
+                    record;
+
+            publish(
+                    JarvisEvent.Type.COMMAND_COMPLETED,
+                    record.getMessage()
+            );
+
+            return JarvisResult.success(
+                    record,
+                    record.getMessage()
             );
         }
 
-        ToolContract.ToolOutput output =
-                result.getData();
+        /*
+         * إذا Evolution بنت وقد فعلت Capability.
+         *
+         * إذا activation موجود، نتحقق منه.
+         */
+        if (result.wasActivated()) {
 
-        if (output == null) {
+            if (result.getActivationRecord() == null ||
+                    !result.getActivationRecord().isActive()) {
 
-            return fail(
-                    plan,
-                    JarvisError.of(
-                            JarvisError.Type.EXECUTION_FAILED,
-                            "Execution succeeded without tool output.",
-                            ENGINE_ID
-                    )
-            );
-        }
-
-        state =
-                ExecutionState.COMPLETED;
-
-        ExecutionRecord record =
-                createSuccessRecord(
+                return fail(
                         plan,
-                        output
+                        JarvisError.of(
+                                JarvisError.Type.EVOLUTION_FAILED,
+                                "Evolution reported activation without an active capability.",
+                                ENGINE_ID
+                        )
                 );
+            }
 
-        lastRecord =
-                record;
+            state =
+                    ExecutionState.COMPLETED;
 
-        publish(
-                JarvisEvent.Type.COMMAND_COMPLETED,
-                record.getMessage()
-        );
+            ExecutionRecord record =
+                    createEvolutionRecord(
+                            plan,
+                            result,
+                            ExecutionMode.EVOLUTION_ACTIVATED
+                    );
 
-        return JarvisResult.success(
-                record,
-                record.getMessage()
+            lastRecord =
+                    record;
+
+            publish(
+                    JarvisEvent.Type.COMMAND_COMPLETED,
+                    record.getMessage()
+            );
+
+            return JarvisResult.success(
+                    record,
+                    record.getMessage()
+            );
+        }
+
+        /*
+         * Evolution وصل إلى BUILD/READY،
+         * ولكن لا توجد Tool executable بعد.
+         *
+         * لا نكذب على Brain ونقول نفذ.
+         */
+        if (result.wasBuilt()) {
+
+            state =
+                    ExecutionState.COMPLETED;
+
+            ExecutionRecord record =
+                    createEvolutionRecord(
+                            plan,
+                            result,
+                            ExecutionMode.EVOLUTION_BUILT
+                    );
+
+            lastRecord =
+                    record;
+
+            publish(
+                    JarvisEvent.Type.EVOLUTION_COMPLETED,
+                    record.getMessage()
+            );
+
+            return JarvisResult.success(
+                    record,
+                    record.getMessage()
+            );
+        }
+
+        return fail(
+                plan,
+                JarvisError.of(
+                        JarvisError.Type.EVOLUTION_FAILED,
+                        "Evolution finished without a recognized execution outcome.",
+                        ENGINE_ID
+                )
         );
     }
 
     /**
-     * فحص الخطة قبل التنفيذ.
+     * التحقق من الخطة قبل التنفيذ.
      */
-    private JarvisResult<ExecutionRecord>
-    validatePlan(
+    private JarvisResult<Void> validatePlan(
             PlanningEngine.Plan plan
     ) {
 
@@ -653,10 +716,15 @@ public final class ExecutionEngine {
             );
         }
 
+        /*
+         * BUILD يمكن أن يكون بلا Tool،
+         * لأن Evolution هو اللي غادي يحاول يبنيها.
+         */
         if (plan.getToolIds() == null ||
                 plan.getToolIds().isEmpty()) {
 
-            if (!plan.requiresEvolution()) {
+            if (!plan.requiresEvolution() &&
+                    !plan.isBuildRequired()) {
 
                 return JarvisResult.failure(
                         JarvisError.of(
@@ -676,7 +744,8 @@ public final class ExecutionEngine {
 
     private ExecutionRecord createSuccessRecord(
             PlanningEngine.Plan plan,
-            ToolContract.ToolOutput output
+            ToolContract.ToolOutput output,
+            ExecutionMode mode
     ) {
 
         String message =
@@ -690,7 +759,37 @@ public final class ExecutionEngine {
                 plan.getToolIds(),
                 output,
                 null,
-                message
+                message,
+                mode
+        );
+    }
+
+    private ExecutionRecord createEvolutionRecord(
+            PlanningEngine.Plan plan,
+            EvolutionCore.EvolutionExecutionResult result,
+            ExecutionMode mode
+    ) {
+
+        String message =
+                result.getMessage();
+
+        if (message == null ||
+                message.trim().isEmpty()) {
+
+            message =
+                    "Evolution completed for capability: "
+                            + plan.getCapabilityId();
+        }
+
+        return new ExecutionRecord(
+                true,
+                plan.getCapabilityId(),
+                plan.getAction(),
+                plan.getToolIds(),
+                result.getToolOutput(),
+                null,
+                message,
+                mode
         );
     }
 
@@ -726,7 +825,8 @@ public final class ExecutionEngine {
                 tools,
                 null,
                 error,
-                message
+                message,
+                ExecutionMode.FAILED
         );
     }
 
@@ -824,8 +924,7 @@ public final class ExecutionEngine {
 
         } catch (Exception ignored) {
             /*
-             * Logging failure must never
-             * break execution flow.
+             * فشل التسجيل لا يجب أن يوقف التنفيذ.
              */
         }
     }
@@ -841,6 +940,11 @@ public final class ExecutionEngine {
     public boolean isExecuting() {
         return state ==
                 ExecutionState.EXECUTING;
+    }
+
+    public boolean isEvolving() {
+        return state ==
+                ExecutionState.EVOLVING;
     }
 
     public boolean isCompleted() {
@@ -861,9 +965,12 @@ public final class ExecutionEngine {
         return planningEngine;
     }
 
-    public CapabilityExecutor
-    getCapabilityExecutor() {
+    public CapabilityExecutor getCapabilityExecutor() {
         return capabilityExecutor;
+    }
+
+    public EvolutionCore getEvolutionCore() {
+        return evolutionCore;
     }
 
     public JarvisRuntime getRuntime() {
@@ -884,14 +991,26 @@ public final class ExecutionEngine {
 
         EXECUTING,
 
+        EVOLVING,
+
         COMPLETED,
 
         FAILED
     }
 
-    /**
-     * السجل النهائي للعملية.
-     */
+    public enum ExecutionMode {
+
+        DIRECT,
+
+        EVOLUTION_EXECUTED,
+
+        EVOLUTION_BUILT,
+
+        EVOLUTION_ACTIVATED,
+
+        FAILED
+    }
+
     public static final class ExecutionRecord {
 
         private final boolean successful;
@@ -901,6 +1020,7 @@ public final class ExecutionEngine {
         private final ToolContract.ToolOutput toolOutput;
         private final JarvisError error;
         private final String message;
+        private final ExecutionMode mode;
 
         private ExecutionRecord(
                 boolean successful,
@@ -909,7 +1029,8 @@ public final class ExecutionEngine {
                 List<String> toolIds,
                 ToolContract.ToolOutput toolOutput,
                 JarvisError error,
-                String message
+                String message,
+                ExecutionMode mode
         ) {
 
             this.successful =
@@ -944,6 +1065,11 @@ public final class ExecutionEngine {
                     message == null
                             ? ""
                             : message;
+
+            this.mode =
+                    mode == null
+                            ? ExecutionMode.FAILED
+                            : mode;
         }
 
         public boolean isSuccessful() {
@@ -958,8 +1084,7 @@ public final class ExecutionEngine {
             return capabilityId;
         }
 
-        public PlanningEngine.PlanAction
-        getAction() {
+        public PlanningEngine.PlanAction getAction() {
             return action;
         }
 
@@ -967,8 +1092,7 @@ public final class ExecutionEngine {
             return toolIds;
         }
 
-        public ToolContract.ToolOutput
-        getToolOutput() {
+        public ToolContract.ToolOutput getToolOutput() {
             return toolOutput;
         }
 
@@ -980,8 +1104,32 @@ public final class ExecutionEngine {
             return message;
         }
 
+        public ExecutionMode getMode() {
+            return mode;
+        }
+
         public boolean hasToolOutput() {
             return toolOutput != null;
+        }
+
+        public boolean wasDirectExecution() {
+            return mode ==
+                    ExecutionMode.DIRECT;
+        }
+
+        public boolean wasEvolutionExecuted() {
+            return mode ==
+                    ExecutionMode.EVOLUTION_EXECUTED;
+        }
+
+        public boolean wasEvolutionBuilt() {
+            return mode ==
+                    ExecutionMode.EVOLUTION_BUILT;
+        }
+
+        public boolean wasEvolutionActivated() {
+            return mode ==
+                    ExecutionMode.EVOLUTION_ACTIVATED;
         }
 
         @Override
@@ -996,6 +1144,8 @@ public final class ExecutionEngine {
                     action +
                     ", toolIds=" +
                     toolIds +
+                    ", mode=" +
+                    mode +
                     ", message='" +
                     message + '\'' +
                     '}';
