@@ -14,28 +14,35 @@ import java.util.Map;
 /**
  * JARVIS V2 - Capability Activation
  *
- * مسؤول عن نقل Capability من:
+ * مسؤول عن المرحلة الأخيرة من دورة القدرة:
  *
- * BUILT / TESTED
- *        ↓
- * ACTIVATION CHECK
- *        ↓
+ * DISCOVERED
+ *     ↓
+ * BUILT
+ *     ↓
+ * VERIFIED
+ *     ↓
+ * REGISTERED
+ *     ↓
  * ACTIVE
  *
- * التفعيل هنا ليس مجرد تسجيل اسم.
+ * هذه الطبقة لا تبني الكود ولا تمنح Android permissions.
  *
- * القدرة لا تعتبر ACTIVE إلا إذا:
- * 1. كانت بياناتها صحيحة.
- * 2. عندها Tool حقيقية قابلة للتنفيذ.
- * 3. الـTool موجودة في ToolRegistry.
- * 4. الـTool متاحة.
+ * مسؤوليتها:
  *
- * هذه الطبقة لا تمنح Android permissions.
- * ولا تتجاوز OwnerSecurityBoundary.
- * ولا تبني الكود.
+ * 1. التحقق من Capability.
+ * 2. التحقق من Tool القابلة للتنفيذ.
+ * 3. تسجيل Tool الجديدة عند الحاجة.
+ * 4. تفعيل Capability.
+ * 5. منع التفعيل إذا فشل التسجيل.
+ * 6. Rollback للتسجيل عند فشل التفعيل.
+ * 7. إعادة التحقق من حالة Tool وقت الاستعمال.
  *
- * البناء والاختبار مسؤولية Evolution pipeline.
- * التنفيذ مسؤولية CapabilityExecutor.
+ * مهم:
+ *
+ * تسجيل Tool هنا يعني أن Tool أصبحت جزءاً من Runtime
+ * الحالي. أما إنشاء Java source جديد أو بناء APK جديد
+ * فهو مسؤولية Evolution pipeline.
  */
 public final class CapabilityActivation {
 
@@ -44,8 +51,7 @@ public final class CapabilityActivation {
 
     private final ToolRegistry toolRegistry;
 
-    private final Map<String, ActivationRecord>
-            activations =
+    private final Map<String, ActivationRecord> activations =
             new LinkedHashMap<>();
 
     public CapabilityActivation(
@@ -58,21 +64,19 @@ public final class CapabilityActivation {
             );
         }
 
-        this.toolRegistry =
-                toolRegistry;
+        this.toolRegistry = toolRegistry;
     }
 
     /**
-     * تفعيل Capability بعد التأكد من وجود
-     * Tool حقيقية قابلة للتنفيذ.
+     * تفعيل Capability باستعمال Tool موجودة مسبقاً.
+     *
+     * هذا هو المسار القديم والمحافظ على التوافق.
      */
-    public synchronized JarvisResult<ActivationRecord>
-    activate(
+    public synchronized JarvisResult<ActivationRecord> activate(
             CapabilitySpec spec
     ) {
 
         if (spec == null) {
-
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
                     "CapabilitySpec cannot be null."
@@ -80,7 +84,6 @@ public final class CapabilityActivation {
         }
 
         if (!spec.isValid()) {
-
             return failure(
                     JarvisError.Type.VALIDATION_FAILED,
                     "CapabilitySpec is invalid."
@@ -88,90 +91,158 @@ public final class CapabilityActivation {
         }
 
         String capabilityId =
-                normalizeId(
-                        spec.getCapabilityId()
-                );
+                normalizeId(spec.getCapabilityId());
 
         if (capabilityId.isEmpty()) {
-
             return failure(
                     JarvisError.Type.VALIDATION_FAILED,
                     "Capability ID cannot be empty."
             );
         }
 
-        /*
-         * نبحث أولاً عن الأدوات المطلوبة.
-         */
         List<String> toolIds =
-                collectToolIds(
-                        spec
-                );
+                collectToolIds(spec);
 
         if (toolIds.isEmpty()) {
-
             return failure(
                     JarvisError.Type.TOOL_UNAVAILABLE,
                     "Capability has no execution tool."
             );
         }
 
-        List<String> availableTools =
-                new ArrayList<>();
+        return activateUsingRegisteredTools(
+                capabilityId,
+                spec.getName(),
+                toolIds
+        );
+    }
 
-        List<String> unavailableTools =
-                new ArrayList<>();
+    /**
+     * المسار الأساسي الجديد:
+     *
+     * يسجل Tool جديدة فعلياً ثم يفعل Capability.
+     *
+     * إذا فشل التسجيل أو التفعيل:
+     * لا تبقى Tool جديدة معلقة داخل Registry.
+     */
+    public synchronized JarvisResult<ActivationRecord> activate(
+            CapabilitySpec spec,
+            ToolContract generatedTool
+    ) {
 
-        for (String toolId : toolIds) {
+        if (spec == null) {
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "CapabilitySpec cannot be null."
+            );
+        }
 
-            ToolContract tool =
-                    getTool(
-                            toolId
-                    );
+        if (!spec.isValid()) {
+            return failure(
+                    JarvisError.Type.VALIDATION_FAILED,
+                    "CapabilitySpec is invalid."
+            );
+        }
 
-            if (tool == null) {
+        if (generatedTool == null) {
+            return failure(
+                    JarvisError.Type.TOOL_UNAVAILABLE,
+                    "Generated capability tool cannot be null."
+            );
+        }
 
-                unavailableTools.add(
-                        toolId
-                );
+        String capabilityId =
+                normalizeId(spec.getCapabilityId());
 
-                continue;
-            }
+        if (capabilityId.isEmpty()) {
+            return failure(
+                    JarvisError.Type.VALIDATION_FAILED,
+                    "Capability ID cannot be empty."
+            );
+        }
 
-            if (!tool.isAvailable()) {
+        String toolId =
+                normalizeId(generatedTool.getId());
 
-                unavailableTools.add(
-                        toolId
-                );
-
-                continue;
-            }
-
-            availableTools.add(
-                    toolId
+        if (toolId.isEmpty()) {
+            return failure(
+                    JarvisError.Type.VALIDATION_FAILED,
+                    "Generated capability tool id cannot be empty."
             );
         }
 
         /*
-         * لا يوجد Tool حقيقي:
-         * لا يتم التفعيل.
+         * يجب أن تكون Tool قابلة للتنفيذ قبل التسجيل.
          */
-        if (availableTools.isEmpty()) {
+        if (!generatedTool.isAvailable()) {
+            return failure(
+                    JarvisError.Type.TOOL_UNAVAILABLE,
+                    "Generated capability tool is not available."
+            );
+        }
+
+        /*
+         * لا نسمح بتجاوز Tool موجودة بشكل صامت.
+         *
+         * إذا كانت موجودة، يجب استعمال replace صراحة
+         * عبر المسار المخصص أدناه.
+         */
+        if (toolRegistry.contains(toolId)) {
+            return failure(
+                    JarvisError.Type.VALIDATION_FAILED,
+                    "A tool with this id is already registered: "
+                            + toolId
+            );
+        }
+
+        JarvisResult<Void> registration =
+                toolRegistry.register(generatedTool);
+
+        if (registration == null ||
+                !registration.isSuccess()) {
+
+            if (registration == null) {
+                return failure(
+                        JarvisError.Type.EVOLUTION_FAILED,
+                        "Tool registration returned no result."
+                );
+            }
+
+            return JarvisResult.failure(
+                    registration.getError()
+            );
+        }
+
+        /*
+         * من هذه اللحظة Tool أصبحت داخل Runtime Registry.
+         *
+         * نتحقق مرة ثانية قبل جعل Capability ACTIVE.
+         */
+        ToolContract registeredTool =
+                getTool(toolId);
+
+        if (registeredTool == null ||
+                !registeredTool.isAvailable()) {
+
+            /*
+             * Rollback:
+             * لا نترك Tool نصف مفعلة.
+             */
+            toolRegistry.remove(toolId);
 
             return failure(
                     JarvisError.Type.TOOL_UNAVAILABLE,
-                    "Capability cannot be activated because no required execution tool is available."
+                    "Registered capability tool failed activation validation."
             );
         }
 
         ActivationRecord record =
-                new ActivationRecord(
+                createActiveRecord(
                         capabilityId,
                         spec.getName(),
-                        ActivationState.ACTIVE,
-                        availableTools,
-                        unavailableTools,
-                        "Capability activated with executable tools."
+                        Collections.singletonList(toolId),
+                        Collections.emptyList(),
+                        "Capability was registered and activated successfully."
                 );
 
         activations.put(
@@ -186,10 +257,226 @@ public final class CapabilityActivation {
     }
 
     /**
-     * تفعيل Capability باستعمال Tool IDs محددة.
+     * تسجيل Tool جديدة وتفعيلها بدون CapabilitySpec.
      *
-     * مفيدة عندما يكون الـEvolution pipeline
-     * قد حدد الأدوات بنفسه.
+     * يستعمله Evolution runtime عندما تكون Capability
+     * already validated elsewhere.
+     */
+    public synchronized JarvisResult<ActivationRecord>
+    registerAndActivate(
+            String capabilityId,
+            String name,
+            ToolContract tool
+    ) {
+
+        String id =
+                normalizeId(capabilityId);
+
+        if (id.isEmpty()) {
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "Capability ID cannot be empty."
+            );
+        }
+
+        if (tool == null) {
+            return failure(
+                    JarvisError.Type.TOOL_UNAVAILABLE,
+                    "Tool cannot be null."
+            );
+        }
+
+        String toolId =
+                normalizeId(tool.getId());
+
+        if (toolId.isEmpty()) {
+            return failure(
+                    JarvisError.Type.VALIDATION_FAILED,
+                    "Tool id cannot be empty."
+            );
+        }
+
+        if (!tool.isAvailable()) {
+            return failure(
+                    JarvisError.Type.TOOL_UNAVAILABLE,
+                    "Tool is not available."
+            );
+        }
+
+        if (toolRegistry.contains(toolId)) {
+            return failure(
+                    JarvisError.Type.VALIDATION_FAILED,
+                    "Tool already exists: " + toolId
+            );
+        }
+
+        JarvisResult<Void> registration =
+                toolRegistry.register(tool);
+
+        if (registration == null ||
+                !registration.isSuccess()) {
+
+            return registration == null
+                    ? failure(
+                            JarvisError.Type.EVOLUTION_FAILED,
+                            "Tool registration returned no result."
+                    )
+                    : JarvisResult.failure(
+                            registration.getError()
+                    );
+        }
+
+        ToolContract verifiedTool =
+                getTool(toolId);
+
+        if (verifiedTool == null ||
+                !verifiedTool.isAvailable()) {
+
+            toolRegistry.remove(toolId);
+
+            return failure(
+                    JarvisError.Type.TOOL_UNAVAILABLE,
+                    "Tool failed post-registration validation."
+            );
+        }
+
+        ActivationRecord record =
+                createActiveRecord(
+                        id,
+                        name,
+                        Collections.singletonList(toolId),
+                        Collections.emptyList(),
+                        "Capability registered and activated."
+                );
+
+        activations.put(
+                id,
+                record
+        );
+
+        return JarvisResult.success(
+                record,
+                record.getMessage()
+        );
+    }
+
+    /**
+     * استبدال Tool موجودة بنسخة مطورة.
+     *
+     * هذا المسار مهم عندما JARVIS يطور Capability موجودة
+     * إلى إصدار أحدث.
+     *
+     * إذا فشل replace:
+     * تبقى النسخة القديمة كما هي.
+     */
+    public synchronized JarvisResult<ActivationRecord>
+    upgrade(
+            String capabilityId,
+            String name,
+            ToolContract upgradedTool
+    ) {
+
+        String id =
+                normalizeId(capabilityId);
+
+        if (id.isEmpty()) {
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "Capability ID cannot be empty."
+            );
+        }
+
+        if (upgradedTool == null) {
+            return failure(
+                    JarvisError.Type.TOOL_UNAVAILABLE,
+                    "Upgraded tool cannot be null."
+            );
+        }
+
+        String toolId =
+                normalizeId(upgradedTool.getId());
+
+        if (toolId.isEmpty()) {
+            return failure(
+                    JarvisError.Type.VALIDATION_FAILED,
+                    "Upgraded tool id cannot be empty."
+            );
+        }
+
+        if (!upgradedTool.isAvailable()) {
+            return failure(
+                    JarvisError.Type.TOOL_UNAVAILABLE,
+                    "Upgraded tool is not available."
+            );
+        }
+
+        ToolContract oldTool =
+                getTool(toolId);
+
+        JarvisResult<Void> replaceResult =
+                toolRegistry.replace(upgradedTool);
+
+        if (replaceResult == null ||
+                !replaceResult.isSuccess()) {
+
+            return replaceResult == null
+                    ? failure(
+                            JarvisError.Type.EVOLUTION_FAILED,
+                            "Tool replacement returned no result."
+                    )
+                    : JarvisResult.failure(
+                            replaceResult.getError()
+                    );
+        }
+
+        ToolContract verifiedTool =
+                getTool(toolId);
+
+        if (verifiedTool == null ||
+                !verifiedTool.isAvailable()) {
+
+            /*
+             * Recovery:
+             * إذا كانت النسخة القديمة موجودة، نرجعها.
+             * إذا لم تكن موجودة، نحذف النسخة الجديدة.
+             */
+            if (oldTool != null) {
+                toolRegistry.replace(oldTool);
+            } else {
+                toolRegistry.remove(toolId);
+            }
+
+            return failure(
+                    JarvisError.Type.RECOVERY_FAILED,
+                    "Upgraded tool failed validation and was rolled back."
+            );
+        }
+
+        List<String> tools =
+                Collections.singletonList(toolId);
+
+        ActivationRecord record =
+                createActiveRecord(
+                        id,
+                        name,
+                        tools,
+                        Collections.emptyList(),
+                        "Capability upgraded and activated successfully."
+                );
+
+        activations.put(
+                id,
+                record
+        );
+
+        return JarvisResult.success(
+                record,
+                record.getMessage()
+        );
+    }
+
+    /**
+     * تفعيل Capability باستعمال مجموعة Tools مسجلة.
      */
     public synchronized JarvisResult<ActivationRecord>
     activate(
@@ -199,12 +486,9 @@ public final class CapabilityActivation {
     ) {
 
         String id =
-                normalizeId(
-                        capabilityId
-                );
+                normalizeId(capabilityId);
 
         if (id.isEmpty()) {
-
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
                     "Capability ID cannot be empty."
@@ -220,77 +504,17 @@ public final class CapabilityActivation {
             );
         }
 
-        List<String> available =
-                new ArrayList<>();
-
-        List<String> unavailable =
-                new ArrayList<>();
-
-        for (String toolId : toolIds) {
-
-            if (toolId == null ||
-                    toolId.trim().isEmpty()) {
-                continue;
-            }
-
-            String normalizedTool =
-                    toolId.trim();
-
-            ToolContract tool =
-                    getTool(
-                            normalizedTool
-                    );
-
-            if (tool != null &&
-                    tool.isAvailable()) {
-
-                available.add(
-                        normalizedTool
-                );
-
-            } else {
-
-                unavailable.add(
-                        normalizedTool
-                );
-            }
-        }
-
-        if (available.isEmpty()) {
-
-            return failure(
-                    JarvisError.Type.TOOL_UNAVAILABLE,
-                    "No executable tool is available for capability: "
-                            + id
-            );
-        }
-
-        ActivationRecord record =
-                new ActivationRecord(
-                        id,
-                        name,
-                        ActivationState.ACTIVE,
-                        available,
-                        unavailable,
-                        "Capability activated."
-                );
-
-        activations.put(
+        return activateUsingRegisteredTools(
                 id,
-                record
-        );
-
-        return JarvisResult.success(
-                record,
-                record.getMessage()
+                name,
+                toolIds
         );
     }
 
     /**
      * تعطيل Capability.
      *
-     * التعطيل يحذف حالة التفعيل فقط.
-     * لا يحذف الملفات ولا الأدوات.
+     * لا يحذف Tool ولا ملفات المشروع.
      */
     public synchronized JarvisResult<ActivationRecord>
     deactivate(
@@ -298,12 +522,9 @@ public final class CapabilityActivation {
     ) {
 
         String id =
-                normalizeId(
-                        capabilityId
-                );
+                normalizeId(capabilityId);
 
         if (id.isEmpty()) {
-
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
                     "Capability ID cannot be empty."
@@ -314,11 +535,9 @@ public final class CapabilityActivation {
                 activations.get(id);
 
         if (current == null) {
-
             return failure(
                     JarvisError.Type.NOT_FOUND,
-                    "Capability is not activated: "
-                            + id
+                    "Capability is not activated: " + id
             );
         }
 
@@ -344,40 +563,34 @@ public final class CapabilityActivation {
     }
 
     /**
-     * فحص هل Capability مفعلة وقابلة للاستعمال.
+     * فحص Capability وقت الاستعمال.
      */
     public synchronized boolean isActive(
             String capabilityId
     ) {
 
         String id =
-                normalizeId(
-                        capabilityId
-                );
+                normalizeId(capabilityId);
 
         ActivationRecord record =
                 activations.get(id);
 
         if (record == null ||
-                record.getState()
-                        != ActivationState.ACTIVE) {
+                record.getState() !=
+                        ActivationState.ACTIVE) {
 
             return false;
         }
 
         /*
-         * نعيد فحص الأدوات وقت الطلب،
-         * لأن Tool قد تصبح unavailable بعد التفعيل.
+         * يجب أن تكون Tool واحدة على الأقل
+         * قابلة للتنفيذ في الوقت الحالي.
          */
-        for (
-                String toolId
-                : record.getAvailableTools()
-        ) {
+        for (String toolId :
+                record.getAvailableTools()) {
 
             ToolContract tool =
-                    getTool(
-                            toolId
-                    );
+                    getTool(toolId);
 
             if (tool != null &&
                     tool.isAvailable()) {
@@ -390,42 +603,35 @@ public final class CapabilityActivation {
     }
 
     /**
-     * إرجاع سجل Capability.
+     * فحص أن Capability مسجلة وقابلة للتنفيذ.
      */
+    public synchronized boolean isExecutable(
+            String capabilityId
+    ) {
+
+        return isActive(capabilityId);
+    }
+
     public synchronized ActivationRecord get(
             String capabilityId
     ) {
 
         String id =
-                normalizeId(
-                        capabilityId
-                );
+                normalizeId(capabilityId);
 
-        return activations.get(
-                id
-        );
+        return activations.get(id);
     }
 
-    /**
-     * فحص وجود سجل.
-     */
     public synchronized boolean contains(
             String capabilityId
     ) {
 
         String id =
-                normalizeId(
-                        capabilityId
-                );
+                normalizeId(capabilityId);
 
-        return activations.containsKey(
-                id
-        );
+        return activations.containsKey(id);
     }
 
-    /**
-     * إرجاع كل Capabilities.
-     */
     public synchronized List<ActivationRecord>
     getAll() {
 
@@ -436,20 +642,15 @@ public final class CapabilityActivation {
         );
     }
 
-    /**
-     * عدد Capabilities المفعلة فعلياً.
-     */
     public synchronized int getActiveCount() {
 
         int count = 0;
 
-        for (
-                ActivationRecord record
-                : activations.values()
-        ) {
+        for (ActivationRecord record :
+                activations.values()) {
 
-            if (record.getState()
-                    == ActivationState.ACTIVE) {
+            if (record.getState() ==
+                    ActivationState.ACTIVE) {
 
                 count++;
             }
@@ -459,7 +660,14 @@ public final class CapabilityActivation {
     }
 
     /**
-     * إزالة سجل Capability.
+     * عدد القدرات المسجلة.
+     */
+    public synchronized int getCount() {
+        return activations.size();
+    }
+
+    /**
+     * إزالة سجل التفعيل فقط.
      *
      * لا تحذف Tool ولا ملفات المشروع.
      */
@@ -469,12 +677,9 @@ public final class CapabilityActivation {
     ) {
 
         String id =
-                normalizeId(
-                        capabilityId
-                );
+                normalizeId(capabilityId);
 
         if (id.isEmpty()) {
-
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
                     "Capability ID cannot be empty."
@@ -482,7 +687,6 @@ public final class CapabilityActivation {
         }
 
         if (!activations.containsKey(id)) {
-
             return failure(
                     JarvisError.Type.NOT_FOUND,
                     "Capability activation record not found: "
@@ -490,9 +694,7 @@ public final class CapabilityActivation {
             );
         }
 
-        activations.remove(
-                id
-        );
+        activations.remove(id);
 
         return JarvisResult.success(
                 true,
@@ -501,8 +703,61 @@ public final class CapabilityActivation {
     }
 
     /**
-     * يمسح سجلات التفعيل فقط.
+     * إزالة Capability من Runtime Registry
+     * مع إزالة سجل التفعيل.
+     *
+     * لا تستعمل هذه العملية لإلغاء ملفات المشروع.
      */
+    public synchronized JarvisResult<Boolean>
+    unregisterRuntimeTool(
+            String capabilityId
+    ) {
+
+        String id =
+                normalizeId(capabilityId);
+
+        if (id.isEmpty()) {
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "Capability ID cannot be empty."
+            );
+        }
+
+        ActivationRecord record =
+                activations.get(id);
+
+        if (record == null) {
+            return failure(
+                    JarvisError.Type.NOT_FOUND,
+                    "Capability activation not found: "
+                            + id
+            );
+        }
+
+        boolean removedAny =
+                false;
+
+        for (String toolId :
+                record.getAvailableTools()) {
+
+            JarvisResult<Void> result =
+                    toolRegistry.remove(toolId);
+
+            if (result != null &&
+                    result.isSuccess()) {
+
+                removedAny = true;
+            }
+        }
+
+        activations.remove(id);
+
+        return JarvisResult.success(
+                removedAny,
+                "Capability runtime registration removed."
+        );
+    }
+
     public synchronized void clear() {
         activations.clear();
     }
@@ -520,51 +775,128 @@ public final class CapabilityActivation {
         return "active="
                 + getActiveCount()
                 + ", registered="
-                + activations.size();
+                + activations.size()
+                + ", runtime_tools="
+                + toolRegistry.getToolCount();
     }
 
     /**
-     * استخراج الأدوات من CapabilitySpec.
+     * تفعيل مجموعة Tools موجودة في Registry.
+     */
+    private JarvisResult<ActivationRecord>
+    activateUsingRegisteredTools(
+            String capabilityId,
+            String name,
+            List<String> toolIds
+    ) {
+
+        LinkedHashMap<String, Boolean> unique =
+                new LinkedHashMap<>();
+
+        for (String toolId : toolIds) {
+
+            if (toolId == null ||
+                    toolId.trim().isEmpty()) {
+
+                continue;
+            }
+
+            unique.put(
+                    toolId.trim(),
+                    Boolean.TRUE
+            );
+        }
+
+        if (unique.isEmpty()) {
+            return failure(
+                    JarvisError.Type.TOOL_UNAVAILABLE,
+                    "No valid execution tools were supplied."
+            );
+        }
+
+        List<String> available =
+                new ArrayList<>();
+
+        List<String> unavailable =
+                new ArrayList<>();
+
+        for (String toolId :
+                unique.keySet()) {
+
+            ToolContract tool =
+                    getTool(toolId);
+
+            if (tool == null) {
+                unavailable.add(toolId);
+                continue;
+            }
+
+            if (!tool.isAvailable()) {
+                unavailable.add(toolId);
+                continue;
+            }
+
+            available.add(toolId);
+        }
+
+        /*
+         * لا نعتبر Capability ACTIVE
+         * إذا لم تكن هناك Tool واحدة قابلة للتنفيذ.
+         */
+        if (available.isEmpty()) {
+            return failure(
+                    JarvisError.Type.TOOL_UNAVAILABLE,
+                    "No executable tool is available for capability: "
+                            + capabilityId
+            );
+        }
+
+        ActivationRecord record =
+                createActiveRecord(
+                        capabilityId,
+                        name,
+                        available,
+                        unavailable,
+                        "Capability activated with executable runtime tools."
+                );
+
+        activations.put(
+                capabilityId,
+                record
+        );
+
+        return JarvisResult.success(
+                record,
+                record.getMessage()
+        );
+    }
+
+    /**
+     * استخراج Tools من CapabilitySpec.
      */
     private List<String> collectToolIds(
             CapabilitySpec spec
     ) {
 
-        LinkedHashMap<String, Boolean>
-                unique =
+        LinkedHashMap<String, Boolean> unique =
                 new LinkedHashMap<>();
 
-        for (
-                String id
-                : spec.getRequiredTools()
-        ) {
+        for (String id :
+                spec.getRequiredTools()) {
 
-            addToolId(
-                    unique,
-                    id
-            );
+            addToolId(unique, id);
         }
 
-        for (
-                String id
-                : spec.getPreferredTools()
-        ) {
+        for (String id :
+                spec.getPreferredTools()) {
 
-            addToolId(
-                    unique,
-                    id
-            );
+            addToolId(unique, id);
         }
 
-        for (
-                String id
-                : spec.getAlternativeTools()
-        ) {
+        for (String id :
+                spec.getAlternativeTools()) {
 
-            addToolId(
-                    unique,
-                    id
-            );
+            addToolId(unique, id);
         }
 
         return new ArrayList<>(
@@ -590,8 +922,7 @@ public final class CapabilityActivation {
     }
 
     /**
-     * الوصول إلى ToolRegistry بطريقة
-     * متوافقة مع Result-based API.
+     * جلب Tool من Registry.
      */
     private ToolContract getTool(
             String toolId
@@ -605,8 +936,7 @@ public final class CapabilityActivation {
 
         try {
 
-            JarvisResult<ToolContract>
-                    result =
+            JarvisResult<ToolContract> result =
                     toolRegistry.get(
                             toolId.trim()
                     );
@@ -623,6 +953,24 @@ public final class CapabilityActivation {
 
             return null;
         }
+    }
+
+    private ActivationRecord createActiveRecord(
+            String capabilityId,
+            String name,
+            List<String> availableTools,
+            List<String> unavailableTools,
+            String message
+    ) {
+
+        return new ActivationRecord(
+                capabilityId,
+                name,
+                ActivationState.ACTIVE,
+                availableTools,
+                unavailableTools,
+                message
+        );
     }
 
     private String normalizeId(
@@ -658,7 +1006,7 @@ public final class CapabilityActivation {
     }
 
     /**
-     * سجل التفعيل.
+     * سجل تفعيل Capability.
      */
     public static final class ActivationRecord {
 
