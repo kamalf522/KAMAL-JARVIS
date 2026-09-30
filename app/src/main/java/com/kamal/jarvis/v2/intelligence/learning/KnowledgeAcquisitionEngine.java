@@ -1,105 +1,115 @@
 package com.kamal.jarvis.v2.intelligence.learning;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * JARVIS V2
  *
  * KnowledgeAcquisitionEngine
  *
- * مسؤول عن مرحلة اكتساب المعرفة من المصادر المسجلة.
+ * مسؤول عن اكتساب المعرفة من الإنترنت بشكل مستقل.
  *
  * المسار:
  *
+ * User/Brain
+ *      ↓
  * Query
- *   ↓
- * Sources
- *   ↓
- * Search
- *   ↓
- * Candidates
- *   ↓
+ *      ↓
+ * Internet
+ *      ↓
+ * Source Discovery
+ *      ↓
+ * Source Trust Evaluation
+ *      ↓
+ * Trusted / Accepted Sources
+ *      ↓
+ * Web Acquisition
+ *      ↓
  * KnowledgeItem
+ *      ↓
+ * Verification
+ *      ↓
+ * KnowledgeMemory
  *
- * ملاحظة مهمة:
- * هذا المحرك لا يعتبر أي نتيجة صحيحة تلقائياً.
- * التحقق والاعتماد يتمان في طبقة مستقلة.
+ * ملاحظة:
+ *
+ * هذا المحرك لم يعد يعتمد على registerSource()
+ * حتى لا يحتاج JARVIS إلى إضافة المصادر يدوياً.
+ *
+ * اكتشاف المصادر يتم بواسطة:
+ *
+ * KnowledgeSourceTrustEngine
+ *
+ * ثم يتم إنشاء NetworkKnowledgeSource داخلياً
+ * للمصادر المقبولة.
  */
 public final class KnowledgeAcquisitionEngine {
 
     private static final String ENGINE_ID =
             "v2.knowledge_acquisition";
 
-    private final Map<String, KnowledgeSource> sources =
+    private static final int DEFAULT_RESULTS = 8;
+
+    private static final int CONNECT_TIMEOUT_MS = 10000;
+
+    private static final int READ_TIMEOUT_MS = 15000;
+
+    private static final int MAX_CONTENT_SIZE = 1_500_000;
+
+    private static final int MAX_LINKS = 40;
+
+    private final KnowledgeSourceTrustEngine trustEngine;
+
+    /*
+     * يحتفظ فقط بالمصادر التي اكتشفها JARVIS.
+     *
+     * المستخدم لا يحتاج إلى تسجيلها.
+     */
+    private final Map<String, KnowledgeSource> discoveredSources =
             new LinkedHashMap<>();
 
-    /**
-     * تسجيل مصدر معرفة.
-     */
-    public synchronized boolean registerSource(
-            KnowledgeSource source
-    ) {
+    public KnowledgeAcquisitionEngine() {
 
-        if (source == null) {
-            return false;
-        }
-
-        String id = source.getId();
-
-        if (id == null ||
-                id.trim().isEmpty()) {
-
-            return false;
-        }
-
-        sources.put(
-                id.trim(),
-                source
-        );
-
-        return true;
-    }
-
-    /**
-     * إزالة مصدر.
-     */
-    public synchronized boolean unregisterSource(
-            String sourceId
-    ) {
-
-        if (sourceId == null ||
-                sourceId.trim().isEmpty()) {
-
-            return false;
-        }
-
-        return sources.remove(
-                sourceId.trim()
-        ) != null;
-    }
-
-    /**
-     * الحصول على مصدر.
-     */
-    public synchronized KnowledgeSource getSource(
-            String sourceId
-    ) {
-
-        if (sourceId == null) {
-            return null;
-        }
-
-        return sources.get(
-                sourceId.trim()
+        this(
+                new KnowledgeSourceTrustEngine()
         );
     }
 
+    public KnowledgeAcquisitionEngine(
+            KnowledgeSourceTrustEngine trustEngine
+    ) {
+
+        this.trustEngine =
+                trustEngine == null
+                        ? new KnowledgeSourceTrustEngine()
+                        : trustEngine;
+    }
+
     /**
-     * البحث في جميع المصادر المتاحة.
+     * البحث المستقل في الإنترنت.
+     *
+     * JARVIS هو الذي:
+     *
+     * 1. يبحث.
+     * 2. يكتشف المصادر.
+     * 3. يقيّم الثقة.
+     * 4. يختار المصادر المقبولة.
+     * 5. يجلب المعرفة.
      */
     public synchronized AcquisitionResult acquire(
             String query
@@ -108,13 +118,13 @@ public final class KnowledgeAcquisitionEngine {
         return acquire(
                 new KnowledgeSource.SearchRequest(
                         query,
-                        10
+                        DEFAULT_RESULTS
                 )
         );
     }
 
     /**
-     * البحث باستخدام طلب مخصص.
+     * البحث باستخدام SearchRequest.
      */
     public synchronized AcquisitionResult acquire(
             KnowledgeSource.SearchRequest request
@@ -127,44 +137,142 @@ public final class KnowledgeAcquisitionEngine {
             );
         }
 
-        List<KnowledgeItem> collected =
-                new ArrayList<>();
-
-        List<String> sourceErrors =
-                new ArrayList<>();
-
-        int attemptedSources = 0;
-        int successfulSources = 0;
-
-        List<KnowledgeSource> snapshot =
-                new ArrayList<>(
-                        sources.values()
+        String query =
+                safe(
+                        request.getQuery()
                 );
 
-        for (KnowledgeSource source : snapshot) {
+        if (query.isEmpty()) {
 
-            if (source == null) {
+            return AcquisitionResult.failure(
+                    "Search query cannot be empty."
+            );
+        }
+
+        /*
+         * المرحلة الأولى:
+         *
+         * اكتشاف مصادر جديدة من الإنترنت.
+         */
+        KnowledgeSourceTrustEngine.DiscoveryResult discovery =
+                trustEngine.discover(
+                        query
+                );
+
+        if (discovery == null) {
+
+            return AcquisitionResult.failure(
+                    "Source discovery returned no result."
+            );
+        }
+
+        if (!discovery.isSuccess()) {
+
+            return AcquisitionResult.failure(
+                    discovery.getMessage()
+            );
+        }
+
+        /*
+         * المرحلة الثانية:
+         *
+         * تحويل المصادر المقبولة إلى NetworkKnowledgeSource.
+         */
+        List<KnowledgeSource> usableSources =
+                new ArrayList<>();
+
+        for (
+                KnowledgeSourceTrustEngine.SourceProfile profile
+                : discovery.getSources()
+        ) {
+
+            if (profile == null) {
                 continue;
             }
+
+            KnowledgeSourceTrustEngine.TrustAssessment assessment =
+                    trustEngine.getAssessment(
+                            profile.getId()
+                    );
+
+            if (assessment == null) {
+                continue;
+            }
+
+            if (!assessment.canUse()) {
+                continue;
+            }
+
+            NetworkKnowledgeSource source =
+                    new NetworkKnowledgeSource(
+                            profile
+                    );
 
             if (!source.isAvailable()) {
                 continue;
             }
 
-            if (!source.supportsContinuousLearning()) {
+            discoveredSources.put(
+                    source.getId(),
+                    source
+            );
+
+            usableSources.add(
+                    source
+            );
+        }
+
+        /*
+         * إذا لم نجد أي مصدر قابل للاستخدام،
+         * لا ندّعي أن التعلم نجح.
+         */
+        if (usableSources.isEmpty()) {
+
+            return AcquisitionResult.failure(
+                    "No usable Internet source passed "
+                            + "the trust evaluation."
+            );
+        }
+
+        /*
+         * المرحلة الثالثة:
+         *
+         * جمع المعرفة من المصادر المقبولة.
+         */
+        List<KnowledgeItem> collected =
+                new ArrayList<>();
+
+        List<String> errors =
+                new ArrayList<>();
+
+        int attempted =
+                0;
+
+        int successful =
+                0;
+
+        for (
+                KnowledgeSource source
+                : usableSources
+        ) {
+
+            if (source == null
+                    || !source.isAvailable()) {
                 continue;
             }
 
-            attemptedSources++;
+            attempted++;
 
             try {
 
                 KnowledgeSource.SearchResult result =
-                        source.search(request);
+                        source.search(
+                                request
+                        );
 
                 if (result == null) {
 
-                    sourceErrors.add(
+                    errors.add(
                             source.getId()
                                     + ": empty result."
                     );
@@ -174,7 +282,7 @@ public final class KnowledgeAcquisitionEngine {
 
                 if (!result.isSuccess()) {
 
-                    sourceErrors.add(
+                    errors.add(
                             source.getId()
                                     + ": "
                                     + result.getMessage()
@@ -183,7 +291,7 @@ public final class KnowledgeAcquisitionEngine {
                     continue;
                 }
 
-                successfulSources++;
+                successful++;
 
                 List<KnowledgeSource.KnowledgeCandidate>
                         candidates =
@@ -194,8 +302,7 @@ public final class KnowledgeAcquisitionEngine {
                 }
 
                 for (
-                        KnowledgeSource.KnowledgeCandidate
-                                candidate
+                        KnowledgeSource.KnowledgeCandidate candidate
                         : candidates
                 ) {
 
@@ -207,39 +314,124 @@ public final class KnowledgeAcquisitionEngine {
                             );
 
                     if (item != null) {
-                        collected.add(item);
+                        collected.add(
+                                item
+                        );
                     }
                 }
 
             } catch (Exception exception) {
 
-                sourceErrors.add(
+                errors.add(
                         source.getId()
                                 + ": "
-                                + safeMessage(exception)
+                                + safeMessage(
+                                exception
+                        )
                 );
             }
         }
 
+        /*
+         * لا نعتبر المعرفة "موثوقة" هنا.
+         *
+         * KnowledgeVerificationEngine هو المسؤول
+         * عن التحقق النهائي.
+         */
         return AcquisitionResult.success(
-                request.getQuery(),
+                query,
                 collected,
-                attemptedSources,
-                successfulSources,
-                sourceErrors
+                attempted,
+                successful,
+                errors
         );
     }
 
     /**
-     * البحث في مصدر محدد.
+     * إعادة اكتشاف المصادر والبحث من الإنترنت.
+     *
+     * مفيدة للتعلم المستمر.
+     */
+    public synchronized AcquisitionResult discoverAndAcquire(
+            String query
+    ) {
+
+        return acquire(
+                query
+        );
+    }
+
+    /**
+     * إعادة التحقق من المصادر التي اكتشفها JARVIS.
+     */
+    public synchronized KnowledgeSourceTrustEngine.RevalidationResult
+    revalidateSources() {
+
+        KnowledgeSourceTrustEngine.RevalidationResult result =
+                trustEngine.revalidateAll();
+
+        /*
+         * المصادر القديمة قد تكون تغيرت.
+         *
+         * نحذف المصادر التي لم تعد قابلة للاستخدام.
+         */
+        List<String> removeIds =
+                new ArrayList<>();
+
+        for (
+                Map.Entry<String, KnowledgeSource> entry
+                : discoveredSources.entrySet()
+        ) {
+
+            KnowledgeSourceTrustEngine.TrustAssessment assessment =
+                    trustEngine.getAssessment(
+                            entry.getKey()
+                    );
+
+            if (assessment == null
+                    || !assessment.canUse()) {
+
+                removeIds.add(
+                        entry.getKey()
+                );
+            }
+        }
+
+        for (String id : removeIds) {
+            discoveredSources.remove(
+                    id
+            );
+        }
+
+        return result;
+    }
+
+    /**
+     * الحصول على مصدر اكتشفه JARVIS.
+     */
+    public synchronized KnowledgeSource getSource(
+            String sourceId
+    ) {
+
+        if (sourceId == null) {
+            return null;
+        }
+
+        return discoveredSources.get(
+                sourceId.trim()
+        );
+    }
+
+    /**
+     * البحث في مصدر اكتشفه JARVIS سابقاً.
      */
     public synchronized AcquisitionResult acquireFrom(
             String sourceId,
             String query
     ) {
 
-        if (sourceId == null ||
-                sourceId.trim().isEmpty()) {
+        if (sourceId == null
+                || sourceId.trim().isEmpty()) {
 
             return AcquisitionResult.failure(
                     "sourceId cannot be empty."
@@ -247,7 +439,7 @@ public final class KnowledgeAcquisitionEngine {
         }
 
         KnowledgeSource source =
-                sources.get(
+                discoveredSources.get(
                         sourceId.trim()
                 );
 
@@ -259,24 +451,32 @@ public final class KnowledgeAcquisitionEngine {
             );
         }
 
-        if (!source.isAvailable()) {
+        KnowledgeSourceTrustEngine.TrustAssessment assessment =
+                trustEngine.getAssessment(
+                        source.getId()
+                );
+
+        if (assessment == null
+                || !assessment.canUse()) {
 
             return AcquisitionResult.failure(
-                    "Knowledge source is unavailable: "
-                            + sourceId
+                    "Source is not currently trusted "
+                            + "enough for acquisition."
             );
         }
 
         KnowledgeSource.SearchRequest request =
                 new KnowledgeSource.SearchRequest(
                         query,
-                        10
+                        DEFAULT_RESULTS
                 );
 
         try {
 
             KnowledgeSource.SearchResult result =
-                    source.search(request);
+                    source.search(
+                            request
+                    );
 
             if (result == null) {
 
@@ -292,37 +492,31 @@ public final class KnowledgeAcquisitionEngine {
                 );
             }
 
-            List<KnowledgeItem> collected =
+            List<KnowledgeItem> items =
                     new ArrayList<>();
 
-            List<KnowledgeSource.KnowledgeCandidate>
-                    candidates =
-                    result.getCandidates();
+            for (
+                    KnowledgeSource.KnowledgeCandidate candidate
+                    : result.getCandidates()
+            ) {
 
-            if (candidates != null) {
-
-                for (
-                        KnowledgeSource.KnowledgeCandidate
+                KnowledgeItem item =
+                        convertCandidate(
+                                source,
+                                request,
                                 candidate
-                        : candidates
-                ) {
+                        );
 
-                    KnowledgeItem item =
-                            convertCandidate(
-                                    source,
-                                    request,
-                                    candidate
-                            );
-
-                    if (item != null) {
-                        collected.add(item);
-                    }
+                if (item != null) {
+                    items.add(
+                            item
+                    );
                 }
             }
 
             return AcquisitionResult.success(
                     query,
-                    collected,
+                    items,
                     1,
                     1,
                     Collections.emptyList()
@@ -331,15 +525,15 @@ public final class KnowledgeAcquisitionEngine {
         } catch (Exception exception) {
 
             return AcquisitionResult.failure(
-                    sourceId
-                            + ": "
-                            + safeMessage(exception)
+                    safeMessage(
+                            exception
+                    )
             );
         }
     }
 
     /**
-     * تحويل النتيجة الخام إلى KnowledgeItem.
+     * تحويل KnowledgeCandidate إلى KnowledgeItem.
      */
     private KnowledgeItem convertCandidate(
             KnowledgeSource source,
@@ -347,25 +541,37 @@ public final class KnowledgeAcquisitionEngine {
             KnowledgeSource.KnowledgeCandidate candidate
     ) {
 
-        if (source == null ||
-                request == null ||
-                candidate == null ||
-                !candidate.isUsable()) {
+        if (source == null
+                || request == null
+                || candidate == null
+                || !candidate.isUsable()) {
 
             return null;
         }
 
         String sourceId =
-                safe(source.getId());
+                safe(
+                        source.getId()
+                );
 
         String title =
-                safe(candidate.getTitle());
+                safe(
+                        candidate.getTitle()
+                );
 
         String content =
-                safe(candidate.getContent());
+                safe(
+                        candidate.getContent()
+                );
 
         String location =
-                safe(candidate.getLocation());
+                safe(
+                        candidate.getLocation()
+                );
+
+        if (content.isEmpty()) {
+            return null;
+        }
 
         String id =
                 createKnowledgeId(
@@ -386,20 +592,11 @@ public final class KnowledgeAcquisitionEngine {
                         location
                 );
 
-        /*
-         * المعرفة في البداية تبقى NEW/COLLECTED.
-         *
-         * لا نرفع الثقة هنا.
-         */
         item =
                 item.withStatus(
                         KnowledgeItem.KnowledgeStatus.COLLECTED
                 );
 
-        /*
-         * نحتفظ بالمعلومات الإضافية
-         * التي قدمها المصدر.
-         */
         if (!candidate.getMetadata().isEmpty()) {
 
             for (
@@ -427,6 +624,12 @@ public final class KnowledgeAcquisitionEngine {
 
         item =
                 item.withMetadata(
+                        "source_url",
+                        location
+                );
+
+        item =
+                item.withMetadata(
                         "query",
                         request.getQuery()
                 );
@@ -440,9 +643,6 @@ public final class KnowledgeAcquisitionEngine {
         return item;
     }
 
-    /**
-     * إنشاء معرف ثابت نسبياً للمعرفة.
-     */
     private String createKnowledgeId(
             String sourceId,
             String query,
@@ -469,6 +669,60 @@ public final class KnowledgeAcquisitionEngine {
                 );
     }
 
+    public synchronized int getSourceCount() {
+        return discoveredSources.size();
+    }
+
+    public synchronized boolean hasSource(
+            String sourceId
+    ) {
+
+        return sourceId != null
+                && discoveredSources.containsKey(
+                sourceId.trim()
+        );
+    }
+
+    public synchronized List<String> getSourceIds() {
+
+        return Collections.unmodifiableList(
+                new ArrayList<>(
+                        discoveredSources.keySet()
+                )
+        );
+    }
+
+    public synchronized List<KnowledgeSource> getSources() {
+
+        return Collections.unmodifiableList(
+                new ArrayList<>(
+                        discoveredSources.values()
+                )
+        );
+    }
+
+    public synchronized List<KnowledgeSourceTrustEngine.SourceProfile>
+    getDiscoveredSourceProfiles() {
+
+        return trustEngine.getDiscoveredSources();
+    }
+
+    public synchronized List<KnowledgeSourceTrustEngine.SourceProfile>
+    getUsableSourceProfiles() {
+
+        return trustEngine.getUsableSources();
+    }
+
+    public KnowledgeSourceTrustEngine
+    getTrustEngine() {
+
+        return trustEngine;
+    }
+
+    public String getEngineId() {
+        return ENGINE_ID;
+    }
+
     private String safe(
             String value
     ) {
@@ -489,8 +743,8 @@ public final class KnowledgeAcquisitionEngine {
         String message =
                 exception.getMessage();
 
-        if (message == null ||
-                message.trim().isEmpty()) {
+        if (message == null
+                || message.trim().isEmpty()) {
 
             return exception
                     .getClass()
@@ -500,43 +754,892 @@ public final class KnowledgeAcquisitionEngine {
         return message;
     }
 
-    public synchronized int getSourceCount() {
-        return sources.size();
-    }
+    /**
+     * مصدر شبكي داخلي.
+     *
+     * لا يحتاج ملف Java منفصل.
+     *
+     * مهمته:
+     *
+     * URL
+     * ↓
+     * HTTP
+     * ↓
+     * HTML
+     * ↓
+     * نص
+     * ↓
+     * KnowledgeCandidate
+     */
+    private static final class NetworkKnowledgeSource
+            implements KnowledgeSource {
 
-    public synchronized boolean hasSource(
-            String sourceId
-    ) {
+        private final KnowledgeSourceTrustEngine.SourceProfile profile;
 
-        return sourceId != null
-                &&
-                sources.containsKey(
-                        sourceId.trim()
+        private NetworkKnowledgeSource(
+                KnowledgeSourceTrustEngine.SourceProfile profile
+        ) {
+
+            this.profile =
+                    profile;
+        }
+
+        @Override
+        public String getId() {
+
+            return profile.getId();
+        }
+
+        @Override
+        public String getName() {
+
+            return profile.getName();
+        }
+
+        @Override
+        public String getDescription() {
+
+            return profile.getDescription();
+        }
+
+        @Override
+        public SourceType getType() {
+
+            return profile.getType();
+        }
+
+        @Override
+        public boolean isAvailable() {
+
+            return profile.isAvailable()
+                    && !isBlankStatic(
+                    profile.getUrl()
+            );
+        }
+
+        @Override
+        public boolean requiresNetwork() {
+            return true;
+        }
+
+        @Override
+        public boolean supportsContinuousLearning() {
+            return true;
+        }
+
+        @Override
+        public SearchResult search(
+                SearchRequest request
+        ) {
+
+            if (request == null
+                    || isBlankStatic(
+                    request.getQuery()
+            )) {
+
+                return SearchResult.failure(
+                        "Search request is empty."
                 );
-    }
+            }
 
-    public synchronized List<String>
-    getSourceIds() {
+            /*
+             * أولاً نحاول استخدام المصدر نفسه.
+             */
+            List<KnowledgeCandidate> candidates =
+                    fetchPage(
+                            profile.getUrl(),
+                            request
+                    );
 
-        return Collections.unmodifiableList(
-                new ArrayList<>(
-                        sources.keySet()
+            /*
+             * إذا لم يعطينا المصدر نتيجة مفيدة،
+             * نحاول استخراج الروابط الموجودة داخله
+             * والبحث في الصفحات المرتبطة.
+             */
+            if (candidates.isEmpty()) {
+
+                candidates =
+                        fetchLinkedPages(
+                                profile.getUrl(),
+                                request
+                        );
+            }
+
+            if (candidates.isEmpty()) {
+
+                return SearchResult.failure(
+                        "No usable knowledge found from source."
+                );
+            }
+
+            return SearchResult.success(
+                    candidates
+            );
+        }
+
+        @Override
+        public Map<String, Object> getMetadata() {
+
+            Map<String, Object> metadata =
+                    new LinkedHashMap<>();
+
+            metadata.put(
+                    "url",
+                    profile.getUrl()
+            );
+
+            metadata.put(
+                    "owner",
+                    profile.getOwner()
+            );
+
+            metadata.put(
+                    "official",
+                    profile.isOfficial()
+            );
+
+            metadata.put(
+                    "verified_ownership",
+                    profile.isVerifiedOwnership()
+            );
+
+            metadata.put(
+                    "trust_domain_relevance",
+                    profile.getDomainRelevance()
+            );
+
+            return metadata;
+        }
+
+        private List<KnowledgeCandidate> fetchPage(
+                String url,
+                SearchRequest request
+        ) {
+
+            HttpURLConnection connection =
+                    null;
+
+            try {
+
+                URL target =
+                        new URL(
+                                url
+                        );
+
+                connection =
+                        (HttpURLConnection)
+                                target.openConnection();
+
+                connection.setRequestMethod(
+                        "GET"
+                );
+
+                connection.setConnectTimeout(
+                        CONNECT_TIMEOUT_MS
+                );
+
+                connection.setReadTimeout(
+                        READ_TIMEOUT_MS
+                );
+
+                connection.setInstanceFollowRedirects(
+                        true
+                );
+
+                connection.setRequestProperty(
+                        "User-Agent",
+                        "Kamal-JARVIS/2.0"
+                );
+
+                connection.setRequestProperty(
+                        "Accept",
+                        "text/html,application/xhtml+xml,"
+                                + "text/plain;q=0.9"
+                );
+
+                int code =
+                        connection.getResponseCode();
+
+                if (code < 200
+                        || code >= 400) {
+
+                    return Collections.emptyList();
+                }
+
+                InputStream stream =
+                        connection.getInputStream();
+
+                String html =
+                        readLimited(
+                                stream,
+                                MAX_CONTENT_SIZE
+                        );
+
+                return parsePage(
+                        url,
+                        html,
+                        request
+                );
+
+            } catch (Exception ignored) {
+
+                return Collections.emptyList();
+
+            } finally {
+
+                if (connection != null) {
+                    connection.disconnect();
+                }
+            }
+        }
+
+        private List<KnowledgeCandidate> fetchLinkedPages(
+                String baseUrl,
+                SearchRequest request
+        ) {
+
+            HttpURLConnection connection =
+                    null;
+
+            try {
+
+                URL target =
+                        new URL(
+                                baseUrl
+                        );
+
+                connection =
+                        (HttpURLConnection)
+                                target.openConnection();
+
+                connection.setRequestMethod(
+                        "GET"
+                );
+
+                connection.setConnectTimeout(
+                        CONNECT_TIMEOUT_MS
+                );
+
+                connection.setReadTimeout(
+                        READ_TIMEOUT_MS
+                );
+
+                connection.setInstanceFollowRedirects(
+                        true
+                );
+
+                connection.setRequestProperty(
+                        "User-Agent",
+                        "Kamal-JARVIS/2.0"
+                );
+
+                int code =
+                        connection.getResponseCode();
+
+                if (code < 200
+                        || code >= 400) {
+
+                    return Collections.emptyList();
+                }
+
+                String html =
+                        readLimited(
+                                connection.getInputStream(),
+                                MAX_CONTENT_SIZE
+                        );
+
+                List<String> links =
+                        extractLinks(
+                                baseUrl,
+                                html
+                        );
+
+                List<KnowledgeCandidate> results =
+                        new ArrayList<>();
+
+                int limit =
+                        Math.min(
+                                links.size(),
+                                MAX_LINKS
+                        );
+
+                for (int i = 0;
+                     i < limit;
+                     i++) {
+
+                    String link =
+                            links.get(i);
+
+                    if (!isRelevantLink(
+                            link,
+                            request.getQuery()
+                    )) {
+                        continue;
+                    }
+
+                    List<KnowledgeCandidate>
+                            page =
+                            fetchPage(
+                                    link,
+                                    request
+                            );
+
+                    results.addAll(
+                            page
+                    );
+
+                    if (results.size()
+                            >= request.getMaxResults()) {
+
+                        break;
+                    }
+                }
+
+                return limitResults(
+                        results,
+                        request.getMaxResults()
+                );
+
+            } catch (Exception ignored) {
+
+                return Collections.emptyList();
+
+            } finally {
+
+                if (connection != null) {
+                    connection.disconnect();
+                }
+            }
+        }
+
+        private List<KnowledgeCandidate> parsePage(
+                String url,
+                String html,
+                SearchRequest request
+        ) {
+
+            if (html == null
+                    || html.trim().isEmpty()) {
+
+                return Collections.emptyList();
+            }
+
+            String title =
+                    extractTitle(
+                            html
+                    );
+
+            String text =
+                    extractText(
+                            html
+                    );
+
+            if (text.length() > MAX_CONTENT_SIZE) {
+
+                text =
+                        text.substring(
+                                0,
+                                MAX_CONTENT_SIZE
+                        );
+            }
+
+            /*
+             * لا نخزن الصفحة كاملة إذا لم تكن
+             * مرتبطة بطلب المستخدم.
+             *
+             * نبحث عن كلمات الطلب داخل النص.
+             */
+            double relevance =
+                    calculateRelevance(
+                            request.getQuery(),
+                            title,
+                            text
+                    );
+
+            if (relevance <= 0.0) {
+
+                return Collections.emptyList();
+            }
+
+            Map<String, Object> metadata =
+                    new LinkedHashMap<>();
+
+            metadata.put(
+                    "relevance",
+                    relevance
+            );
+
+            metadata.put(
+                    "source_url",
+                    url
+            );
+
+            metadata.put(
+                    "acquisition",
+                    "internet"
+            );
+
+            KnowledgeCandidate candidate =
+                    new KnowledgeCandidate(
+                            title,
+                            text,
+                            url,
+                            profile.getOwner(),
+                            metadata
+                    );
+
+            List<KnowledgeCandidate> result =
+                    new ArrayList<>();
+
+            result.add(
+                    candidate
+            );
+
+            return result;
+        }
+
+        private double calculateRelevance(
+                String query,
+                String title,
+                String content
+        ) {
+
+            String q =
+                    query.toLowerCase();
+
+            String combined =
+                    (
+                            safeStatic(title)
+                                    + " "
+                                    + safeStatic(content)
+                    ).toLowerCase();
+
+            String[] words =
+                    q.split(
+                            "\\s+"
+                    );
+
+            if (words.length == 0) {
+                return 0.0;
+            }
+
+            int matches = 0;
+
+            for (String word : words) {
+
+                if (word.length() < 2) {
+                    continue;
+                }
+
+                if (combined.contains(
+                        word
+                )) {
+
+                    matches++;
+                }
+            }
+
+            return Math.min(
+                    1.0,
+                    (double) matches
+                            / (double) words.length
+            );
+        }
+
+        private List<String> extractLinks(
+                String baseUrl,
+                String html
+        ) {
+
+            List<String> links =
+                    new ArrayList<>();
+
+            Set<String> seen =
+                    new HashSet<>();
+
+            Pattern pattern =
+                    Pattern.compile(
+                            "<a[^>]+href=[\"']([^\"']+)[\"']",
+                            Pattern.CASE_INSENSITIVE
+                    );
+
+            Matcher matcher =
+                    pattern.matcher(
+                            html
+                    );
+
+            while (matcher.find()
+                    && links.size()
+                    < MAX_LINKS) {
+
+                String raw =
+                        decodeHtml(
+                                matcher.group(1)
+                        );
+
+                String absolute =
+                        resolveUrl(
+                                baseUrl,
+                                raw
+                        );
+
+                if (!isHttpUrl(
+                        absolute
+                )) {
+                    continue;
+                }
+
+                String normalized =
+                        normalizeUrl(
+                                absolute
+                        );
+
+                if (seen.add(
+                        normalized
+                )) {
+
+                    links.add(
+                            absolute
+                    );
+                }
+            }
+
+            return links;
+        }
+
+        private boolean isRelevantLink(
+                String url,
+                String query
+        ) {
+
+            String lower =
+                    url.toLowerCase();
+
+            String[] words =
+                    query.toLowerCase()
+                            .split(
+                                    "\\s+"
+                            );
+
+            for (String word : words) {
+
+                if (word.length() >= 3
+                        && lower.contains(
+                        word
+                )) {
+
+                    return true;
+                }
+            }
+
+            return lower.contains(
+                    "article"
+            )
+                    || lower.contains(
+                    "docs"
+            )
+                    || lower.contains(
+                    "learn"
+            )
+                    || lower.contains(
+                    "guide"
+            )
+                    || lower.contains(
+                    "research"
+            );
+        }
+
+        private static String extractTitle(
+                String html
+        ) {
+
+            Pattern pattern =
+                    Pattern.compile(
+                            "<title[^>]*>(.*?)</title>",
+                            Pattern.CASE_INSENSITIVE
+                                    | Pattern.DOTALL
+                    );
+
+            Matcher matcher =
+                    pattern.matcher(
+                            html
+                    );
+
+            if (!matcher.find()) {
+                return "";
+            }
+
+            return stripHtmlStatic(
+                    matcher.group(1)
+            );
+        }
+
+        private static String extractText(
+                String html
+        ) {
+
+            String value =
+                    html
+                            .replaceAll(
+                                    "(?is)<script.*?</script>",
+                                    " "
+                            )
+                            .replaceAll(
+                                    "(?is)<style.*?</style>",
+                                    " "
+                            )
+                            .replaceAll(
+                                    "(?is)<noscript.*?</noscript>",
+                                    " "
+                            )
+                            .replaceAll(
+                                    "<[^>]+>",
+                                    " "
+                            )
+                            .replaceAll(
+                                    "\\s+",
+                                    " "
+                            );
+
+            return decodeHtml(
+                    value
+            ).trim();
+        }
+
+        private static String readLimited(
+                InputStream input,
+                int maxBytes
+        ) throws IOException {
+
+            if (input == null) {
+                return "";
+            }
+
+            byte[] buffer =
+                    new byte[8192];
+
+            int total = 0;
+
+            StringBuilder result =
+                    new StringBuilder();
+
+            while (true) {
+
+                int read =
+                        input.read(
+                                buffer
+                        );
+
+                if (read < 0) {
+                    break;
+                }
+
+                int allowed =
+                        read;
+
+                if (total + read
+                        > maxBytes) {
+
+                    allowed =
+                            maxBytes - total;
+                }
+
+                if (allowed > 0) {
+
+                    result.append(
+                            new String(
+                                    buffer,
+                                    0,
+                                    allowed,
+                                    StandardCharsets.UTF_8
+                            )
+                    );
+
+                    total += allowed;
+                }
+
+                if (total >= maxBytes) {
+                    break;
+                }
+            }
+
+            return result.toString();
+        }
+
+        private static String resolveUrl(
+                String base,
+                String link
+        ) {
+
+            try {
+
+                URI baseUri =
+                        new URI(
+                                base
+                        );
+
+                URI resolved =
+                        baseUri.resolve(
+                                link
+                        );
+
+                return resolved.toString();
+
+            } catch (Exception e) {
+
+                return "";
+            }
+        }
+
+        private static boolean isHttpUrl(
+                String url
+        ) {
+
+            try {
+
+                URI uri =
+                        new URI(
+                                url
+                        );
+
+                String scheme =
+                        uri.getScheme();
+
+                return (
+                        "http".equalsIgnoreCase(
+                                scheme
+                        )
+                                || "https".equalsIgnoreCase(
+                                scheme
+                        )
                 )
-        );
-    }
+                        && uri.getHost() != null;
 
-    public synchronized List<KnowledgeSource>
-    getSources() {
+            } catch (Exception e) {
 
-        return Collections.unmodifiableList(
-                new ArrayList<>(
-                        sources.values()
-                )
-        );
-    }
+                return false;
+            }
+        }
 
-    public String getEngineId() {
-        return ENGINE_ID;
+        private static String normalizeUrl(
+                String url
+        ) {
+
+            String value =
+                    safeStatic(
+                            url
+                    );
+
+            while (value.endsWith("/")) {
+
+                value =
+                        value.substring(
+                                0,
+                                value.length() - 1
+                        );
+            }
+
+            return value.toLowerCase();
+        }
+
+        private static String decodeHtml(
+                String value
+        ) {
+
+            if (value == null) {
+                return "";
+            }
+
+            return value
+                    .replace(
+                            "&amp;",
+                            "&"
+                    )
+                    .replace(
+                            "&quot;",
+                            "\""
+                    )
+                    .replace(
+                            "&#39;",
+                            "'"
+                    )
+                    .replace(
+                            "&lt;",
+                            "<"
+                    )
+                    .replace(
+                            "&gt;",
+                            ">"
+                    );
+        }
+
+        private static String stripHtmlStatic(
+                String value
+        ) {
+
+            if (value == null) {
+                return "";
+            }
+
+            return decodeHtml(
+                    value
+                            .replaceAll(
+                                    "<[^>]+>",
+                                    " "
+                            )
+                            .replaceAll(
+                                    "\\s+",
+                                    " "
+                            )
+            ).trim();
+        }
+
+        private static String safeStatic(
+                String value
+        ) {
+
+            return value == null
+                    ? ""
+                    : value.trim();
+        }
+
+        private static boolean isBlankStatic(
+                String value
+        ) {
+
+            return value == null
+                    || value.trim().isEmpty();
+        }
+
+        private static List<KnowledgeCandidate>
+        limitResults(
+                List<KnowledgeCandidate> input,
+                int max
+        ) {
+
+            if (input == null
+                    || input.isEmpty()) {
+
+                return Collections.emptyList();
+            }
+
+            int limit =
+                    Math.max(
+                            1,
+                            max
+                    );
+
+            if (input.size() <= limit) {
+                return input;
+            }
+
+            return new ArrayList<>(
+                    input.subList(
+                            0,
+                            limit
+                    )
+            );
+        }
     }
 
     /**
@@ -562,7 +1665,9 @@ public final class KnowledgeAcquisitionEngine {
                 String message
         ) {
 
-            this.success = success;
+            this.success =
+                    success;
+
             this.query =
                     query == null
                             ? ""
