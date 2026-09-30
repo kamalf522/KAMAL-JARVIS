@@ -9,28 +9,37 @@ import java.util.List;
  *
  * KnowledgeLearningEngine
  *
- * حلقة التعلم الرئيسية:
+ * دورة التعلم:
  *
  * Query
  *   ↓
- * Acquisition
+ * Internet Source Discovery
  *   ↓
- * Verification
+ * Trust Evaluation
  *   ↓
- * Memory
+ * Knowledge Acquisition
  *   ↓
- * Knowledge usable by JARVIS
+ * Knowledge Verification
+ *   ↓
+ * Knowledge Memory
+ *   ↓
+ * Continuous Learning
  *
- * هذا المحرك لا يعتمد على مصدر واحد.
- * أي KnowledgeSource مسجل داخل KnowledgeAcquisitionEngine
- * يمكن استعماله ضمن دورة التعلم.
+ * هذا المحرك لا يحتاج من المستخدم إضافة المصادر.
  *
- * مهم:
- * - المعرفة غير الموثقة لا تعتبر معرفة موثوقة.
- * - المعرفة المرفوضة لا تدخل الذاكرة.
- * - المعرفة التي تحتاج مراجعة يمكن الاحتفاظ بها
- *   إذا تم تفعيل ذلك صراحة.
- * - المحرك لا يفرض YouTube أو Web أو أي مصدر محدد.
+ * KnowledgeAcquisitionEngine هو المسؤول عن:
+ * - اكتشاف المصادر
+ * - تقييم المصادر
+ * - جمع المعرفة
+ *
+ * KnowledgeVerificationEngine هو المسؤول عن:
+ * - التحقق
+ * - مقارنة المعرفة
+ * - اكتشاف التعارض
+ *
+ * KnowledgeMemory هو المسؤول عن:
+ * - حفظ المعرفة المقبولة
+ * - استرجاعها
  */
 public final class KnowledgeLearningEngine {
 
@@ -38,7 +47,9 @@ public final class KnowledgeLearningEngine {
             "v2.knowledge_learning";
 
     private final KnowledgeAcquisitionEngine acquisitionEngine;
+
     private final KnowledgeVerificationEngine verificationEngine;
+
     private final KnowledgeMemory memory;
 
     private LearningState state =
@@ -48,17 +59,30 @@ public final class KnowledgeLearningEngine {
 
     private long learningCount = 0L;
 
+    private long successfulLearningCount = 0L;
+
+    private long failedLearningCount = 0L;
+
     private LearningResult lastResult;
 
-    /**
-     * السلوك الافتراضي:
+    /*
+     * الوضع الافتراضي:
      *
-     * نخزن المعرفة VERIFIED فقط.
-     *
-     * المعرفة NEEDS_REVIEW تبقى في نتيجة التعلم
-     * ولا يتم اعتبارها معرفة موثوقة.
+     * VERIFIED فقط تدخل الذاكرة.
      */
     private boolean storeReviewItems = false;
+
+    /*
+     * إذا كان true يستطيع JARVIS إعادة فحص
+     * المصادر التي سبق اكتشافها بشكل دوري.
+     */
+    private boolean continuousSourceRevalidation = true;
+
+    /*
+     * عدد دورات التعلم التي يجب بعدها
+     * إعادة فحص المصادر.
+     */
+    private long revalidationInterval = 5L;
 
     public KnowledgeLearningEngine(
             KnowledgeAcquisitionEngine acquisitionEngine,
@@ -95,12 +119,7 @@ public final class KnowledgeLearningEngine {
     }
 
     /**
-     * تشغيل دورة تعلم كاملة.
-     *
-     * Query
-     * -> Acquire
-     * -> Verify
-     * -> Store
+     * دورة تعلم كاملة.
      */
     public synchronized LearningResult learn(
             String query
@@ -113,8 +132,14 @@ public final class KnowledgeLearningEngine {
     }
 
     /**
-     * تشغيل دورة تعلم كاملة
-     * مع إمكانية تخزين المعرفة التي تحتاج مراجعة.
+     * دورة تعلم كاملة.
+     *
+     * Internet
+     * -> Discovery
+     * -> Trust
+     * -> Acquisition
+     * -> Verification
+     * -> Memory
      */
     public synchronized LearningResult learn(
             String query,
@@ -122,12 +147,16 @@ public final class KnowledgeLearningEngine {
     ) {
 
         String normalizedQuery =
-                normalize(query);
+                normalize(
+                        query
+                );
 
         if (normalizedQuery.isEmpty()) {
 
             state =
                     LearningState.FAILED;
+
+            failedLearningCount++;
 
             lastResult =
                     LearningResult.failure(
@@ -146,13 +175,37 @@ public final class KnowledgeLearningEngine {
         learningCount++;
 
         /*
+         * إعادة التحقق من المصادر بشكل دوري.
+         *
+         * هذا لا يضيف مصادر يدوياً.
+         * JARVIS هو الذي يعيد فحصها.
+         */
+        if (shouldRevalidateSources()) {
+
+            try {
+
+                acquisitionEngine
+                        .revalidateSources();
+
+            } catch (Exception ignored) {
+                /*
+                 * فشل إعادة التحقق لا يمنع دورة
+                 * التعلم الحالية من محاولة اكتشاف
+                 * مصادر جديدة.
+                 */
+            }
+        }
+
+        /*
          * المرحلة 1:
-         * الحصول على المعرفة من جميع المصادر المتاحة.
+         *
+         * اكتشاف المصادر + الثقة + جمع المعرفة.
          */
         state =
                 LearningState.ACQUIRING;
 
-        KnowledgeAcquisitionEngine.AcquisitionResult acquisitionResult =
+        KnowledgeAcquisitionEngine.AcquisitionResult
+                acquisitionResult =
                 acquisitionEngine.acquire(
                         lastQuery
                 );
@@ -161,6 +214,8 @@ public final class KnowledgeLearningEngine {
 
             state =
                     LearningState.FAILED;
+
+            failedLearningCount++;
 
             lastResult =
                     LearningResult.failure(
@@ -176,6 +231,8 @@ public final class KnowledgeLearningEngine {
             state =
                     LearningState.FAILED;
 
+            failedLearningCount++;
+
             lastResult =
                     LearningResult.fromAcquisitionFailure(
                             lastQuery,
@@ -186,13 +243,19 @@ public final class KnowledgeLearningEngine {
         }
 
         List<KnowledgeItem> acquiredItems =
-                acquisitionResult.getItems();
+                safeList(
+                        acquisitionResult.getItems()
+                );
 
-        if (acquiredItems == null
-                || acquiredItems.isEmpty()) {
+        /*
+         * لم نجد معرفة جديدة.
+         */
+        if (acquiredItems.isEmpty()) {
 
             state =
                     LearningState.COMPLETED;
+
+            successfulLearningCount++;
 
             lastResult =
                     LearningResult.success(
@@ -210,12 +273,14 @@ public final class KnowledgeLearningEngine {
 
         /*
          * المرحلة 2:
+         *
          * التحقق من المعرفة.
          */
         state =
                 LearningState.VERIFYING;
 
-        KnowledgeVerificationEngine.VerificationReport verificationReport =
+        KnowledgeVerificationEngine.VerificationReport
+                verificationReport =
                 verificationEngine.verify(
                         acquiredItems
                 );
@@ -224,6 +289,8 @@ public final class KnowledgeLearningEngine {
 
             state =
                     LearningState.FAILED;
+
+            failedLearningCount++;
 
             lastResult =
                     LearningResult.failure(
@@ -239,6 +306,8 @@ public final class KnowledgeLearningEngine {
             state =
                     LearningState.FAILED;
 
+            failedLearningCount++;
+
             lastResult =
                     LearningResult.fromVerificationFailure(
                             lastQuery,
@@ -251,25 +320,23 @@ public final class KnowledgeLearningEngine {
 
         List<KnowledgeItem> verifiedItems =
                 safeList(
-                        verificationReport
-                                .getVerifiedItems()
+                        verificationReport.getVerifiedItems()
                 );
 
         List<KnowledgeItem> reviewItems =
                 safeList(
-                        verificationReport
-                                .getReviewItems()
+                        verificationReport.getReviewItems()
                 );
 
         List<KnowledgeItem> rejectedItems =
                 safeList(
-                        verificationReport
-                                .getRejectedItems()
+                        verificationReport.getRejectedItems()
                 );
 
         /*
          * المرحلة 3:
-         * التخزين.
+         *
+         * اختيار ما يدخل الذاكرة.
          */
         state =
                 LearningState.STORING;
@@ -278,18 +345,20 @@ public final class KnowledgeLearningEngine {
                 new ArrayList<>();
 
         /*
-         * المعرفة VERIFIED تدخل الذاكرة.
+         * المعرفة الموثقة تدخل دائماً.
          */
         itemsToStore.addAll(
                 verifiedItems
         );
 
         /*
-         * المعرفة NEEDS_REVIEW لا تدخل افتراضياً.
-         * يمكن تفعيلها عبر setStoreReviewItems(true).
+         * المعرفة التي تحتاج مراجعة لا تدخل
+         * إلا إذا طلب النظام ذلك صراحة.
          */
-        if (includeReviewItems
-                || storeReviewItems) {
+        if (
+                includeReviewItems
+                        || storeReviewItems
+        ) {
 
             itemsToStore.addAll(
                     reviewItems
@@ -303,10 +372,13 @@ public final class KnowledgeLearningEngine {
 
         /*
          * المرحلة 4:
-         * انتهاء الدورة.
+         *
+         * إتمام دورة التعلم.
          */
         state =
                 LearningState.COMPLETED;
+
+        successfulLearningCount++;
 
         lastResult =
                 LearningResult.success(
@@ -323,19 +395,23 @@ public final class KnowledgeLearningEngine {
     }
 
     /**
-     * تعلم مباشر من عناصر معرفة موجودة مسبقاً.
+     * تعلم من معرفة موجودة مسبقاً.
      *
-     * مفيد عندما تأتي البيانات من محرك آخر.
+     * المعرفة تمر عبر التحقق قبل التخزين.
      */
     public synchronized LearningResult learnItems(
             List<KnowledgeItem> items
     ) {
 
-        if (items == null
-                || items.isEmpty()) {
+        if (
+                items == null
+                        || items.isEmpty()
+        ) {
 
             state =
                     LearningState.FAILED;
+
+            failedLearningCount++;
 
             lastResult =
                     LearningResult.failure(
@@ -351,16 +427,21 @@ public final class KnowledgeLearningEngine {
         state =
                 LearningState.VERIFYING;
 
-        KnowledgeVerificationEngine.VerificationReport report =
+        KnowledgeVerificationEngine.VerificationReport
+                report =
                 verificationEngine.verify(
                         items
                 );
 
-        if (report == null
-                || report.isFailure()) {
+        if (
+                report == null
+                        || report.isFailure()
+        ) {
 
             state =
                     LearningState.FAILED;
+
+            failedLearningCount++;
 
             lastResult =
                     LearningResult.fromVerificationFailure(
@@ -412,6 +493,8 @@ public final class KnowledgeLearningEngine {
         state =
                 LearningState.COMPLETED;
 
+        successfulLearningCount++;
+
         lastResult =
                 LearningResult.success(
                         "",
@@ -427,10 +510,9 @@ public final class KnowledgeLearningEngine {
     }
 
     /**
-     * تخزين معرفة موثقة يدوياً.
+     * حفظ معرفة موثقة.
      *
-     * هذا لا يتجاوز التحقق:
-     * العنصر يجب أن يكون VERIFIED.
+     * لا يمكن تجاوز التحقق.
      */
     public synchronized boolean remember(
             KnowledgeItem item
@@ -462,44 +544,20 @@ public final class KnowledgeLearningEngine {
     }
 
     /**
-     * الحصول على أفضل معرفة موثقة مرتبطة بالسؤال.
+     * إيجاد أفضل معرفة مرتبطة بالطلب.
      */
     public synchronized KnowledgeItem recallBest(
             String query
     ) {
 
-        List<KnowledgeItem> verified =
-                memory.searchVerified(
-                        query
-                );
-
-        if (verified.isEmpty()) {
-            return null;
-        }
-
-        KnowledgeItem best =
-                verified.get(0);
-
-        for (KnowledgeItem item : verified) {
-
-            if (item == null) {
-                continue;
-            }
-
-            if (item.getConfidence()
-                    > best.getConfidence()) {
-
-                best = item;
-            }
-        }
-
-        return best;
+        return memory.findBest(
+                query
+        );
     }
 
     /**
-     * تفعيل أو تعطيل تخزين المعرفة التي تحتاج مراجعة.
-     *
-     * false هو الوضع الآمن الافتراضي.
+     * تفعيل / تعطيل تخزين العناصر
+     * التي تحتاج مراجعة.
      */
     public synchronized void setStoreReviewItems(
             boolean enabled
@@ -510,13 +568,95 @@ public final class KnowledgeLearningEngine {
     }
 
     public synchronized boolean isStoreReviewItemsEnabled() {
+
         return storeReviewItems;
     }
 
     /**
-     * الحالة الحالية.
+     * تفعيل / تعطيل إعادة فحص المصادر.
+     */
+    public synchronized void setContinuousSourceRevalidation(
+            boolean enabled
+    ) {
+
+        continuousSourceRevalidation =
+                enabled;
+    }
+
+    public synchronized boolean
+    isContinuousSourceRevalidationEnabled() {
+
+        return continuousSourceRevalidation;
+    }
+
+    /**
+     * تحديد عدد دورات التعلم بين عمليات
+     * إعادة فحص المصادر.
+     */
+    public synchronized void setRevalidationInterval(
+            long interval
+    ) {
+
+        if (interval < 1L) {
+
+            interval = 1L;
+        }
+
+        revalidationInterval =
+                interval;
+    }
+
+    public synchronized long getRevalidationInterval() {
+
+        return revalidationInterval;
+    }
+
+    /**
+     * إجبار JARVIS على إعادة فحص مصادره الآن.
+     */
+    public synchronized KnowledgeSourceTrustEngine.RevalidationResult
+    revalidateSourcesNow() {
+
+        return acquisitionEngine
+                .revalidateSources();
+    }
+
+    /**
+     * مصادر الإنترنت التي اكتشفها JARVIS.
+     */
+    public synchronized List<
+            KnowledgeSourceTrustEngine.SourceProfile
+            > getDiscoveredSources() {
+
+        return acquisitionEngine
+                .getDiscoveredSourceProfiles();
+    }
+
+    /**
+     * المصادر التي يسمح نظام الثقة باستخدامها.
+     */
+    public synchronized List<
+            KnowledgeSourceTrustEngine.SourceProfile
+            > getUsableSources() {
+
+        return acquisitionEngine
+                .getUsableSourceProfiles();
+    }
+
+    /**
+     * عدد المصادر المكتشفة.
+     */
+    public synchronized int getSourceCount() {
+
+        return acquisitionEngine
+                .getSourceCount();
+    }
+
+    /**
+     * حالة التعلم.
      */
     public synchronized LearningState getState() {
+
         return state;
     }
 
@@ -528,76 +668,95 @@ public final class KnowledgeLearningEngine {
     }
 
     public synchronized boolean isIdle() {
+
         return state == LearningState.IDLE;
     }
 
     public synchronized boolean isCompleted() {
+
         return state == LearningState.COMPLETED;
     }
 
     public synchronized boolean hasFailed() {
+
         return state == LearningState.FAILED;
     }
 
-    /**
-     * آخر استعلام تعلم.
-     */
     public synchronized String getLastQuery() {
+
         return lastQuery;
     }
 
-    /**
-     * عدد دورات التعلم.
-     */
     public synchronized long getLearningCount() {
+
         return learningCount;
     }
 
-    /**
-     * آخر نتيجة.
-     */
+    public synchronized long getSuccessfulLearningCount() {
+
+        return successfulLearningCount;
+    }
+
+    public synchronized long getFailedLearningCount() {
+
+        return failedLearningCount;
+    }
+
     public synchronized LearningResult getLastResult() {
+
         return lastResult;
     }
 
-    /**
-     * الوصول لمحرك الحصول على المعرفة.
-     */
     public KnowledgeAcquisitionEngine
     getAcquisitionEngine() {
 
         return acquisitionEngine;
     }
 
-    /**
-     * الوصول لمحرك التحقق.
-     */
     public KnowledgeVerificationEngine
     getVerificationEngine() {
 
         return verificationEngine;
     }
 
-    /**
-     * الوصول للذاكرة.
-     */
     public KnowledgeMemory getMemory() {
+
         return memory;
     }
 
     public String getEngineId() {
+
         return ENGINE_ID;
     }
 
     /**
-     * تحويل القائمة إلى قائمة آمنة.
+     * تحديد هل حان وقت إعادة فحص المصادر.
      */
+    private boolean shouldRevalidateSources() {
+
+        if (!continuousSourceRevalidation) {
+            return false;
+        }
+
+        if (learningCount <= 1L) {
+            return false;
+        }
+
+        return (
+                learningCount
+                        % revalidationInterval
+                        == 0L
+        );
+    }
+
     private List<KnowledgeItem> safeList(
             List<KnowledgeItem> items
     ) {
 
-        if (items == null
-                || items.isEmpty()) {
+        if (
+                items == null
+                        || items.isEmpty()
+        ) {
 
             return Collections.emptyList();
         }
@@ -625,9 +784,6 @@ public final class KnowledgeLearningEngine {
                 );
     }
 
-    /**
-     * حالات دورة التعلم.
-     */
     public enum LearningState {
 
         IDLE,
@@ -649,6 +805,7 @@ public final class KnowledgeLearningEngine {
     public static final class LearningResult {
 
         private final boolean success;
+
         private final String query;
 
         private final KnowledgeAcquisitionEngine.AcquisitionResult
@@ -699,30 +856,18 @@ public final class KnowledgeLearningEngine {
                     verificationReport;
 
             this.verifiedItems =
-                    Collections.unmodifiableList(
-                            new ArrayList<>(
-                                    verifiedItems == null
-                                            ? Collections.emptyList()
-                                            : verifiedItems
-                            )
+                    immutableList(
+                            verifiedItems
                     );
 
             this.reviewItems =
-                    Collections.unmodifiableList(
-                            new ArrayList<>(
-                                    reviewItems == null
-                                            ? Collections.emptyList()
-                                            : reviewItems
-                            )
+                    immutableList(
+                            reviewItems
                     );
 
             this.rejectedItems =
-                    Collections.unmodifiableList(
-                            new ArrayList<>(
-                                    rejectedItems == null
-                                            ? Collections.emptyList()
-                                            : rejectedItems
-                            )
+                    immutableList(
+                            rejectedItems
                     );
 
             this.storedCount =
@@ -735,6 +880,25 @@ public final class KnowledgeLearningEngine {
                     message == null
                             ? ""
                             : message;
+        }
+
+        private static List<KnowledgeItem> immutableList(
+                List<KnowledgeItem> items
+        ) {
+
+            if (
+                    items == null
+                            || items.isEmpty()
+            ) {
+
+                return Collections.emptyList();
+            }
+
+            return Collections.unmodifiableList(
+                    new ArrayList<>(
+                            items
+                    )
+            );
         }
 
         public static LearningResult success(
