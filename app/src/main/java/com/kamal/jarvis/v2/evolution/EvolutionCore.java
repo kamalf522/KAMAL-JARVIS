@@ -19,33 +19,19 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * العقل المركزي لمنظومة Evolution.
  *
- * دورة العمل:
- *
  * REQUEST
- *    ↓
- * DISCOVERY
- *    ↓
- * PLANNING
- *    ↓
- * DIRECT / ALTERNATIVE / PERMISSION / BUILD
- *    ↓
- * EVOLUTION
- *    ↓
- * VERIFICATION
- *    ↓
- * ACTIVATION
- *    ↓
- * READY
+ * -> DISCOVERY
+ * -> PLANNING
+ * -> EXECUTION / PERMISSION / BUILD
+ * -> EVOLUTION
+ * -> VERIFICATION
+ * -> ACTIVATION
+ * -> READY
  *
- * ملاحظات مهمة:
- *
- * - EvolutionCore لا يمنح Android permissions بنفسه.
- * - EvolutionCore لا يغير OwnerSecurityBoundary.
- * - EvolutionCore لا ينشئ Tool وهمية.
- * - CapabilityActivation لا يتم استعمالها إلا عندما
- *   تكون Tool حقيقية وقابلة للتنفيذ.
- * - إنشاء source code وبناء المشروع يبقى من اختصاص
- *   EvolutionOrchestrator / SourceEvolutionEngine.
+ * Learning integration:
+ * JarvisBrain يمكنه تمرير المعرفة الخارجية الموثقة
+ * عبر ToolInput بدون جعل EvolutionCore مرتبطاً مباشرة
+ * بـ KnowledgeLearningEngine.
  */
 public final class EvolutionCore {
 
@@ -55,14 +41,6 @@ public final class EvolutionCore {
     private final CapabilityDiscovery discovery;
     private final CapabilityExecutor executor;
     private final EvolutionOrchestrator orchestrator;
-
-    /*
-     * Activation اختيارية للحفاظ على توافق constructors
-     * القديمة.
-     *
-     * عندما يتم إنشاء EvolutionCore مع ToolRegistry،
-     * يصبح Core قادراً على ربط Evolution مع Runtime activation.
-     */
     private final CapabilityActivation activation;
 
     private final Map<String, EvolutionRecord> records =
@@ -73,11 +51,6 @@ public final class EvolutionCore {
 
     private volatile EvolutionRecord lastRecord;
 
-    /**
-     * Constructor قديم للحفاظ على compatibility.
-     *
-     * لا يتم إنشاء Activation بدون ToolRegistry.
-     */
     public EvolutionCore(
             CapabilityDiscovery discovery,
             CapabilityExecutor executor,
@@ -92,12 +65,6 @@ public final class EvolutionCore {
         );
     }
 
-    /**
-     * Constructor الكامل.
-     *
-     * هذا هو المسار المفضل عندما يكون EvolutionCore
-     * مربوطاً بالـRuntime ToolRegistry.
-     */
     public EvolutionCore(
             CapabilityDiscovery discovery,
             CapabilityExecutor executor,
@@ -140,9 +107,6 @@ public final class EvolutionCore {
                         );
     }
 
-    /**
-     * تحليل CapabilityRequirement بدون تنفيذ.
-     */
     public synchronized JarvisResult<EvolutionAnalysis> analyze(
             CapabilityRequirement requirement
     ) {
@@ -250,9 +214,6 @@ public final class EvolutionCore {
         );
     }
 
-    /**
-     * تنفيذ CapabilityRequirement.
-     */
     public synchronized JarvisResult<EvolutionExecutionResult> execute(
             CapabilityRequirement requirement,
             ToolContract.ToolInput input
@@ -319,9 +280,7 @@ public final class EvolutionCore {
         }
 
         /*
-         * =========================================
          * DIRECT / ALTERNATIVE
-         * =========================================
          */
         if (plan.getAction()
                 == CapabilityPlan.Action.EXECUTE_DIRECT
@@ -372,9 +331,7 @@ public final class EvolutionCore {
         }
 
         /*
-         * =========================================
          * PERMISSION
-         * =========================================
          */
         if (plan.getAction()
                 == CapabilityPlan.Action.REQUEST_PERMISSION) {
@@ -395,9 +352,7 @@ public final class EvolutionCore {
         }
 
         /*
-         * =========================================
          * BUILD CAPABILITY
-         * =========================================
          */
         if (plan.getAction()
                 == CapabilityPlan.Action.BUILD_CAPABILITY) {
@@ -412,7 +367,8 @@ public final class EvolutionCore {
                 spec =
                         createCapabilitySpec(
                                 requirement,
-                                plan
+                                plan,
+                                input
                         );
 
             } catch (Exception exception) {
@@ -442,9 +398,6 @@ public final class EvolutionCore {
                 );
             }
 
-            /*
-             * إطلاق Evolution pipeline.
-             */
             JarvisResult<
                     EvolutionOrchestrator.EvolutionRecord
                     > evolutionResult =
@@ -494,25 +447,6 @@ public final class EvolutionCore {
                 );
             }
 
-            /*
-             * =========================================
-             * ACTIVATION
-             * =========================================
-             *
-             * مهم:
-             *
-             * EvolutionOrchestrator الحالي لا ينتج
-             * ToolContract جديدة executable من تلقاء نفسه.
-             *
-             * لذلك لا ننشئ Tool وهمية.
-             *
-             * إذا كانت Tool المطلوبة موجودة فعلاً في
-             * ToolRegistry، نحاول تفعيل Capability.
-             *
-             * إذا لم تكن موجودة، نسجل أن Evolution وصل
-             * إلى READY لكن activation executable
-             * مازال ينتظر Tool حقيقية.
-             */
             CapabilityActivation.ActivationRecord
                     activationRecord = null;
 
@@ -548,14 +482,6 @@ public final class EvolutionCore {
 
                 } else {
 
-                    /*
-                     * لا نفشل Evolution نفسه فقط لأن
-                     * لا توجد Tool executable حالياً.
-                     *
-                     * Build/verification نجحو،
-                     * ولكن Runtime activation غير ممكن
-                     * بدون Tool حقيقية.
-                     */
                     state =
                             EvolutionState.READY;
                 }
@@ -589,11 +515,6 @@ public final class EvolutionCore {
             );
         }
 
-        /*
-         * =========================================
-         * UNAVAILABLE
-         * =========================================
-         */
         state =
                 EvolutionState.FAILED;
 
@@ -604,11 +525,6 @@ public final class EvolutionCore {
         );
     }
 
-    /**
-     * تفعيل Tool حقيقية مرتبطة بـCapability
-     * بعد أن تكون قد تم إنشاؤها والتحقق منها
-     * بواسطة طبقة Evolution أخرى.
-     */
     public synchronized JarvisResult<
             CapabilityActivation.ActivationRecord>
     activateGeneratedTool(
@@ -690,11 +606,13 @@ public final class EvolutionCore {
     }
 
     /**
-     * إنشاء CapabilitySpec كاملة.
+     * Creates the capability specification and incorporates
+     * verified external knowledge supplied by JarvisBrain.
      */
     private CapabilitySpec createCapabilitySpec(
             CapabilityRequirement requirement,
-            CapabilityPlan plan
+            CapabilityPlan plan,
+            ToolContract.ToolInput input
     ) {
 
         CapabilitySpec.Builder builder =
@@ -707,8 +625,73 @@ public final class EvolutionCore {
                 requirement.getDescription()
         );
 
+        String learningQuery =
+                readStringParameter(
+                        input,
+                        "learning_query"
+                );
+
+        boolean learningCompleted =
+                readBooleanParameter(
+                        input,
+                        "learning_completed"
+                );
+
+        List<KnowledgeEvidence>
+                knowledgeEvidence =
+                readKnowledgeEvidence(
+                        input
+                );
+
+        StringBuilder description =
+                new StringBuilder(
+                        "Capability generated by JARVIS Evolution Core."
+                );
+
+        if (!learningQuery.isEmpty()) {
+
+            description.append(
+                    " Learning query: "
+            ).append(
+                    compact(
+                            learningQuery,
+                            500
+                    )
+            ).append('.');
+        }
+
+        if (learningCompleted &&
+                !knowledgeEvidence.isEmpty()) {
+
+            description.append(
+                    " Development is informed by verified external knowledge."
+            );
+
+            builder.successCriterion(
+                    "Capability design uses verified external knowledge."
+            );
+
+            for (KnowledgeEvidence evidence :
+                    knowledgeEvidence) {
+
+                String evidenceText =
+                        evidence.toSpecificationText();
+
+                if (!evidenceText.isEmpty()) {
+
+                    builder.successCriterion(
+                            "Knowledge evidence: "
+                                    + evidenceText
+                    );
+                }
+            }
+        }
+
         builder.description(
-                "Capability generated by JARVIS Evolution Core."
+                compact(
+                        description.toString(),
+                        3000
+                )
         );
 
         Set<CapabilityPermission>
@@ -791,7 +774,295 @@ public final class EvolutionCore {
                 "Generated capability contains its identifier."
         );
 
+        if (!learningCompleted ||
+                knowledgeEvidence.isEmpty()) {
+
+            builder.successCriterion(
+                    "No external knowledge was available for this evolution cycle."
+            );
+        }
+
         return builder.build();
+    }
+
+    private List<KnowledgeEvidence> readKnowledgeEvidence(
+            ToolContract.ToolInput input
+    ) {
+
+        List<KnowledgeEvidence> result =
+                new ArrayList<>();
+
+        if (input == null) {
+            return result;
+        }
+
+        Object raw =
+                input.get(
+                        "verified_knowledge_items"
+                );
+
+        if (!(raw instanceof List<?>)) {
+            return result;
+        }
+
+        List<?> items =
+                (List<?>) raw;
+
+        int limit =
+                Math.min(
+                        items.size(),
+                        8
+                );
+
+        for (int index = 0;
+                index < limit;
+                index++) {
+
+            Object item =
+                    items.get(index);
+
+            if (!(item instanceof Map<?, ?>)) {
+                continue;
+            }
+
+            Map<?, ?> map =
+                    (Map<?, ?>) item;
+
+            String content =
+                    valueAsString(
+                            map.get("content")
+                    );
+
+            if (content.isEmpty()) {
+                continue;
+            }
+
+            String sourceId =
+                    valueAsString(
+                            map.get("source_id")
+                    );
+
+            String sourceLocation =
+                    valueAsString(
+                            map.get("source_location")
+                    );
+
+            String confidence =
+                    valueAsString(
+                            map.get("confidence")
+                    );
+
+            String status =
+                    valueAsString(
+                            map.get("status")
+                    );
+
+            result.add(
+                    new KnowledgeEvidence(
+                            content,
+                            sourceId,
+                            sourceLocation,
+                            confidence,
+                            status
+                    )
+            );
+        }
+
+        return result;
+    }
+
+    private String readStringParameter(
+            ToolContract.ToolInput input,
+            String key
+    ) {
+
+        if (input == null ||
+                key == null ||
+                key.trim().isEmpty()) {
+
+            return "";
+        }
+
+        Object value =
+                input.get(key);
+
+        return valueAsString(
+                value
+        );
+    }
+
+    private boolean readBooleanParameter(
+            ToolContract.ToolInput input,
+            String key
+    ) {
+
+        if (input == null ||
+                key == null ||
+                key.trim().isEmpty()) {
+
+            return false;
+        }
+
+        Object value =
+                input.get(key);
+
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+
+        return "true".equalsIgnoreCase(
+                valueAsString(
+                        value
+                )
+        );
+    }
+
+    private String valueAsString(
+            Object value
+    ) {
+
+        if (value == null) {
+            return "";
+        }
+
+        return String.valueOf(
+                value
+        ).trim();
+    }
+
+    private String compact(
+            String value,
+            int maxLength
+    ) {
+
+        if (value == null) {
+            return "";
+        }
+
+        String cleaned =
+                value
+                        .replace(
+                                '\n',
+                                ' '
+                        )
+                        .replace(
+                                '\r',
+                                ' '
+                        )
+                        .replace(
+                                '\t',
+                                ' '
+                        )
+                        .trim();
+
+        if (cleaned.length() <= maxLength) {
+            return cleaned;
+        }
+
+        return cleaned.substring(
+                0,
+                Math.max(
+                        0,
+                        maxLength - 3
+                )
+        ) + "...";
+    }
+
+    private static final class KnowledgeEvidence {
+
+        private final String content;
+        private final String sourceId;
+        private final String sourceLocation;
+        private final String confidence;
+        private final String status;
+
+        private KnowledgeEvidence(
+                String content,
+                String sourceId,
+                String sourceLocation,
+                String confidence,
+                String status
+        ) {
+
+            this.content =
+                    content;
+
+            this.sourceId =
+                    sourceId;
+
+            this.sourceLocation =
+                    sourceLocation;
+
+            this.confidence =
+                    confidence;
+
+            this.status =
+                    status;
+        }
+
+        private String toSpecificationText() {
+
+            StringBuilder text =
+                    new StringBuilder(
+                            compact(
+                                    content,
+                                    700
+                            )
+                    );
+
+            if (!sourceId.isEmpty()) {
+
+                text.append(
+                        " [source="
+                ).append(
+                        compact(
+                                sourceId,
+                                120
+                        )
+                ).append(']');
+            }
+
+            if (!sourceLocation.isEmpty()) {
+
+                text.append(
+                        " [location="
+                ).append(
+                        compact(
+                                sourceLocation,
+                                180
+                        )
+                ).append(']');
+            }
+
+            if (!confidence.isEmpty()) {
+
+                text.append(
+                        " [confidence="
+                ).append(
+                        compact(
+                                confidence,
+                                80
+                        )
+                ).append(']');
+            }
+
+            if (!status.isEmpty()) {
+
+                text.append(
+                        " [status="
+                ).append(
+                        compact(
+                                status,
+                                80
+                        )
+                ).append(']');
+            }
+
+            return compact(
+                    text.toString(),
+                    1200
+            );
+        }
     }
 
     private void saveRecord(
@@ -960,9 +1231,6 @@ public final class EvolutionCore {
         FAILED
     }
 
-    /**
-     * نتيجة التحليل.
-     */
     public static final class EvolutionAnalysis {
 
         private final CapabilityRequirement requirement;
@@ -1056,9 +1324,6 @@ public final class EvolutionCore {
         }
     }
 
-    /**
-     * نتيجة تنفيذ Evolution.
-     */
     public static final class EvolutionExecutionResult {
 
         private final ExecutionOutcome outcome;
@@ -1258,9 +1523,6 @@ public final class EvolutionCore {
         PERMISSION_REQUIRED
     }
 
-    /**
-     * سجل Evolution داخل Core.
-     */
     public static final class EvolutionRecord {
 
         private final String capabilityId;
