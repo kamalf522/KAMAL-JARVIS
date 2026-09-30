@@ -6,6 +6,8 @@ import com.kamal.jarvis.v2.core.JarvisResult;
 import com.kamal.jarvis.v2.core.JarvisRuntime;
 import com.kamal.jarvis.v2.core.ToolContract;
 import com.kamal.jarvis.v2.evolution.EvolutionCore;
+import com.kamal.jarvis.v2.intelligence.learning.KnowledgeItem;
+import com.kamal.jarvis.v2.intelligence.learning.KnowledgeLearningEngine;
 import com.kamal.jarvis.v2.permissions.CapabilityPermission;
 import com.kamal.jarvis.v2.permissions.CapabilityRequirement;
 
@@ -16,39 +18,31 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * JARVIS V2 - Jarvis Brain
+ * JARVIS V2 - Central Brain
  *
- * العقل المركزي ديال JARVIS.
- *
- * المبدأ:
+ * المسار:
  *
  * المستخدم
  *    ↓
- * CommandUnderstanding
+ * فهم الطلب
  *    ↓
- * فهم الهدف الكامل
+ * تحديد الهدف
  *    ↓
- * Brain
+ * معرفة موجودة؟
  *    ↓
- * تحديد واش:
- *    - محادثة / سؤال
- *    - طلب تنفيذ
- *    - طلب تطور
- *    - قدرة جديدة غير معروفة
+ * تعلم من الإنترنت + التحقق
  *    ↓
- * CapabilityRequirement
+ * اكتشاف القدرة المطلوبة
  *    ↓
  * EvolutionCore
  *    ↓
- * Discovery → Planning → Building → Testing → Recovery
+ * تنفيذ / بناء / اختبار / استرجاع
+ *    ↓
+ * تعلم من النتيجة
+ *    ↓
+ * تطور مستمر
  *
- * مهم:
- *
- * Brain ما عندوش لائحة محدودة ديال الأوامر.
- *
- * CommandUnderstanding كتخرج المعنى الأولي،
- * والطلب الكامل كيبقى محفوظ باش الطبقات العليا
- * تقدر تخطط وتطور قدرة جديدة عند الحاجة.
+ * هذا العقل لا يعتمد على لائحة مغلقة من الأوامر.
  */
 public final class JarvisBrain {
 
@@ -58,16 +52,37 @@ public final class JarvisBrain {
     private final EvolutionCore evolutionCore;
     private final JarvisRuntime runtime;
     private final CommandUnderstanding understanding;
+    private final KnowledgeLearningEngine learningEngine;
 
     private volatile BrainState state =
             BrainState.IDLE;
 
     private volatile BrainResponse lastResponse;
 
+    /**
+     * Constructor القديم للحفاظ على التوافق.
+     */
     public JarvisBrain(
             EvolutionCore evolutionCore,
             JarvisRuntime runtime
     ) {
+
+        this(
+                evolutionCore,
+                runtime,
+                createDefaultLearningEngine()
+        );
+    }
+
+    /**
+     * Constructor كامل.
+     */
+    public JarvisBrain(
+            EvolutionCore evolutionCore,
+            JarvisRuntime runtime,
+            KnowledgeLearningEngine learningEngine
+    ) {
+
         if (evolutionCore == null) {
             throw new IllegalArgumentException(
                     "evolutionCore cannot be null."
@@ -80,23 +95,52 @@ public final class JarvisBrain {
             );
         }
 
-        this.evolutionCore = evolutionCore;
-        this.runtime = runtime;
-        this.understanding = new CommandUnderstanding();
+        this.evolutionCore =
+                evolutionCore;
+
+        this.runtime =
+                runtime;
+
+        this.understanding =
+                new CommandUnderstanding();
+
+        this.learningEngine =
+                learningEngine == null
+                        ? createDefaultLearningEngine()
+                        : learningEngine;
+    }
+
+    /**
+     * إنشاء نظام التعلم المستقل.
+     *
+     * لا يحتاج المستخدم لإضافة المصادر.
+     */
+    private static KnowledgeLearningEngine
+    createDefaultLearningEngine() {
+
+        return new KnowledgeLearningEngine(
+                new com.kamal.jarvis.v2.intelligence.learning
+                        .KnowledgeAcquisitionEngine(),
+                new com.kamal.jarvis.v2.intelligence.learning
+                        .KnowledgeVerificationEngine(),
+                new com.kamal.jarvis.v2.intelligence.learning
+                        .KnowledgeMemory()
+        );
     }
 
     /**
      * نقطة الدخول الرئيسية.
      */
-    public synchronized JarvisResult<BrainResponse> process(
+    public synchronized JarvisResult<BrainResponse>
+    process(
             String userCommand
     ) {
 
         if (userCommand == null ||
                 userCommand.trim().isEmpty()) {
 
-            state = BrainState.FAILED;
-            lastResponse = null;
+            state =
+                    BrainState.FAILED;
 
             publish(
                     JarvisEvent.Type.COMMAND_FAILED,
@@ -109,7 +153,8 @@ public final class JarvisBrain {
             );
         }
 
-        state = BrainState.UNDERSTANDING;
+        state =
+                BrainState.UNDERSTANDING;
 
         publish(
                 JarvisEvent.Type.COMMAND_RECEIVED,
@@ -117,11 +162,8 @@ public final class JarvisBrain {
         );
 
         /*
-         * الفهم الحقيقي الأولي كيدوز من
-         * CommandUnderstanding.
-         *
-         * ما بقيناش نستعملو understand()
-         * قديم داخل Brain.
+         * المرحلة 1:
+         * الفهم العام.
          */
         CommandUnderstanding.Result understood =
                 understanding.analyze(
@@ -131,17 +173,13 @@ public final class JarvisBrain {
         if (understood == null ||
                 !understood.isValid()) {
 
-            state = BrainState.FAILED;
+            state =
+                    BrainState.FAILED;
 
             String message =
                     understood == null
                             ? "JARVIS could not understand the request."
                             : understood.getMessage();
-
-            publish(
-                    JarvisEvent.Type.COMMAND_FAILED,
-                    message
-            );
 
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
@@ -149,36 +187,23 @@ public final class JarvisBrain {
             );
         }
 
-        /*
-         * الطلب كامل محفوظ هنا.
-         */
         String normalized =
                 understood.getNormalizedCommand();
 
         String goal =
                 understood.getGoal();
 
-        String capabilityId =
-                understood.getCapabilityId();
+        if (goal == null ||
+                goal.trim().isEmpty()) {
+
+            goal =
+                    userCommand;
+        }
 
         /*
          * -------------------------------------------------
-         * 1. المحادثة والأسئلة
+         * المحادثة
          * -------------------------------------------------
-         *
-         * ماشي كل كلام خاصو يتحول إلى Tool.
-         *
-         * مثال:
-         *
-         * "سلام جارڤيس"
-         * "شكون نتا؟"
-         *
-         * ما خاصناش نقلبوهم إلى:
-         *
-         * jarvis.general
-         *
-         * لأن هذا هو السبب اللي كان كيخرج:
-         * الأمر غير منفذ.
          */
         if (understood.isConversational() ||
                 isIdentityRequest(understood)) {
@@ -190,8 +215,11 @@ public final class JarvisBrain {
                             understood
                     );
 
-            lastResponse = response;
-            state = BrainState.COMPLETED;
+            lastResponse =
+                    response;
+
+            state =
+                    BrainState.COMPLETED;
 
             publish(
                     JarvisEvent.Type.COMMAND_COMPLETED,
@@ -206,16 +234,19 @@ public final class JarvisBrain {
 
         /*
          * -------------------------------------------------
-         * 2. سؤال معلوماتي
+         * المعلومات
          * -------------------------------------------------
          *
-         * السؤال ماشي بالضرورة Action.
+         * هنا JARVIS ما غاديش يخترع جواب.
          *
-         * إلا كان عند JARVIS مصدر معرفة/قدرة مناسبة،
-         * الطبقات العليا تقدر تضيفها لاحقاً.
+         * غادي:
          *
-         * ما كنحاولوش نحولو السؤال تلقائياً
-         * إلى أمر Android.
+         * Internet
+         * → source discovery
+         * → trust
+         * → acquisition
+         * → verification
+         * → memory
          */
         if (understood.getIntentType() ==
                 CommandUnderstanding.IntentType.INFORMATION
@@ -223,14 +254,18 @@ public final class JarvisBrain {
                 !understood.isEvolutionRequest()) {
 
             BrainResponse response =
-                    createInformationResponse(
+                    answerWithKnowledge(
                             userCommand,
                             normalized,
-                            understood
+                            understood,
+                            goal
                     );
 
-            lastResponse = response;
-            state = BrainState.WAITING;
+            lastResponse =
+                    response;
+
+            state =
+                    BrainState.COMPLETED;
 
             publish(
                     JarvisEvent.Type.COMMAND_COMPLETED,
@@ -245,17 +280,8 @@ public final class JarvisBrain {
 
         /*
          * -------------------------------------------------
-         * 3. بناء Requirement
+         * بناء متطلبات القدرة
          * -------------------------------------------------
-         *
-         * هنا الفرق الكبير:
-         *
-         * ما كنستعملوش:
-         *
-         * jarvis.general
-         *
-         * بل كنستعملو capabilityId
-         * والهدف الكامل اللي عطانا المستخدم.
          */
         CapabilityRequirement requirement =
                 buildRequirement(
@@ -264,7 +290,8 @@ public final class JarvisBrain {
 
         if (requirement == null) {
 
-            state = BrainState.FAILED;
+            state =
+                    BrainState.FAILED;
 
             return failure(
                     JarvisError.Type.EVOLUTION_FAILED,
@@ -272,24 +299,18 @@ public final class JarvisBrain {
             );
         }
 
-        state = BrainState.PLANNING;
+        state =
+                BrainState.PLANNING;
 
         publish(
                 JarvisEvent.Type.COMMAND_STARTED,
-                "Planning goal: "
-                        + goal
+                goal
         );
 
         /*
          * -------------------------------------------------
-         * 4. معلومات التنفيذ
+         * المعلومات اللي غادي تمشي للـ EvolutionCore
          * -------------------------------------------------
-         *
-         * كنمررو النص الأصلي + المعنى + الهدف
-         * للطبقات اللي تحت.
-         *
-         * هكذا ما كيبقاش EvolutionCore عارف
-         * غير كلمة صغيرة من الطلب.
          */
         Map<String, Object> parameters =
                 new LinkedHashMap<>();
@@ -311,7 +332,7 @@ public final class JarvisBrain {
 
         parameters.put(
                 "capability_id",
-                capabilityId
+                understood.getCapabilityId()
         );
 
         parameters.put(
@@ -378,32 +399,122 @@ public final class JarvisBrain {
 
         /*
          * -------------------------------------------------
-         * 5. EvolutionCore
+         * Evolution
          * -------------------------------------------------
-         *
-         * هنا كيبدا المسار الحقيقي:
-         *
-         * Discover
-         * Plan
-         * Execute
-         * Build إذا كانت القدرة ناقصة
-         * Test
-         * Verify
-         * Recover عند الفشل
          */
-        state = BrainState.EXECUTING;
+        state =
+                BrainState.EXECUTING;
 
         JarvisResult<
                 EvolutionCore.EvolutionExecutionResult
-                > executionResult =
+                > result =
                 evolutionCore.execute(
                         requirement,
                         input
                 );
 
-        if (executionResult == null) {
+        /*
+         * -------------------------------------------------
+         * إذا فشل بسبب قدرة ناقصة:
+         *
+         * JARVIS يتعلم من الإنترنت أولا،
+         * ثم يعاود محاولة المسار مرة واحدة.
+         *
+         * هذا هو الربط بين:
+         *
+         * Learning
+         * +
+         * Evolution
+         * -------------------------------------------------
+         */
+        if (shouldLearnBeforeRetry(result)) {
 
-            state = BrainState.FAILED;
+            state =
+                    BrainState.LEARNING;
+
+            publish(
+                    JarvisEvent.Type.COMMAND_STARTED,
+                    "JARVIS is learning what is missing."
+            );
+
+            try {
+
+                KnowledgeLearningEngine.LearningResult
+                        learningResult =
+                        learningEngine.learn(
+                                goal
+                        );
+
+                KnowledgeItem learned =
+                        learningEngine.recallBest(
+                                goal
+                        );
+
+                if (learned != null &&
+                        learned.isVerified()) {
+
+                    parameters.put(
+                            "verified_knowledge",
+                            learned.getContent()
+                    );
+
+                    parameters.put(
+                            "knowledge_source",
+                            learned.getSourceId()
+                    );
+
+                    parameters.put(
+                            "knowledge_confidence",
+                            learned.getConfidence()
+                    );
+
+                    input =
+                            new ToolContract.ToolInput(
+                                    understood
+                                            .getActionType()
+                                            .name()
+                                            .toLowerCase(),
+                                    parameters
+                            );
+                }
+
+                /*
+                 * إعادة محاولة Evolution.
+                 *
+                 * محاولة واحدة فقط باش ما ندخلوش
+                 * فـ loop لا نهائي.
+                 */
+                state =
+                        BrainState.EXECUTING;
+
+                JarvisResult<
+                        EvolutionCore.EvolutionExecutionResult
+                        > retryResult =
+                        evolutionCore.execute(
+                                requirement,
+                                input
+                        );
+
+                if (retryResult != null &&
+                        retryResult.isSuccess()) {
+
+                    result =
+                            retryResult;
+                }
+
+            } catch (Exception ignored) {
+
+                /*
+                 * فشل التعلم ما خاصوش يطيح
+                 * العقل كامل.
+                 */
+            }
+        }
+
+        if (result == null) {
+
+            state =
+                    BrainState.FAILED;
 
             return failure(
                     JarvisError.Type.EVOLUTION_FAILED,
@@ -411,12 +522,13 @@ public final class JarvisBrain {
             );
         }
 
-        if (!executionResult.isSuccess()) {
+        if (!result.isSuccess()) {
 
-            state = BrainState.FAILED;
+            state =
+                    BrainState.FAILED;
 
             JarvisError error =
-                    executionResult.getError();
+                    result.getError();
 
             String message =
                     error == null
@@ -449,15 +561,16 @@ public final class JarvisBrain {
 
         EvolutionCore.EvolutionExecutionResult
                 evolutionResult =
-                executionResult.getData();
+                result.getData();
 
         if (evolutionResult == null) {
 
-            state = BrainState.FAILED;
+            state =
+                    BrainState.FAILED;
 
             return failure(
                     JarvisError.Type.EVOLUTION_FAILED,
-                    "JARVIS received an empty evolution result."
+                    "Empty evolution result."
             );
         }
 
@@ -466,15 +579,16 @@ public final class JarvisBrain {
                         userCommand,
                         normalized,
                         understood,
-                        requirement,
                         evolutionResult
                 );
 
-        lastResponse = response;
+        lastResponse =
+                response;
 
         if (response.isSuccessful()) {
 
-            state = BrainState.COMPLETED;
+            state =
+                    BrainState.COMPLETED;
 
             publish(
                     JarvisEvent.Type.COMMAND_COMPLETED,
@@ -487,23 +601,9 @@ public final class JarvisBrain {
             );
         }
 
-        state = BrainState.WAITING;
+        state =
+                BrainState.WAITING;
 
-        publish(
-                JarvisEvent.Type.COMMAND_FAILED,
-                response.getMessage()
-        );
-
-        /*
-         * النتيجة هنا ماشي crash.
-         *
-         * ممكن تكون:
-         * - permission required
-         * - capability unavailable
-         * - evolution failed
-         *
-         * وكنرجعو السبب الحقيقي.
-         */
         return JarvisResult.success(
                 response,
                 response.getMessage()
@@ -511,9 +611,147 @@ public final class JarvisBrain {
     }
 
     /**
-     * بناء Requirement من الفهم العام.
-     *
-     * ما كايناش هنا لائحة مغلقة ديال القدرات.
+     * واش خاص JARVIS يتعلم قبل إعادة المحاولة.
+     */
+    private boolean shouldLearnBeforeRetry(
+            JarvisResult<
+                    EvolutionCore.EvolutionExecutionResult
+                    > result
+    ) {
+
+        if (result == null ||
+                !result.isSuccess()) {
+
+            return false;
+        }
+
+        EvolutionCore.EvolutionExecutionResult
+                data =
+                result.getData();
+
+        if (data == null ||
+                data.getPlan() == null) {
+
+            return true;
+        }
+
+        CapabilityPlan.Action action =
+                data.getPlan().getAction();
+
+        return action ==
+                CapabilityPlan.Action.UNAVAILABLE;
+    }
+
+    /**
+     * الإجابة من المعرفة المكتسبة.
+     */
+    private BrainResponse answerWithKnowledge(
+            String originalCommand,
+            String normalized,
+            CommandUnderstanding.Result understood,
+            String goal
+    ) {
+
+        try {
+
+            state =
+                    BrainState.LEARNING;
+
+            KnowledgeLearningEngine.LearningResult
+                    learningResult =
+                    learningEngine.learn(
+                            goal
+                    );
+
+            KnowledgeItem best =
+                    learningEngine.recallBest(
+                            goal
+                    );
+
+            if (best != null &&
+                    best.isVerified()) {
+
+                String content =
+                        best.getContent();
+
+                if (content == null) {
+                    content = "";
+                }
+
+                if (content.length() > 5000) {
+
+                    content =
+                            content.substring(
+                                    0,
+                                    5000
+                            );
+                }
+
+                String message =
+                        "تعلمت وتحققت من المعلومة:\n\n"
+                                + content;
+
+                return new BrainResponse(
+                        originalCommand,
+                        normalized,
+                        understood.getIntentType(),
+                        understood
+                                .getActionType()
+                                .name(),
+                        understood.getCapabilityId(),
+                        EvolutionCore.ExecutionOutcome.EXECUTED,
+                        message,
+                        true,
+                        Collections.emptyList(),
+                        null
+                );
+            }
+
+            String reason =
+                    learningResult == null
+                            ? ""
+                            : learningResult.getMessage();
+
+            return new BrainResponse(
+                    originalCommand,
+                    normalized,
+                    understood.getIntentType(),
+                    understood
+                            .getActionType()
+                            .name(),
+                    understood.getCapabilityId(),
+                    EvolutionCore.ExecutionOutcome.EXECUTED,
+                    "بحثت فشبكة الإنترنت وتحققت من النتائج، ولكن ما لقيتش معرفة موثوقة كافية باش نعطيك جواب بلا تخمين."
+                            + (reason.isEmpty()
+                            ? ""
+                            : "\n" + reason),
+                    true,
+                    Collections.emptyList(),
+                    null
+            );
+
+        } catch (Exception e) {
+
+            return new BrainResponse(
+                    originalCommand,
+                    normalized,
+                    understood.getIntentType(),
+                    understood
+                            .getActionType()
+                            .name(),
+                    understood.getCapabilityId(),
+                    EvolutionCore.ExecutionOutcome.EXECUTED,
+                    "فشلت دورة التعلم: "
+                            + e.getMessage(),
+                    true,
+                    Collections.emptyList(),
+                    null
+            );
+        }
+    }
+
+    /**
+     * بناء Requirement عام.
      */
     private CapabilityRequirement buildRequirement(
             CommandUnderstanding.Result understood
@@ -535,8 +773,7 @@ public final class JarvisBrain {
                 goal.trim().isEmpty()) {
 
             goal =
-                    understood
-                            .getOriginalCommand();
+                    understood.getOriginalCommand();
         }
 
         CapabilityRequirement.Builder builder =
@@ -545,17 +782,16 @@ public final class JarvisBrain {
                         goal
                 );
 
-        /*
-         * المتطلبات اللي اكتاشفتها طبقة الفهم.
-         */
-        List<CommandUnderstanding.Requirement>
-                requirements =
+        List<
+                CommandUnderstanding.Requirement
+                > requirements =
                 understood.getRequirements();
 
         if (requirements != null) {
 
             for (
-                    CommandUnderstanding.Requirement requirement
+                    CommandUnderstanding.Requirement
+                            requirement
                     : requirements
             ) {
 
@@ -566,41 +802,20 @@ public final class JarvisBrain {
             }
         }
 
-        /*
-         * طلب التطور الذاتي حساس.
-         *
-         * ما كنسمحوش للتطور يتجاوز Owner Security.
-         */
         if (understood.isEvolutionRequest()) {
 
             builder.requireOwnerAuthorization();
-
             builder.allowAlternativeBuilding();
         }
 
-        /*
-         * الطلبات الجديدة وغير المصنفة:
-         *
-         * ما كنرميهاش.
-         *
-         * ما كنربطوهاش بأداة وهمية.
-         *
-         * كنخليو EvolutionCore يكتشف واش كاينة
-         * قدرة مناسبة أو خاص بناء قدرة جديدة.
-         */
-        if (understood.getIntentType() ==
-                CommandUnderstanding.IntentType.GENERAL) {
+        if (understood.isDestructive()) {
 
-            builder.allowAlternativeBuilding();
+            builder.requireOwnerAuthorization();
         }
 
-        /*
-         * أدوات مفضلة فقط إذا كانت طبقة الفهم
-         * فعلاً عارفة نوع القدرة.
-         *
-         * ما كاين حتى jarvis.general.
-         */
-        switch (understood.getIntentType()) {
+        switch (
+                understood.getIntentType()
+        ) {
 
             case REMINDER:
 
@@ -654,6 +869,24 @@ public final class JarvisBrain {
                         "network.http"
                 );
 
+                builder.requirePermission(
+                        CapabilityPermission.NETWORK
+                );
+
+                builder.allowAlternativeBuilding();
+
+                break;
+
+            case NETWORK:
+
+                builder.preferTool(
+                        "network.http"
+                );
+
+                builder.requirePermission(
+                        CapabilityPermission.NETWORK
+                );
+
                 builder.allowAlternativeBuilding();
 
                 break;
@@ -685,31 +918,17 @@ public final class JarvisBrain {
                 break;
 
             case SETTINGS:
-
-                builder.allowAlternativeBuilding();
-
-                break;
-
-            case NETWORK:
-
-                builder.preferTool(
-                        "network.http"
-                );
-
-                builder.allowAlternativeBuilding();
-
-                break;
-
             case INFORMATION:
-
-                builder.allowAlternativeBuilding();
-
-                break;
-
             case GENERAL:
 
             default:
 
+                /*
+                 * ما كاينش tool وهمي.
+                 *
+                 * JARVIS يقدر يكتشف أو يبني
+                 * القدرة اللي ناقصة.
+                 */
                 builder.allowAlternativeBuilding();
 
                 break;
@@ -719,7 +938,7 @@ public final class JarvisBrain {
     }
 
     /**
-     * تحويل Requirement الخاص بالفهم إلى صلاحية.
+     * تحويل متطلبات الفهم إلى صلاحيات.
      */
     private void addRequirement(
             CapabilityRequirement.Builder builder,
@@ -728,6 +947,7 @@ public final class JarvisBrain {
 
         if (builder == null ||
                 requirement == null) {
+
             return;
         }
 
@@ -824,7 +1044,7 @@ public final class JarvisBrain {
     }
 
     /**
-     * معالجة الكلام العادي/التحية/الهوية.
+     * رد المحادثة.
      */
     private BrainResponse createConversationResponse(
             String originalCommand,
@@ -838,24 +1058,22 @@ public final class JarvisBrain {
 
             message =
                     "أنا JARVIS، المساعد ديالك. "
-                            + "النواة ديالي مبنية باش نفهم الهدف ديالك، "
-                            + "نخطط ليه، ونطور القدرات اللي خاصاني "
-                            + "بشكل مستمر مع احترام صلاحياتك وأمان النظام.";
+                            + "النواة ديالي كتخدم على الفهم، "
+                            + "التعلم من الشبكة، اكتشاف القدرات، "
+                            + "والتطور المستمر مع احترام سيطرة المالك.";
 
         } else {
 
             message =
-                    "سمعتك وفهمت أن الطلب ديالك محادثة. "
-                            + "الطلب محفوظ عندي وما غاديش نحولو "
-                            + "لأمر تنفيذي بلا سبب.";
+                    "فهمتك. هاد الطلب محادثة وما غاديش "
+                            + "نحوّلو لأمر تنفيذي بلا سبب.";
         }
 
         return new BrainResponse(
                 originalCommand,
                 normalized,
                 understood.getIntentType(),
-                understood.getActionType()
-                        .name(),
+                understood.getActionType().name(),
                 understood.getCapabilityId(),
                 EvolutionCore.ExecutionOutcome.EXECUTED,
                 message,
@@ -865,53 +1083,6 @@ public final class JarvisBrain {
         );
     }
 
-    /**
-     * معالجة الأسئلة المعلوماتية.
-     *
-     * حالياً ما كنخترعوش جواب من راسنا.
-     * كنرجعو الهدف الكامل باش طبقة المعرفة/الذكاء
-     * اللي غادي تتطور من بعد تقدر تتعامل معاه.
-     */
-    private BrainResponse createInformationResponse(
-            String originalCommand,
-            String normalized,
-            CommandUnderstanding.Result understood
-    ) {
-
-        String goal =
-                understood.getGoal();
-
-        if (goal == null ||
-                goal.trim().isEmpty()) {
-
-            goal = originalCommand;
-        }
-
-        String message =
-                "فهمت السؤال ديالك: "
-                        + goal
-                        + ". "
-                        + "الطلب ما اعتبرتوش أمراً فاشلاً "
-                        + "وما حولتوش لأداة غير موجودة.";
-
-        return new BrainResponse(
-                originalCommand,
-                normalized,
-                understood.getIntentType(),
-                understood.getActionType()
-                        .name(),
-                understood.getCapabilityId(),
-                EvolutionCore.ExecutionOutcome.EXECUTED,
-                message,
-                true,
-                Collections.emptyList(),
-                null
-        );
-    }
-
-    /**
-     * تحديد واش الطلب متعلق بهوية JARVIS.
-     */
     private boolean isIdentityRequest(
             CommandUnderstanding.Result result
     ) {
@@ -931,21 +1102,23 @@ public final class JarvisBrain {
                 text.toLowerCase();
 
         return value.contains("شكون")
-                && (
-                value.contains("جارڤيس")
-                        || value.contains("جارفس")
-                        || value.contains("jarvis")
-        );
+                &&
+                (
+                        value.contains("جارڤيس")
+                                ||
+                        value.contains("جارفس")
+                                ||
+                        value.contains("jarvis")
+                );
     }
 
     /**
-     * إنشاء النتيجة النهائية للتنفيذ/التطور.
+     * النتيجة النهائية.
      */
     private BrainResponse createResponse(
             String originalCommand,
-            String normalizedCommand,
+            String normalized,
             CommandUnderstanding.Result understood,
-            CapabilityRequirement requirement,
             EvolutionCore.EvolutionExecutionResult
                     evolutionResult
     ) {
@@ -967,18 +1140,16 @@ public final class JarvisBrain {
             case BUILT:
 
                 message =
-                        "JARVIS طور/بنى القدرة المطلوبة "
-                                + "ومرت عبر دورة التطوير الحالية.";
+                        "JARVIS بنى/طور القدرة المطلوبة "
+                                + "ومرت عبر دورة التطور والتحقق.";
 
                 break;
 
             case PERMISSION_REQUIRED:
 
                 message =
-                        buildPermissionMessage(
-                                evolutionResult
-                                        .getMissingPermissions()
-                        );
+                        "هاد العملية محتاجة صلاحية أو "
+                                + "تفويض المالك قبل التنفيذ.";
 
                 break;
 
@@ -986,36 +1157,21 @@ public final class JarvisBrain {
 
                 message =
                         evolutionResult.getMessage();
-
-                if (message == null ||
-                        message.trim().isEmpty()) {
-
-                    message =
-                            "الهدف ما تنفذش. "
-                                    + "JARVIS حافظ على النتيجة الحقيقية "
-                                    + "بدون ما يدعي أنه نفذها.";
-                }
-
-                break;
         }
 
-        boolean successful =
+        return new BrainResponse(
+                originalCommand,
+                normalized,
+                understood.getIntentType(),
+                understood.getActionType().name(),
+                understood.getCapabilityId(),
+                outcome,
+                message,
                 outcome ==
                         EvolutionCore.ExecutionOutcome.EXECUTED
                         ||
                         outcome ==
-                                EvolutionCore.ExecutionOutcome.BUILT;
-
-        return new BrainResponse(
-                originalCommand,
-                normalizedCommand,
-                understood.getIntentType(),
-                understood.getActionType()
-                        .name(),
-                requirement.getCapabilityId(),
-                outcome,
-                message,
-                successful,
+                                EvolutionCore.ExecutionOutcome.BUILT,
                 evolutionResult
                         .getMissingPermissions(),
                 evolutionResult
@@ -1023,48 +1179,6 @@ public final class JarvisBrain {
         );
     }
 
-    private String buildPermissionMessage(
-            List<CapabilityPermission> missing
-    ) {
-
-        if (missing == null ||
-                missing.isEmpty()) {
-
-            return
-                    "JARVIS يحتاج صلاحية إضافية "
-                            + "قبل إكمال الهدف.";
-        }
-
-        StringBuilder builder =
-                new StringBuilder();
-
-        builder.append(
-                "JARVIS يحتاج الصلاحيات التالية: "
-        );
-
-        for (int i = 0;
-             i < missing.size();
-             i++) {
-
-            if (i > 0) {
-                builder.append(", ");
-            }
-
-            builder.append(
-                    missing.get(i).getId()
-            );
-        }
-
-        builder.append(
-                ". لم يتم اعتبار الهدف منفذاً."
-        );
-
-        return builder.toString();
-    }
-
-    /**
-     * Capability ID آمن.
-     */
     private String safeCapabilityId(
             String value
     ) {
@@ -1098,10 +1212,7 @@ public final class JarvisBrain {
             );
 
         } catch (Exception ignored) {
-
-            /*
-             * Event logging ما خاصوش يوقف Brain.
-             */
+            // Event logging cannot stop the brain.
         }
     }
 
@@ -1139,18 +1250,22 @@ public final class JarvisBrain {
         return understanding;
     }
 
+    public KnowledgeLearningEngine
+    getLearningEngine() {
+        return learningEngine;
+    }
+
     public static String getBrainId() {
         return BRAIN_ID;
     }
 
-    /**
-     * حالات العقل.
-     */
     public enum BrainState {
 
         IDLE,
 
         UNDERSTANDING,
+
+        LEARNING,
 
         PLANNING,
 
@@ -1170,12 +1285,16 @@ public final class JarvisBrain {
 
         private final String originalCommand;
         private final String normalizedCommand;
+
         private final CommandUnderstanding.IntentType
                 intentType;
+
         private final String action;
         private final String capabilityId;
+
         private final EvolutionCore.ExecutionOutcome
                 outcome;
+
         private final String message;
         private final boolean successful;
 
