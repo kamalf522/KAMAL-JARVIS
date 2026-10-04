@@ -12,6 +12,7 @@ import com.kamal.jarvis.v2.evolution.BuildEngine;
 import com.kamal.jarvis.v2.evolution.CapabilityDiscovery;
 import com.kamal.jarvis.v2.evolution.CapabilityExecutor;
 import com.kamal.jarvis.v2.evolution.CodeEvolutionEngine;
+import com.kamal.jarvis.v2.evolution.CodeGenerationEngine;
 import com.kamal.jarvis.v2.evolution.EvolutionCore;
 import com.kamal.jarvis.v2.evolution.EvolutionOrchestrator;
 import com.kamal.jarvis.v2.evolution.EvolutionVerificationEngine;
@@ -24,9 +25,11 @@ import com.kamal.jarvis.v2.evolution.SourceEvolutionEngine;
 import com.kamal.jarvis.v2.intelligence.ExecutionEngine;
 import com.kamal.jarvis.v2.intelligence.JarvisBrain;
 import com.kamal.jarvis.v2.intelligence.PlanningEngine;
+import com.kamal.jarvis.v2.intelligence.learning.CodeProviderDiscoveryBridge;
 import com.kamal.jarvis.v2.intelligence.learning.KnowledgeAcquisitionEngine;
 import com.kamal.jarvis.v2.intelligence.learning.KnowledgeLearningEngine;
 import com.kamal.jarvis.v2.intelligence.learning.KnowledgeMemory;
+import com.kamal.jarvis.v2.intelligence.learning.KnowledgeSourceTrustEngine;
 import com.kamal.jarvis.v2.intelligence.learning.KnowledgeVerificationEngine;
 
 import com.kamal.jarvis.v2.permissions.AndroidPermissionBridge;
@@ -75,7 +78,9 @@ public final class JarvisSystem {
     private final EvolutionOrchestrator evolutionOrchestrator;
     private final EvolutionCore evolutionCore;
 
+    private final KnowledgeSourceTrustEngine trustEngine;
     private final KnowledgeLearningEngine learningEngine;
+    private final CodeProviderDiscoveryBridge codeProviderDiscoveryBridge;
 
     private final PlanningEngine planningEngine;
     private final ExecutionEngine executionEngine;
@@ -103,32 +108,16 @@ public final class JarvisSystem {
                         "jarvis_workspace"
                 );
 
-        // =====================================================
-        // OWNER SECURITY
-        // =====================================================
-
         this.securityBoundary =
                 new OwnerSecurityBoundary();
-
-        // =====================================================
-        // PROJECT WORKSPACE
-        // =====================================================
 
         this.projectWorkspaceManager =
                 new ProjectWorkspaceManager(
                         this.securityBoundary
                 );
 
-        // =====================================================
-        // RUNTIME
-        // =====================================================
-
         this.runtime =
                 new JarvisRuntime();
-
-        // =====================================================
-        // TOOLS
-        // =====================================================
 
         this.toolRegistry =
                 new ToolRegistry();
@@ -138,10 +127,6 @@ public final class JarvisSystem {
                         this.context
                 );
 
-        // =====================================================
-        // PERMISSIONS
-        // =====================================================
-
         this.permissionManager =
                 new PermissionManager();
 
@@ -149,10 +134,6 @@ public final class JarvisSystem {
                 new AndroidPermissionBridge(
                         this.context
                 );
-
-        // =====================================================
-        // CODE EVOLUTION
-        // =====================================================
 
         this.codeEvolutionEngine =
                 new CodeEvolutionEngine(
@@ -164,10 +145,6 @@ public final class JarvisSystem {
                 new SourceEvolutionEngine(
                         this.codeEvolutionEngine
                 );
-
-        // =====================================================
-        // SELF BUILD
-        // =====================================================
 
         this.selfBuilder =
                 new SelfBuilder(
@@ -183,19 +160,11 @@ public final class JarvisSystem {
                         this.workspaceRoot
                 );
 
-        // =====================================================
-        // BUILD
-        // =====================================================
-
         this.buildEngine =
                 new BuildEngine(
                         this.projectWorkspaceManager,
                         this.securityBoundary
                 );
-
-        // =====================================================
-        // EVOLUTION VERIFICATION
-        // =====================================================
 
         this.verificationEngine =
                 new EvolutionVerificationEngine(
@@ -203,10 +172,6 @@ public final class JarvisSystem {
                         this.projectWorkspaceManager,
                         this.securityBoundary
                 );
-
-        // =====================================================
-        // EVOLUTION ORCHESTRATOR
-        // =====================================================
 
         this.evolutionOrchestrator =
                 new EvolutionOrchestrator(
@@ -220,19 +185,11 @@ public final class JarvisSystem {
                         this.verificationEngine
                 );
 
-        // =====================================================
-        // CAPABILITY DISCOVERY
-        // =====================================================
-
         this.capabilityDiscovery =
                 new CapabilityDiscovery(
                         this.toolRegistry,
                         this.permissionManager
                 );
-
-        // =====================================================
-        // CAPABILITY EXECUTION
-        // =====================================================
 
         this.capabilityExecutor =
                 new CapabilityExecutor(
@@ -240,10 +197,6 @@ public final class JarvisSystem {
                         this.toolRegistry,
                         this.permissionManager
                 );
-
-        // =====================================================
-        // EVOLUTION CORE
-        // =====================================================
 
         this.evolutionCore =
                 new EvolutionCore(
@@ -253,13 +206,28 @@ public final class JarvisSystem {
                         this.toolRegistry
                 );
 
-        // =====================================================
-        // KNOWLEDGE / CONTINUOUS LEARNING
-        // =====================================================
+        /*
+         * =====================================================
+         * CONTINUOUS LEARNING
+         * =====================================================
+         *
+         * نفس Trust Engine يستعمله:
+         *
+         * Internet Learning
+         *        +
+         * Code Provider Discovery
+         *
+         * باش ما يكونوش جوج أنظمة منفصلين.
+         */
+
+        this.trustEngine =
+                new KnowledgeSourceTrustEngine();
 
         KnowledgeAcquisitionEngine
                 knowledgeAcquisitionEngine =
-                new KnowledgeAcquisitionEngine();
+                new KnowledgeAcquisitionEngine(
+                        this.trustEngine
+                );
 
         KnowledgeVerificationEngine
                 knowledgeVerificationEngine =
@@ -276,19 +244,45 @@ public final class JarvisSystem {
                         knowledgeMemory
                 );
 
-        // =====================================================
-        // PLANNING
-        // =====================================================
+        /*
+         * =====================================================
+         * CODE PROVIDER DISCOVERY
+         * =====================================================
+         *
+         * JARVIS يقدر يكتشف مصادر توليد الكود
+         * من خلال نفس نظام الثقة.
+         */
+
+        this.codeProviderDiscoveryBridge =
+                new CodeProviderDiscoveryBridge(
+                        this.trustEngine
+                );
+
+        /*
+         * تسجيل محرك اكتشاف مزودي الكود داخل
+         * CodeGenerationEngine.
+         *
+         * لا يتم فرض Provider معين.
+         */
+
+        CodeGenerationEngine
+                codeGenerationEngine =
+                this.evolutionCore
+                        .getCodeGenerationEngine();
+
+        if (codeGenerationEngine != null) {
+
+            codeGenerationEngine
+                    .registerDiscoveryEngine(
+                            this.codeProviderDiscoveryBridge
+                    );
+        }
 
         this.planningEngine =
                 new PlanningEngine(
                         this.toolRegistry,
                         this.permissionManager
                 );
-
-        // =====================================================
-        // EXECUTION
-        // =====================================================
 
         this.executionEngine =
                 new ExecutionEngine(
@@ -298,10 +292,6 @@ public final class JarvisSystem {
                         this.runtime
                 );
 
-        // =====================================================
-        // BRAIN
-        // =====================================================
-
         this.brain =
                 new JarvisBrain(
                         this.evolutionCore,
@@ -310,13 +300,8 @@ public final class JarvisSystem {
                         this.executionEngine
                 );
 
-        this.initialized =
-                false;
+        this.initialized = false;
     }
-
-    // =========================================================
-    // START
-    // =========================================================
 
     public synchronized JarvisResult<Boolean> start() {
 
@@ -360,8 +345,9 @@ public final class JarvisSystem {
                 );
             }
 
-            JarvisResult<ProjectWorkspaceManager.ProjectInspection>
-                    workspaceResult =
+            JarvisResult<
+                    ProjectWorkspaceManager.ProjectInspection
+                    > workspaceResult =
                     projectWorkspaceManager.revalidate();
 
             boolean projectReady =
@@ -419,7 +405,8 @@ public final class JarvisSystem {
                 return JarvisResult.success(
                         true,
                         "JARVIS V2 started successfully. "
-                                + "Core, Runtime, Learning and "
+                                + "Core, Runtime, Learning, "
+                                + "Provider Discovery and "
                                 + "Evolution workspace are ready."
                 );
             }
@@ -427,8 +414,10 @@ public final class JarvisSystem {
             return JarvisResult.success(
                     true,
                     "JARVIS V2 started successfully. "
-                            + "Core, Runtime and Learning are ready. "
-                            + "Project Evolution workspace is not configured yet."
+                            + "Core, Runtime, Learning and "
+                            + "Provider Discovery are ready. "
+                            + "Project Evolution workspace "
+                            + "is not configured yet."
             );
 
         } catch (Exception exception) {
@@ -445,10 +434,6 @@ public final class JarvisSystem {
             );
         }
     }
-
-    // =========================================================
-    // STOP
-    // =========================================================
 
     public synchronized JarvisResult<Boolean> stop() {
 
@@ -476,10 +461,6 @@ public final class JarvisSystem {
         }
     }
 
-    // =========================================================
-    // COMMAND PROCESSING
-    // =========================================================
-
     public synchronized
     JarvisResult<JarvisBrain.BrainResponse>
     processCommand(
@@ -504,10 +485,6 @@ public final class JarvisSystem {
                 command
         );
     }
-
-    // =========================================================
-    // TOOL REGISTRATION
-    // =========================================================
 
     public synchronized JarvisResult<Boolean>
     registerTool(
@@ -557,13 +534,9 @@ public final class JarvisSystem {
         if (toolRegistry.contains(toolId)
                 || runtime.containsTool(toolId)) {
 
-            toolRegistry.remove(
-                    toolId
-            );
+            toolRegistry.remove(toolId);
 
-            runtime.unregisterTool(
-                    toolId
-            );
+            runtime.unregisterTool(toolId);
         }
 
         JarvisResult<Void> registryResult =
@@ -586,9 +559,7 @@ public final class JarvisSystem {
 
         if (!runtimeResult.isSuccess()) {
 
-            toolRegistry.remove(
-                    toolId
-            );
+            toolRegistry.remove(toolId);
 
             return JarvisResult.failure(
                     runtimeResult.getError(),
@@ -600,13 +571,9 @@ public final class JarvisSystem {
         if (!toolRegistry.contains(toolId)
                 || !runtime.containsTool(toolId)) {
 
-            toolRegistry.remove(
-                    toolId
-            );
+            toolRegistry.remove(toolId);
 
-            runtime.unregisterTool(
-                    toolId
-            );
+            runtime.unregisterTool(toolId);
 
             return failure(
                     JarvisError.Type.INTERNAL_ERROR,
@@ -621,10 +588,6 @@ public final class JarvisSystem {
                         + toolId
         );
     }
-
-    // =========================================================
-    // TOOL UNREGISTRATION
-    // =========================================================
 
     public synchronized JarvisResult<Boolean>
     unregisterTool(
@@ -701,10 +664,6 @@ public final class JarvisSystem {
         );
     }
 
-    // =========================================================
-    // PROJECT WORKSPACE
-    // =========================================================
-
     public synchronized JarvisResult<Boolean>
     configureProjectWorkspace(
             File projectRoot
@@ -718,8 +677,9 @@ public final class JarvisSystem {
             );
         }
 
-        JarvisResult<ProjectWorkspaceManager.ProjectInspection>
-                result =
+        JarvisResult<
+                ProjectWorkspaceManager.ProjectInspection
+                > result =
                 projectWorkspaceManager.configure(
                         projectRoot
                 );
@@ -752,8 +712,9 @@ public final class JarvisSystem {
             );
         }
 
-        JarvisResult<ProjectWorkspaceManager.ProjectInspection>
-                result =
+        JarvisResult<
+                ProjectWorkspaceManager.ProjectInspection
+                > result =
                 projectWorkspaceManager.configurePath(
                         projectPath
                 );
@@ -786,8 +747,9 @@ public final class JarvisSystem {
     public synchronized JarvisResult<Boolean>
     revalidateProjectWorkspace() {
 
-        JarvisResult<ProjectWorkspaceManager.ProjectInspection>
-                result =
+        JarvisResult<
+                ProjectWorkspaceManager.ProjectInspection
+                > result =
                 projectWorkspaceManager.revalidate();
 
         if (!result.isSuccess()) {
@@ -810,10 +772,6 @@ public final class JarvisSystem {
         return projectWorkspaceManager.isReady();
     }
 
-    // =========================================================
-    // PERMISSIONS
-    // =========================================================
-
     public synchronized void
     synchronizePermissions() {
 
@@ -821,10 +779,6 @@ public final class JarvisSystem {
                 permissionManager
         );
     }
-
-    // =========================================================
-    // STATUS
-    // =========================================================
 
     public synchronized SystemStatus
     getStatus() {
@@ -847,10 +801,6 @@ public final class JarvisSystem {
                         .name()
         );
     }
-
-    // =========================================================
-    // GETTERS
-    // =========================================================
 
     public Context getContext() {
         return context;
@@ -950,10 +900,22 @@ public final class JarvisSystem {
         return evolutionCore;
     }
 
+    public KnowledgeSourceTrustEngine
+    getTrustEngine() {
+
+        return trustEngine;
+    }
+
     public KnowledgeLearningEngine
     getLearningEngine() {
 
         return learningEngine;
+    }
+
+    public CodeProviderDiscoveryBridge
+    getCodeProviderDiscoveryBridge() {
+
+        return codeProviderDiscoveryBridge;
     }
 
     public PlanningEngine
@@ -981,10 +943,6 @@ public final class JarvisSystem {
     public boolean isInitialized() {
         return initialized;
     }
-
-    // =========================================================
-    // OWNER INITIALIZATION
-    // =========================================================
 
     private JarvisResult<Boolean>
     initializeOwner() {
@@ -1062,10 +1020,6 @@ public final class JarvisSystem {
         );
     }
 
-    // =========================================================
-    // HELPERS
-    // =========================================================
-
     private static String normalizeToolId(
             String toolId
     ) {
@@ -1091,10 +1045,6 @@ public final class JarvisSystem {
                 )
         );
     }
-
-    // =========================================================
-    // SYSTEM STATUS
-    // =========================================================
 
     public static final class SystemStatus {
 
