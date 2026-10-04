@@ -4,9 +4,17 @@ import com.kamal.jarvis.v2.core.JarvisError;
 import com.kamal.jarvis.v2.core.JarvisResult;
 import com.kamal.jarvis.v2.evolution.CodeGenerationEngine;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -17,28 +25,31 @@ import java.util.Set;
 /**
  * JARVIS V2
  *
- * CodeProviderDiscoveryBridge
+ * Code Provider Discovery Bridge
  *
- * حلقة الوصل بين:
- *
- * Internet / Source Trust
- *          ↓
- * Provider Discovery
- *          ↓
+ * Internet
+ *   ↓
+ * Source Discovery
+ *   ↓
+ * Trust Evaluation
+ *   ↓
+ * Protocol Detection
+ *   ↓
+ * OpenAI-Compatible Provider
+ *   ↓
  * CodeGenerationEngine
  *
- * المسؤوليات:
+ * هذه النسخة لا تعتبر أي موقع عشوائي مولداً للكود.
  *
- * 1. البحث عن مصادر محتملة لتوليد الكود.
- * 2. استعمال Trust Engine قبل قبول المصدر.
- * 3. التحقق أن المصدر يمكن أن يمثل Code Generator فعلياً.
- * 4. عدم اعتبار صفحات الإنترنت العادية Code Generators.
- * 5. إعادة مزودي التوليد الحقيقيين فقط إلى CodeGenerationEngine.
+ * المصدر لا يصبح Provider إلا إذا:
  *
- * ملاحظة مهمة:
+ * 1. تم اكتشافه بواسطة Trust Engine.
+ * 2. اجتاز مستوى الثقة المطلوب.
+ * 3. تم العثور على OpenAI-compatible endpoint.
+ * 4. endpoint /v1/models يجيب فعلياً.
+ * 5. تم العثور على model صالح.
  *
- * هذا الملف لا يخترع API لمصدر لا يملكه.
- * المصدر يجب أن يقدم عقداً واضحاً أو endpoint معروفاً.
+ * وبعد ذلك فقط يستطيع JARVIS إرسال طلب توليد حقيقي.
  */
 public final class CodeProviderDiscoveryBridge
         implements CodeGenerationEngine.ProviderDiscovery {
@@ -46,11 +57,23 @@ public final class CodeProviderDiscoveryBridge
     private static final String ENGINE_ID =
             "v2.code_provider_discovery_bridge";
 
-    private static final int CONNECT_TIMEOUT_MS = 7000;
+    private static final String USER_AGENT =
+            "Kamal-JARVIS/2.0";
 
-    private static final int READ_TIMEOUT_MS = 9000;
+    private static final int CONNECT_TIMEOUT_MS =
+            8000;
 
-    private static final int MAX_DISCOVERY_SOURCES = 12;
+    private static final int READ_TIMEOUT_MS =
+            20000;
+
+    private static final int MAX_DISCOVERY_SOURCES =
+            12;
+
+    private static final int MAX_RESPONSE_BYTES =
+            2_000_000;
+
+    private static final double MIN_TRUST_SCORE =
+            0.70;
 
     private final KnowledgeSourceTrustEngine trustEngine;
 
@@ -65,63 +88,48 @@ public final class CodeProviderDiscoveryBridge
                         : trustEngine;
     }
 
-    /**
-     * معرف محرك الاكتشاف.
-     */
     @Override
     public String getId() {
         return ENGINE_ID;
     }
 
-    /**
-     * يحدد هل المحرك متاح.
-     */
     @Override
     public boolean isAvailable() {
         return enabled && trustEngine != null;
     }
 
-    /**
-     * تفعيل المحرك.
-     */
     public void enable() {
         enabled = true;
     }
 
-    /**
-     * تعطيل المحرك.
-     */
     public void disable() {
         enabled = false;
     }
 
     /**
-     * اكتشاف مزودي توليد الكود.
-     *
-     * العملية:
-     *
-     * 1. بناء استعلام مناسب.
-     * 2. اكتشاف المصادر.
-     * 3. تقييم الثقة.
-     * 4. فحص قابلية المصدر للاستعمال كـ API.
-     * 5. إنشاء Provider فقط إذا كان هناك دليل كاف.
+     * اكتشاف Providers حقيقيين.
      */
     @Override
-    public synchronized List<CodeGenerationEngine.CodeGeneratorProvider>
-    discover(
+    public synchronized List<
+            CodeGenerationEngine.CodeGeneratorProvider
+            > discover(
             CodeGenerationEngine.GenerationRequest request
     ) {
 
-        if (!isAvailable() ||
-                request == null ||
-                !request.isValid()) {
+        if (!isAvailable()
+                || request == null
+                || !request.isValid()) {
 
             return Collections.emptyList();
         }
 
-        List<CodeGenerationEngine.CodeGeneratorProvider>
-                providers =
+        List<
+                CodeGenerationEngine.CodeGeneratorProvider
+                > providers =
                 new ArrayList<>();
+
+        Set<String> providerIds =
+                new LinkedHashSet<>();
 
         try {
 
@@ -132,8 +140,8 @@ public final class CodeProviderDiscoveryBridge
                     discovery =
                     trustEngine.discover(query);
 
-            if (discovery == null ||
-                    !discovery.isSuccess()) {
+            if (discovery == null
+                    || !discovery.isSuccess()) {
 
                 return providers;
             }
@@ -141,8 +149,7 @@ public final class CodeProviderDiscoveryBridge
             int checked = 0;
 
             for (
-                    KnowledgeSourceTrustEngine.SourceProfile
-                    profile
+                    KnowledgeSourceTrustEngine.SourceProfile profile
                     : discovery.getSources()
             ) {
 
@@ -150,8 +157,7 @@ public final class CodeProviderDiscoveryBridge
                     continue;
                 }
 
-                if (checked >=
-                        MAX_DISCOVERY_SOURCES) {
+                if (checked >= MAX_DISCOVERY_SOURCES) {
                     break;
                 }
 
@@ -161,37 +167,42 @@ public final class CodeProviderDiscoveryBridge
                     continue;
                 }
 
-                ProviderEndpoint endpoint =
-                        inspectProviderEndpoint(
+                List<ApiEndpoint> endpoints =
+                        discoverCompatibleEndpoints(
                                 profile
                         );
 
-                if (endpoint == null ||
-                        !endpoint.isUsable()) {
-                    continue;
+                for (ApiEndpoint endpoint : endpoints) {
+
+                    if (endpoint == null
+                            || !endpoint.isUsable()) {
+                        continue;
+                    }
+
+                    String providerId =
+                            endpoint.providerId();
+
+                    if (!providerIds.add(providerId)) {
+                        continue;
+                    }
+
+                    OpenAiCompatibleProvider provider =
+                            new OpenAiCompatibleProvider(
+                                    endpoint
+                            );
+
+                    if (!provider.isConfigured()
+                            || !provider.isAvailable()) {
+                        continue;
+                    }
+
+                    providers.add(provider);
                 }
-
-                CodeGenerationEngine.CodeGeneratorProvider
-                        provider =
-                        new HttpCodeGeneratorProvider(
-                                endpoint
-                        );
-
-                if (!provider.isConfigured()) {
-                    continue;
-                }
-
-                if (!provider.isAvailable()) {
-                    continue;
-                }
-
-                providers.add(provider);
             }
 
         } catch (Exception ignored) {
             /*
-             * فشل اكتشاف مصدر واحد لا يجب أن يوقف
-             * بقية نظام JARVIS.
+             * فشل مصدر واحد لا يوقف بقية الاكتشاف.
              */
         }
 
@@ -199,85 +210,66 @@ public final class CodeProviderDiscoveryBridge
     }
 
     /**
-     * البحث عن مصدر توليد كود.
+     * يبني استعلاماً عاماً.
+     *
+     * JARVIS لا يبحث عن Provider واحد محدد.
      */
     private String buildDiscoveryQuery(
             CodeGenerationEngine.GenerationRequest request
     ) {
 
-        String goal =
-                request.getGoal();
-
-        String description =
-                request.getDescription();
-
         return
-                "free open source code generation API "
-                        + "programmatic code generation endpoint "
-                        + "JSON API "
-                        + safe(goal)
+                "free open source AI code generation API "
+                        + "OpenAI compatible API "
+                        + "LLM inference API "
+                        + "v1 models chat completions "
+                        + safe(request.getGoal())
                         + " "
-                        + safe(description);
+                        + safe(request.getDescription());
     }
 
     /**
-     * تقييم المصدر قبل أي استعمال.
+     * تقييم Trust قبل استعمال أي مصدر.
      */
     private boolean isTrustworthy(
             KnowledgeSourceTrustEngine.SourceProfile profile
     ) {
 
-        if (profile == null ||
-                !profile.isAvailable()) {
+        if (profile == null
+                || !profile.isAvailable()) {
 
             return false;
         }
 
-        KnowledgeSourceTrustEngine.TrustAssessment
-                assessment =
+        KnowledgeSourceTrustEngine.TrustAssessment assessment =
                 trustEngine.getAssessment(
                         profile.getId()
                 );
 
-        if (assessment == null ||
-                !assessment.canUse()) {
+        if (assessment == null
+                || !assessment.canUse()) {
 
             return false;
         }
 
-        /*
-         * بالنسبة لمصدر Code Generation،
-         * نحتاج مستوى ثقة أعلى من مجرد مصدر معلومات.
-         */
-        double trustScore =
-                calculateTrustScore(
-                        profile
-                );
+        double score =
+                calculateTrustScore(profile);
 
-        return trustScore >= 0.70;
+        return score >= MIN_TRUST_SCORE;
     }
 
-    /**
-     * حساب ثقة مركبة للمصدر.
-     */
     private double calculateTrustScore(
             KnowledgeSourceTrustEngine.SourceProfile profile
     ) {
 
         double ownership =
-                clamp(
-                        profile.getOwnershipScore()
-                );
+                clamp(profile.getOwnershipScore());
 
         double reputation =
-                clamp(
-                        profile.getReputationScore()
-                );
+                clamp(profile.getReputationScore());
 
         double references =
-                clamp(
-                        profile.getReferenceQuality()
-                );
+                clamp(profile.getReferenceQuality());
 
         double corroboration =
                 clamp(
@@ -285,19 +277,13 @@ public final class CodeProviderDiscoveryBridge
                 );
 
         double freshness =
-                clamp(
-                        profile.getFreshnessScore()
-                );
+                clamp(profile.getFreshnessScore());
 
         double transparency =
-                clamp(
-                        profile.getTransparencyScore()
-                );
+                clamp(profile.getTransparencyScore());
 
         double relevance =
-                clamp(
-                        profile.getDomainRelevance()
-                );
+                clamp(profile.getDomainRelevance());
 
         return
                 ownership * 0.20
@@ -310,41 +296,1055 @@ public final class CodeProviderDiscoveryBridge
     }
 
     /**
-     * فحص endpoint للمصدر.
+     * يحاول اكتشاف OpenAI-compatible API فعلياً.
      *
-     * لا نرسل بيانات توليد هنا.
-     * الغرض فقط التأكد من وجود endpoint يمكن
-     * أن يكون API فعلياً.
+     * لا نعتمد فقط على اسم الرابط.
+     *
+     * الاختبار الحقيقي:
+     *
+     * GET /v1/models
      */
-    private ProviderEndpoint inspectProviderEndpoint(
+    private List<ApiEndpoint> discoverCompatibleEndpoints(
             KnowledgeSourceTrustEngine.SourceProfile profile
     ) {
+
+        List<ApiEndpoint> result =
+                new ArrayList<>();
 
         String sourceUrl =
                 safe(profile.getUrl());
 
         if (sourceUrl.isEmpty()) {
+            return result;
+        }
+
+        List<String> candidates =
+                buildEndpointCandidates(
+                        sourceUrl
+                );
+
+        for (String baseUrl : candidates) {
+
+            ApiEndpoint endpoint =
+                    inspectOpenAiCompatibleEndpoint(
+                            profile,
+                            baseUrl
+                    );
+
+            if (endpoint != null
+                    && endpoint.isUsable()) {
+
+                result.add(endpoint);
+
+                /*
+                 * يكفي Provider واحد صالح
+                 * من نفس المصدر.
+                 */
+                break;
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * إنشاء عناوين محتملة للـAPI.
+     */
+    private List<String> buildEndpointCandidates(
+            String sourceUrl
+    ) {
+
+        Set<String> candidates =
+                new LinkedHashSet<>();
+
+        try {
+
+            URI uri =
+                    URI.create(sourceUrl);
+
+            String scheme =
+                    uri.getScheme();
+
+            String authority =
+                    uri.getRawAuthority();
+
+            if (scheme != null
+                    && authority != null) {
+
+                String root =
+                        scheme
+                                + "://"
+                                + authority;
+
+                String path =
+                        uri.getPath();
+
+                if (path != null
+                        && !path.trim().isEmpty()) {
+
+                    String cleanPath =
+                            path.trim()
+                                    .replaceAll(
+                                            "/+$",
+                                            ""
+                                    );
+
+                    if (cleanPath.endsWith(
+                            "/v1"
+                    )) {
+
+                        candidates.add(
+                                root
+                                        + cleanPath
+                        );
+
+                    } else {
+
+                        candidates.add(
+                                root
+                                        + cleanPath
+                                        + "/v1"
+                        );
+                    }
+                }
+
+                candidates.add(
+                        root + "/v1"
+                );
+
+                candidates.add(root);
+            }
+
+        } catch (Exception ignored) {
+            /*
+             * مصدر غير صالح.
+             */
+        }
+
+        return new ArrayList<>(candidates);
+    }
+
+    /**
+     * الاختبار الفعلي للـAPI.
+     */
+    private ApiEndpoint inspectOpenAiCompatibleEndpoint(
+            KnowledgeSourceTrustEngine.SourceProfile profile,
+            String baseUrl
+    ) {
+
+        String modelsUrl =
+                joinUrl(
+                        baseUrl,
+                        "/models"
+                );
+
+        HttpResponse response =
+                httpGet(
+                        modelsUrl
+                );
+
+        if (response == null
+                || !response.success) {
+
             return null;
         }
 
-        if (!looksLikeApiSource(
-                profile,
-                sourceUrl
-        )) {
+        String body =
+                response.body;
+
+        if (!looksLikeJson(body)) {
             return null;
         }
 
         try {
 
-            URI uri =
-                    URI.create(
-                            sourceUrl
+            JSONObject json =
+                    new JSONObject(body);
+
+            JSONArray data =
+                    json.optJSONArray(
+                            "data"
                     );
 
-            URL url =
-                    uri.toURL();
+            if (data == null
+                    || data.length() == 0) {
 
-            HttpURLConnection connection =
+                return null;
+            }
+
+            String model =
+                    findUsableModel(data);
+
+            if (model.isEmpty()) {
+                return null;
+            }
+
+            String chatEndpoint =
+                    joinUrl(
+                            baseUrl,
+                            "/chat/completions"
+                    );
+
+            /*
+             * لا نرسل Prompt هنا.
+             *
+             * يكفي اكتشاف:
+             * - /models
+             * - model
+             * - endpoint
+             *
+             * التوليد الحقيقي يتم لاحقاً.
+             */
+            return new ApiEndpoint(
+                    profile.getId(),
+                    profile.getName(),
+                    baseUrl,
+                    chatEndpoint,
+                    model,
+                    profile.getOwner(),
+                    profile.isOfficial(),
+                    profile.isVerifiedOwnership()
+            );
+
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String findUsableModel(
+            JSONArray data
+    ) {
+
+        String fallback = "";
+
+        for (int i = 0;
+             i < data.length();
+             i++) {
+
+            try {
+
+                JSONObject item =
+                        data.optJSONObject(i);
+
+                if (item == null) {
+                    continue;
+                }
+
+                String id =
+                        item.optString(
+                                "id",
+                                ""
+                        ).trim();
+
+                if (id.isEmpty()) {
+                    continue;
+                }
+
+                String lower =
+                        id.toLowerCase(
+                                Locale.ROOT
+                        );
+
+                /*
+                 * الأفضلية للموديلات التي يمكن
+                 * استعمالها عادةً في النص/الكود.
+                 */
+                if (lower.contains("code")
+                        || lower.contains("coder")
+                        || lower.contains("instruct")
+                        || lower.contains("chat")
+                        || lower.contains("qwen")
+                        || lower.contains("llama")
+                        || lower.contains("deepseek")) {
+
+                    return id;
+                }
+
+                if (fallback.isEmpty()) {
+                    fallback = id;
+                }
+
+            } catch (Exception ignored) {
+                // تجاهل model غير صالح.
+            }
+        }
+
+        return fallback;
+    }
+
+    /**
+     * Provider حقيقي لـ OpenAI-compatible API.
+     */
+    private static final class OpenAiCompatibleProvider
+            implements CodeGenerationEngine.CodeGeneratorProvider {
+
+        private final ApiEndpoint endpoint;
+
+        private OpenAiCompatibleProvider(
+                ApiEndpoint endpoint
+        ) {
+            this.endpoint = endpoint;
+        }
+
+        @Override
+        public String getId() {
+
+            return endpoint.providerId();
+        }
+
+        @Override
+        public String getName() {
+
+            return endpoint.name;
+        }
+
+        @Override
+        public int getPriority() {
+
+            int priority = 60;
+
+            if (endpoint.official) {
+                priority += 15;
+            }
+
+            if (endpoint.verifiedOwnership) {
+                priority += 15;
+            }
+
+            return priority;
+        }
+
+        @Override
+        public boolean isConfigured() {
+
+            return endpoint != null
+                    && endpoint.isUsable();
+        }
+
+        @Override
+        public boolean isAvailable() {
+
+            if (!isConfigured()) {
+                return false;
+            }
+
+            /*
+             * إعادة فحص models قبل الاستعمال.
+             */
+            HttpResponse response =
+                    httpGetStatic(
+                            endpoint.modelsUrl()
+                    );
+
+            if (response == null
+                    || !response.success
+                    || !looksLikeJsonStatic(
+                    response.body
+            )) {
+
+                return false;
+            }
+
+            try {
+
+                JSONObject json =
+                        new JSONObject(
+                                response.body
+                        );
+
+                JSONArray data =
+                        json.optJSONArray(
+                                "data"
+                        );
+
+                return data != null
+                        && data.length() > 0;
+
+            } catch (Exception e) {
+
+                return false;
+            }
+        }
+
+        /**
+         * التوليد الحقيقي.
+         *
+         * نرسل طلباً متوافقاً مع:
+         *
+         * POST /v1/chat/completions
+         *
+         * والـmodel المكتشف تلقائياً.
+         */
+        @Override
+        public JarvisResult<
+                CodeGenerationEngine.GeneratedCode
+                > generate(
+                CodeGenerationEngine.GenerationRequest request
+        ) {
+
+            if (request == null
+                    || !request.isValid()) {
+
+                return failure(
+                        JarvisError.Type.VALIDATION_FAILED,
+                        "Generation request is invalid."
+                );
+            }
+
+            if (!isConfigured()) {
+
+                return failure(
+                        JarvisError.Type.TOOL_UNAVAILABLE,
+                        "Discovered provider is unavailable."
+                );
+            }
+
+            String prompt =
+                    buildPrompt(request);
+
+            JSONObject payload =
+                    new JSONObject();
+
+            try {
+
+                payload.put(
+                        "model",
+                        endpoint.model
+                );
+
+                payload.put(
+                        "temperature",
+                        0.1
+                );
+
+                payload.put(
+                        "stream",
+                        false
+                );
+
+                JSONArray messages =
+                        new JSONArray();
+
+                JSONObject system =
+                        new JSONObject();
+
+                system.put(
+                        "role",
+                        "system"
+                );
+
+                system.put(
+                        "content",
+                        buildSystemPrompt()
+                );
+
+                messages.put(system);
+
+                JSONObject user =
+                        new JSONObject();
+
+                user.put(
+                        "role",
+                        "user"
+                );
+
+                user.put(
+                        "content",
+                        prompt
+                );
+
+                messages.put(user);
+
+                payload.put(
+                        "messages",
+                        messages
+                );
+
+            } catch (Exception e) {
+
+                return failure(
+                        JarvisError.Type.INTERNAL_ERROR,
+                        "Could not create generation request."
+                );
+            }
+
+            HttpResponse response =
+                    postJson(
+                            endpoint.chatUrl,
+                            payload.toString()
+                    );
+
+            if (response == null
+                    || !response.success) {
+
+                String message =
+                        response == null
+                                ? "Provider returned no response."
+                                : response.message;
+
+                return failure(
+                        JarvisError.Type.TOOL_UNAVAILABLE,
+                        message
+                );
+            }
+
+            try {
+
+                String generatedText =
+                        extractAssistantContent(
+                                response.body
+                        );
+
+                if (generatedText.isEmpty()) {
+
+                    return failure(
+                            JarvisError.Type.EVOLUTION_FAILED,
+                            "Provider returned empty generated content."
+                    );
+                }
+
+                List<
+                        CodeGenerationEngine.GeneratedFile
+                        > files =
+                        parseGeneratedFiles(
+                                generatedText,
+                                request
+                        );
+
+                if (files.isEmpty()) {
+
+                    return failure(
+                            JarvisError.Type.VALIDATION_FAILED,
+                            "Provider response did not contain valid "
+                                    + "file definitions."
+                    );
+                }
+
+                String generationId =
+                        "network_"
+                                + Long.toHexString(
+                                System.currentTimeMillis()
+                        );
+
+                CodeGenerationEngine.GeneratedCode
+                        generated =
+                        new CodeGenerationEngine.GeneratedCode(
+                                generationId,
+                                getId(),
+                                "Generated through verified "
+                                        + "OpenAI-compatible provider: "
+                                        + endpoint.name,
+                                files
+                        );
+
+                return JarvisResult.success(
+                        generated,
+                        "Code generated by discovered provider."
+                );
+
+            } catch (Exception e) {
+
+                return failure(
+                        JarvisError.Type.EVOLUTION_FAILED,
+                        "Could not parse provider response: "
+                                + safeStatic(
+                                e.getMessage()
+                        )
+                );
+            }
+        }
+
+        /**
+         * Prompt صارم لتقليل الكود العشوائي.
+         */
+        private String buildPrompt(
+                CodeGenerationEngine.GenerationRequest request
+        ) {
+
+            StringBuilder builder =
+                    new StringBuilder();
+
+            builder.append(
+                    "CAPABILITY ID:\n"
+            );
+
+            builder.append(
+                    request.getCapabilityId()
+            );
+
+            builder.append(
+                    "\n\nGOAL:\n"
+            );
+
+            builder.append(
+                    request.getGoal()
+            );
+
+            builder.append(
+                    "\n\nDESCRIPTION:\n"
+            );
+
+            builder.append(
+                    request.getDescription()
+            );
+
+            builder.append(
+                    "\n\nPROJECT CONTEXT:\n"
+            );
+
+            builder.append(
+                    request.getProjectContext()
+            );
+
+            builder.append(
+                    "\n\nREQUIRED FILES:\n"
+            );
+
+            appendSet(
+                    builder,
+                    request.getRequiredFiles()
+            );
+
+            builder.append(
+                    "\n\nREQUIRED TOOLS:\n"
+            );
+
+            appendSet(
+                    builder,
+                    request.getRequiredTools()
+            );
+
+            builder.append(
+                    "\n\nSUCCESS CRITERIA:\n"
+            );
+
+            appendSet(
+                    builder,
+                    request.getSuccessCriteria()
+            );
+
+            builder.append(
+                    "\n\nALLOWED PATHS:\n"
+            );
+
+            appendSet(
+                    builder,
+                    request.getAllowedPaths()
+            );
+
+            builder.append(
+                    "\n\n"
+            );
+
+            builder.append(
+                    "Generate the required implementation.\n"
+            );
+
+            builder.append(
+                    "Do not modify protected security files.\n"
+            );
+
+            builder.append(
+                    "Do not invent external APIs.\n"
+            );
+
+            builder.append(
+                    "Return only file blocks.\n"
+            );
+
+            builder.append(
+                    "Use exactly this format:\n\n"
+            );
+
+            builder.append(
+                    "[FILE path/to/File.java]\n"
+            );
+
+            builder.append(
+                    "complete file content\n"
+            );
+
+            builder.append(
+                    "[/FILE]\n"
+            );
+
+            return builder.toString();
+        }
+
+        private String buildSystemPrompt() {
+
+            return
+                    "You are the code generation component of "
+                            + "JARVIS V2. "
+                            + "Generate complete production-oriented "
+                            + "source files. "
+                            + "Never claim that code works without "
+                            + "providing the implementation. "
+                            + "Respect the requested paths. "
+                            + "Do not modify security boundaries. "
+                            + "Return only [FILE path] blocks.";
+        }
+
+        private void appendSet(
+                StringBuilder builder,
+                Set<String> values
+        ) {
+
+            if (values == null
+                    || values.isEmpty()) {
+
+                builder.append(
+                        "(none)\n"
+                );
+
+                return;
+            }
+
+            for (String value : values) {
+
+                if (value == null) {
+                    continue;
+                }
+
+                builder.append(
+                        "- "
+                );
+
+                builder.append(
+                        value
+                );
+
+                builder.append(
+                        "\n"
+                );
+            }
+        }
+
+        /**
+         * استخراج محتوى assistant من OpenAI-compatible response.
+         */
+        private String extractAssistantContent(
+                String body
+        ) {
+
+            JSONObject json =
+                    new JSONObject(body);
+
+            JSONArray choices =
+                    json.optJSONArray(
+                            "choices"
+                    );
+
+            if (choices == null
+                    || choices.length() == 0) {
+
+                return "";
+            }
+
+            JSONObject choice =
+                    choices.optJSONObject(0);
+
+            if (choice == null) {
+                return "";
+            }
+
+            JSONObject message =
+                    choice.optJSONObject(
+                            "message"
+                    );
+
+            if (message != null) {
+
+                return message.optString(
+                        "content",
+                        ""
+                ).trim();
+            }
+
+            return choice.optString(
+                    "text",
+                    ""
+            ).trim();
+        }
+
+        /**
+         * تحويل response إلى ملفات.
+         */
+        private List<
+                CodeGenerationEngine.GeneratedFile
+                > parseGeneratedFiles(
+                String text,
+                CodeGenerationEngine.GenerationRequest request
+        ) {
+
+            List<
+                    CodeGenerationEngine.GeneratedFile
+                    > files =
+                    new ArrayList<>();
+
+            String markerStart =
+                    "[FILE ";
+
+            String markerEnd =
+                    "[/FILE]";
+
+            int cursor = 0;
+
+            while (cursor < text.length()) {
+
+                int start =
+                        text.indexOf(
+                                markerStart,
+                                cursor
+                        );
+
+                if (start < 0) {
+                    break;
+                }
+
+                int headerEnd =
+                        text.indexOf(
+                                "]",
+                                start
+                        );
+
+                if (headerEnd < 0) {
+                    break;
+                }
+
+                String path =
+                        text.substring(
+                                start + markerStart.length(),
+                                headerEnd
+                        ).trim();
+
+                int contentStart =
+                        headerEnd + 1;
+
+                int end =
+                        text.indexOf(
+                                markerEnd,
+                                contentStart
+                        );
+
+                if (end < 0) {
+                    break;
+                }
+
+                String content =
+                        text.substring(
+                                contentStart,
+                                end
+                        ).trim();
+
+                if (!path.isEmpty()
+                        && !content.isEmpty()) {
+
+                    files.add(
+                            new CodeGenerationEngine.GeneratedFile(
+                                    path,
+                                    chooseOperation(
+                                            path,
+                                            request
+                                    ),
+                                    content
+                            )
+                    );
+                }
+
+                cursor =
+                        end + markerEnd.length();
+            }
+
+            /*
+             * إذا الموديل رجع ملف واحد بدون markers،
+             * لا نخمن المسار إلا إذا كان هناك ملف واحد
+             * مطلوب بشكل صريح.
+             */
+            if (files.isEmpty()
+                    && request.getRequiredFiles().size() == 1) {
+
+                String path =
+                        request.getRequiredFiles()
+                                .iterator()
+                                .next();
+
+                String cleaned =
+                        stripCodeFence(text);
+
+                if (!cleaned.isEmpty()) {
+
+                    files.add(
+                            new CodeGenerationEngine.GeneratedFile(
+                                    path,
+                                    chooseOperation(
+                                            path,
+                                            request
+                                    ),
+                                    cleaned
+                            )
+                    );
+                }
+            }
+
+            return files;
+        }
+
+        private
+        com.kamal.jarvis.v2.evolution.SourceEvolutionEngine
+                .FileChange.Operation
+        chooseOperation(
+                String path,
+                CodeGenerationEngine.GenerationRequest request
+        ) {
+
+            if (request.getRequiredFiles()
+                    .contains(path)) {
+
+                /*
+                 * الملفات المطلوبة يمكن أن تكون موجودة
+                 * أو جديدة؛ WRITE يسمح لـ
+                 * SourceEvolutionEngine بإدارة التغيير.
+                 */
+                return
+                        com.kamal.jarvis.v2.evolution
+                                .SourceEvolutionEngine
+                                .FileChange
+                                .Operation
+                                .WRITE;
+            }
+
+            return
+                    com.kamal.jarvis.v2.evolution
+                            .SourceEvolutionEngine
+                            .FileChange
+                            .Operation
+                            .CREATE;
+        }
+
+        private String stripCodeFence(
+                String text
+        ) {
+
+            String value =
+                    text == null
+                            ? ""
+                            : text.trim();
+
+            if (value.startsWith("```")
+                    && value.endsWith("```")) {
+
+                int firstNewLine =
+                        value.indexOf('\n');
+
+                if (firstNewLine >= 0) {
+
+                    value =
+                            value.substring(
+                                    firstNewLine + 1,
+                                    value.length() - 3
+                            ).trim();
+                }
+            }
+
+            return value;
+        }
+
+        private JarvisResult<
+                CodeGenerationEngine.GeneratedCode
+                > failure(
+                JarvisError.Type type,
+                String message
+        ) {
+
+            return JarvisResult.failure(
+                    JarvisError.of(
+                            type,
+                            message,
+                            ENGINE_ID
+                    )
+            );
+        }
+    }
+
+    /**
+     * معلومات API المكتشف.
+     */
+    private static final class ApiEndpoint {
+
+        private final String sourceId;
+        private final String name;
+        private final String baseUrl;
+        private final String chatUrl;
+        private final String model;
+        private final String owner;
+        private final boolean official;
+        private final boolean verifiedOwnership;
+
+        private ApiEndpoint(
+                String sourceId,
+                String name,
+                String baseUrl,
+                String chatUrl,
+                String model,
+                String owner,
+                boolean official,
+                boolean verifiedOwnership
+        ) {
+
+            this.sourceId = safeStatic(sourceId);
+            this.name = safeStatic(name);
+            this.baseUrl = safeStatic(baseUrl);
+            this.chatUrl = safeStatic(chatUrl);
+            this.model = safeStatic(model);
+            this.owner = safeStatic(owner);
+            this.official = official;
+            this.verifiedOwnership =
+                    verifiedOwnership;
+        }
+
+        private boolean isUsable() {
+
+            return !sourceId.isEmpty()
+                    && !baseUrl.isEmpty()
+                    && !chatUrl.isEmpty()
+                    && !model.isEmpty();
+        }
+
+        private String modelsUrl() {
+
+            return joinUrlStatic(
+                    baseUrl,
+                    "/models"
+            );
+        }
+
+        private String providerId() {
+
+            return "network."
+                    + sourceId
+                    + "."
+                    + Integer.toHexString(
+                    baseUrl.hashCode()
+            );
+        }
+    }
+
+    private static HttpResponse httpGetStatic(
+            String urlString
+    ) {
+
+        HttpURLConnection connection =
+                null;
+
+        try {
+
+            URL url =
+                    URI.create(
+                            urlString
+                    ).toURL();
+
+            connection =
                     (HttpURLConnection)
                             url.openConnection();
 
@@ -371,132 +1371,313 @@ public final class CodeProviderDiscoveryBridge
 
             connection.setRequestProperty(
                     "User-Agent",
-                    "Kamal-JARVIS/2.0"
+                    USER_AGENT
             );
 
-            int responseCode =
+            int code =
                     connection.getResponseCode();
 
-            String contentType =
-                    safe(
-                            connection.getContentType()
+            String body =
+                    readBody(
+                            connection,
+                            code
                     );
 
-            connection.disconnect();
+            boolean success =
+                    code >= 200
+                            && code < 300;
 
-            if (responseCode < 200 ||
-                    responseCode >= 400) {
-
-                return null;
-            }
-
-            /*
-             * API المصدر يجب أن يرجع JSON أو يعلن
-             * صراحة أنه endpoint برمجي.
-             */
-            if (!looksLikeJson(
-                    contentType
-            )) {
-
-                return null;
-            }
-
-            return new ProviderEndpoint(
-                    profile.getId(),
-                    profile.getName(),
-                    sourceUrl,
-                    profile.getOwner(),
-                    profile.isVerifiedOwnership(),
-                    profile.isOfficial(),
-                    responseCode
+            return new HttpResponse(
+                    success,
+                    code,
+                    body,
+                    success
+                            ? "HTTP request succeeded."
+                            : "HTTP request failed: "
+                            + code
             );
 
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
+        } catch (Exception e) {
 
-    /**
-     * تحديد ما إذا كان المصدر يبدو API.
-     */
-    private boolean looksLikeApiSource(
-            KnowledgeSourceTrustEngine.SourceProfile profile,
-            String url
-    ) {
+            return new HttpResponse(
+                    false,
+                    -1,
+                    "",
+                    "HTTP GET failed: "
+                            + safeStatic(
+                            e.getMessage()
+                    )
+            );
 
-        String lowerUrl =
-                url.toLowerCase(
-                        Locale.ROOT
-                );
+        } finally {
 
-        String name =
-                safe(profile.getName())
-                        .toLowerCase(
-                                Locale.ROOT
-                        );
-
-        String description =
-                safe(profile.getDescription())
-                        .toLowerCase(
-                                Locale.ROOT
-                        );
-
-        String combined =
-                lowerUrl
-                        + " "
-                        + name
-                        + " "
-                        + description;
-
-        String[] apiSignals = {
-                "/api/",
-                "api.",
-                "/v1/",
-                "/v2/",
-                "/generate",
-                "/completion",
-                "/chat/completions",
-                "inference",
-                "openai-compatible",
-                "llm api",
-                "code generation api",
-                "json api"
-        };
-
-        for (String signal :
-                apiSignals) {
-
-            if (combined.contains(signal)) {
-                return true;
+            if (connection != null) {
+                connection.disconnect();
             }
         }
-
-        return false;
     }
 
-    private boolean looksLikeJson(
-            String contentType
+    private HttpResponse httpGet(
+            String urlString
     ) {
 
-        String value =
-                safe(contentType)
-                        .toLowerCase(
-                                Locale.ROOT
-                        );
-
-        return value.contains(
-                "application/json"
-        ) ||
-                value.contains(
-                        "+json"
-                );
+        return httpGetStatic(
+                urlString
+        );
     }
 
-    private double clamp(
+    private HttpResponse postJson(
+            String urlString,
+            String json
+    ) {
+
+        HttpURLConnection connection =
+                null;
+
+        try {
+
+            URL url =
+                    URI.create(
+                            urlString
+                    ).toURL();
+
+            connection =
+                    (HttpURLConnection)
+                            url.openConnection();
+
+            connection.setRequestMethod(
+                    "POST"
+            );
+
+            connection.setConnectTimeout(
+                    CONNECT_TIMEOUT_MS
+            );
+
+            connection.setReadTimeout(
+                    READ_TIMEOUT_MS
+            );
+
+            connection.setDoOutput(
+                    true
+            );
+
+            connection.setInstanceFollowRedirects(
+                    true
+            );
+
+            connection.setRequestProperty(
+                    "Content-Type",
+                    "application/json"
+            );
+
+            connection.setRequestProperty(
+                    "Accept",
+                    "application/json"
+            );
+
+            connection.setRequestProperty(
+                    "User-Agent",
+                    USER_AGENT
+            );
+
+            byte[] data =
+                    json.getBytes(
+                            StandardCharsets.UTF_8
+                    );
+
+            try (OutputStream output =
+                         connection.getOutputStream()) {
+
+                output.write(data);
+                output.flush();
+            }
+
+            int code =
+                    connection.getResponseCode();
+
+            String body =
+                    readBody(
+                            connection,
+                            code
+                    );
+
+            boolean success =
+                    code >= 200
+                            && code < 300;
+
+            return new HttpResponse(
+                    success,
+                    code,
+                    body,
+                    success
+                            ? "Provider request succeeded."
+                            : "Provider returned HTTP "
+                            + code
+                            + "."
+            );
+
+        } catch (Exception e) {
+
+            return new HttpResponse(
+                    false,
+                    -1,
+                    "",
+                    "Provider request failed: "
+                            + safeStatic(
+                            e.getMessage()
+                    )
+            );
+
+        } finally {
+
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+
+    private static String readBody(
+            HttpURLConnection connection,
+            int responseCode
+    ) {
+
+        InputStream stream =
+                null;
+
+        try {
+
+            if (responseCode >= 200
+                    && responseCode < 400) {
+
+                stream =
+                        connection.getInputStream();
+
+            } else {
+
+                stream =
+                        connection.getErrorStream();
+            }
+
+            if (stream == null) {
+                return "";
+            }
+
+            BufferedReader reader =
+                    new BufferedReader(
+                            new InputStreamReader(
+                                    stream,
+                                    StandardCharsets.UTF_8
+                            )
+                    );
+
+            StringBuilder builder =
+                    new StringBuilder();
+
+            String line;
+
+            int total = 0;
+
+            while ((line =
+                    reader.readLine()) != null) {
+
+                total +=
+                        line.length();
+
+                if (total >
+                        MAX_RESPONSE_BYTES) {
+
+                    break;
+                }
+
+                builder.append(line);
+                builder.append('\n');
+            }
+
+            reader.close();
+
+            return builder.toString();
+
+        } catch (Exception e) {
+
+            return "";
+
+        } finally {
+
+            if (stream != null) {
+
+                try {
+                    stream.close();
+                } catch (Exception ignored) {
+                    // لا شيء.
+                }
+            }
+        }
+    }
+
+    private static boolean looksLikeJson(
+            String value
+    ) {
+
+        if (value == null) {
+            return false;
+        }
+
+        String clean =
+                value.trim();
+
+        return clean.startsWith("{")
+                || clean.startsWith("[");
+    }
+
+    private static boolean looksLikeJsonStatic(
+            String value
+    ) {
+
+        return looksLikeJson(value);
+    }
+
+    private static String joinUrl(
+            String base,
+            String path
+    ) {
+
+        return joinUrlStatic(
+                base,
+                path
+        );
+    }
+
+    private static String joinUrlStatic(
+            String base,
+            String path
+    ) {
+
+        String left =
+                safeStatic(base)
+                        .replaceAll(
+                                "/+$",
+                                ""
+                        );
+
+        String right =
+                safeStatic(path)
+                        .replaceAll(
+                                "^/+",
+                                ""
+                        );
+
+        return left
+                + "/"
+                + right;
+    }
+
+    private static double clamp(
             double value
     ) {
 
-        if (Double.isNaN(value)) {
+        if (Double.isNaN(value)
+                || Double.isInfinite(value)) {
+
             return 0.0;
         }
 
@@ -509,7 +1690,7 @@ public final class CodeProviderDiscoveryBridge
         );
     }
 
-    private String safe(
+    private static String safeStatic(
             String value
     ) {
 
@@ -518,170 +1699,37 @@ public final class CodeProviderDiscoveryBridge
                 : value.trim();
     }
 
-    public KnowledgeSourceTrustEngine
-    getTrustEngine() {
+    private String safe(
+            String value
+    ) {
 
-        return trustEngine;
+        return safeStatic(value);
     }
 
-    public String getEngineId() {
-        return ENGINE_ID;
-    }
+    private static final class HttpResponse {
 
-    /**
-     * معلومات endpoint المكتشف.
-     */
-    private static final class ProviderEndpoint {
+        private final boolean success;
+        private final int code;
+        private final String body;
+        private final String message;
 
-        private final String sourceId;
-        private final String name;
-        private final String url;
-        private final String owner;
-        private final boolean verifiedOwnership;
-        private final boolean official;
-        private final int responseCode;
-
-        private ProviderEndpoint(
-                String sourceId,
-                String name,
-                String url,
-                String owner,
-                boolean verifiedOwnership,
-                boolean official,
-                int responseCode
+        private HttpResponse(
+                boolean success,
+                int code,
+                String body,
+                String message
         ) {
 
-            this.sourceId =
-                    sourceId;
-
-            this.name =
-                    name;
-
-            this.url =
-                    url;
-
-            this.owner =
-                    owner;
-
-            this.verifiedOwnership =
-                    verifiedOwnership;
-
-            this.official =
-                    official;
-
-            this.responseCode =
-                    responseCode;
-        }
-
-        private boolean isUsable() {
-
-            return !safe(sourceId).isEmpty()
-                    && !safe(url).isEmpty()
-                    && responseCode >= 200
-                    && responseCode < 400;
-        }
-    }
-
-    /**
-     * مزود HTTP عام.
-     *
-     * ملاحظة:
-     *
-     * هذه الطبقة لا تفترض schema معيناً للمصدر.
-     * لذلك لن ترسل طلب توليد إلى API مجهول.
-     *
-     * قبل التوليد الفعلي يجب أن يثبت المصدر
-     * contract متوافقاً مع CodeGenerationEngine.
-     */
-    private static final class HttpCodeGeneratorProvider
-            implements CodeGenerationEngine.CodeGeneratorProvider {
-
-        private final ProviderEndpoint endpoint;
-
-        private HttpCodeGeneratorProvider(
-                ProviderEndpoint endpoint
-        ) {
-            this.endpoint =
-                    endpoint;
-        }
-
-        @Override
-        public String getId() {
-
-            return "network."
-                    + safeStatic(
-                            endpoint.sourceId
-                    );
-        }
-
-        @Override
-        public String getName() {
-
-            return safeStatic(
-                    endpoint.name
-            );
-        }
-
-        @Override
-        public int getPriority() {
-
-            int priority = 50;
-
-            if (endpoint.official) {
-                priority += 15;
-            }
-
-            if (endpoint.verifiedOwnership) {
-                priority += 15;
-            }
-
-            return priority;
-        }
-
-        @Override
-        public boolean isConfigured() {
-
-            return endpoint != null
-                    && endpoint.isUsable();
-        }
-
-        @Override
-        public boolean isAvailable() {
-
-            return isConfigured();
-        }
-
-        @Override
-        public JarvisResult<
-                CodeGenerationEngine.GeneratedCode
-                > generate(
-                CodeGenerationEngine.GenerationRequest request
-        ) {
-
-            /*
-             * لا ندعي نجاح التوليد قبل اكتشاف
-             * contract حقيقي للـAPI.
-             *
-             * هذا يمنع JARVIS من إرسال طلبات
-             * عشوائية إلى الإنترنت.
-             */
-            return JarvisResult.failure(
-                    JarvisError.of(
-                            JarvisError.Type.TOOL_UNAVAILABLE,
-                            "Provider discovered but its code-generation "
-                                    + "request contract has not been verified.",
-                            "v2.code_provider_discovery_bridge"
-                    )
-            );
-        }
-
-        private static String safeStatic(
-                String value
-        ) {
-
-            return value == null
-                    ? ""
-                    : value.trim();
+            this.success = success;
+            this.code = code;
+            this.body =
+                    body == null
+                            ? ""
+                            : body;
+            this.message =
+                    message == null
+                            ? ""
+                            : message;
         }
     }
 }
