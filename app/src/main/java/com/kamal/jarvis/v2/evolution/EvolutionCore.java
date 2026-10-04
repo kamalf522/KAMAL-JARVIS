@@ -449,10 +449,18 @@ public final class EvolutionCore {
                                             + spec.getCapabilityId(),
                                     "",
                                     null,
-                                    spec.getAllowedFiles(),
-                                    spec.getRequiredFiles(),
-                                    spec.getRequiredTools(),
-                                    spec.getSuccessCriteria()
+                                    new java.util.LinkedHashSet<>(
+                                            spec.getAllowedFiles()
+                                    ),
+                                    new java.util.LinkedHashSet<>(
+                                            spec.getRequiredFiles()
+                                    ),
+                                    new java.util.LinkedHashSet<>(
+                                            spec.getRequiredTools()
+                                    ),
+                                    new java.util.LinkedHashSet<>(
+                                            spec.getSuccessCriteria()
+                                    )
                             );
 
                 } catch (Exception exception) {
@@ -471,7 +479,7 @@ public final class EvolutionCore {
                 }
 
                 JarvisResult<
-                        CodeGenerationEngine.GenerationRecord
+                        CodeGenerationEngine.GeneratedCode
                         > generationResult =
                         codeGenerationEngine.generate(
                                 generationRequest
@@ -493,12 +501,11 @@ public final class EvolutionCore {
                             );
                 }
 
-                CodeGenerationEngine.GenerationRecord
-                        generationRecord =
+                CodeGenerationEngine.GeneratedCode
+                        generatedCode =
                         generationResult.getData();
 
-                if (generationRecord == null ||
-                        generationRecord.getGeneratedCode() == null) {
+                if (generatedCode == null) {
 
                     state =
                             EvolutionState.FAILED;
@@ -508,10 +515,6 @@ public final class EvolutionCore {
                             "Code generation produced no validated code."
                     );
                 }
-
-                CodeGenerationEngine.GeneratedCode
-                        generatedCode =
-                        generationRecord.getGeneratedCode();
 
                 JarvisResult<
                         SourceEvolutionEngine.ChangeSet
@@ -1147,7 +1150,7 @@ public final class EvolutionCore {
         ).trim();
     }
 
-    private String compact(
+    private static String compact(
             String value,
             int maxLength
     ) {
