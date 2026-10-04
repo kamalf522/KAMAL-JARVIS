@@ -17,35 +17,14 @@ import java.util.Set;
 /**
  * JARVIS V2 - Code Generation Engine
  *
- * مسؤول عن طبقة توليد الكود قبل الكتابة الفعلية للمشروع.
+ * مسؤول عن:
+ * - إدارة مصادر توليد الكود.
+ * - اختيار أفضل مصدر متاح.
+ * - اكتشاف مصادر جديدة عبر ProviderDiscovery.
+ * - التحقق البنيوي من الكود قبل التطوير.
+ * - تحويل الكود المولد إلى ChangeSet.
  *
- * المسار:
- *
- * GenerationRequest
- *      ↓
- * Provider Selection
- *      ↓
- * AI Code Generator
- *      ↓
- * GeneratedCode
- *      ↓
- * Structural Validation
- *      ↓
- * ChangeSet
- *      ↓
- * SourceEvolutionEngine
- *      ↓
- * CodeEvolutionEngine
- *
- * هذا المحرك لا يكتب مباشرة إلى ملفات المشروع.
- *
- * يمكن ربطه بعدة مصادر توليد:
- * - Local AI
- * - Remote AI
- * - Open-source model
- * - Future JARVIS native generator
- *
- * الهدف هو عدم ربط JARVIS بمصدر واحد.
+ * لا يكتب مباشرة إلى ملفات المشروع.
  */
 public final class CodeGenerationEngine {
 
@@ -57,6 +36,9 @@ public final class CodeGenerationEngine {
     private final Map<String, CodeGeneratorProvider> providers =
             new LinkedHashMap<>();
 
+    private final List<ProviderDiscovery> discoveryEngines =
+            new ArrayList<>();
+
     private volatile String preferredProviderId;
 
     private volatile GenerationRecord lastRecord;
@@ -64,24 +46,21 @@ public final class CodeGenerationEngine {
     public CodeGenerationEngine(
             OwnerSecurityBoundary securityBoundary
     ) {
-
         if (securityBoundary == null) {
             throw new IllegalArgumentException(
                     "securityBoundary cannot be null."
             );
         }
 
-        this.securityBoundary =
-                securityBoundary;
+        this.securityBoundary = securityBoundary;
     }
 
     /**
-     * إضافة مصدر توليد.
+     * إضافة مزود توليد معروف.
      */
     public synchronized JarvisResult<Void> registerProvider(
             CodeGeneratorProvider provider
     ) {
-
         if (provider == null) {
             return failure(
                     JarvisError.Type.INVALID_REQUEST,
@@ -89,10 +68,7 @@ public final class CodeGenerationEngine {
             );
         }
 
-        String id =
-                normalize(
-                        provider.getId()
-                );
+        String id = normalize(provider.getId());
 
         if (id.isEmpty()) {
             return failure(
@@ -108,10 +84,7 @@ public final class CodeGenerationEngine {
             );
         }
 
-        providers.put(
-                id,
-                provider
-        );
+        providers.put(id, provider);
 
         if (preferredProviderId == null) {
             preferredProviderId = id;
@@ -124,14 +97,166 @@ public final class CodeGenerationEngine {
     }
 
     /**
-     * حذف مصدر توليد.
+     * تسجيل محرك يستطيع اكتشاف مزودي توليد جدد.
+     *
+     * هذا لا يعني أن أي مصدر إنترنت يصبح مزوداً تلقائياً.
+     * يجب أن يعيد Discovery مزوداً يملك عقد توليد حقيقي.
+     */
+    public synchronized JarvisResult<Void> registerDiscoveryEngine(
+            ProviderDiscovery discovery
+    ) {
+        if (discovery == null) {
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "Provider discovery engine cannot be null."
+            );
+        }
+
+        if (!discovery.isAvailable()) {
+            return failure(
+                    JarvisError.Type.TOOL_UNAVAILABLE,
+                    "Provider discovery engine is unavailable."
+            );
+        }
+
+        if (!discoveryEngines.contains(discovery)) {
+            discoveryEngines.add(discovery);
+        }
+
+        return JarvisResult.success(
+                null,
+                "Provider discovery engine registered."
+        );
+    }
+
+    /**
+     * إزالة محرك اكتشاف.
+     */
+    public synchronized JarvisResult<Void> removeDiscoveryEngine(
+            ProviderDiscovery discovery
+    ) {
+        if (discovery == null) {
+            return failure(
+                    JarvisError.Type.INVALID_REQUEST,
+                    "Discovery engine cannot be null."
+            );
+        }
+
+        if (!discoveryEngines.remove(discovery)) {
+            return failure(
+                    JarvisError.Type.NOT_FOUND,
+                    "Discovery engine not found."
+            );
+        }
+
+        return JarvisResult.success(
+                null,
+                "Discovery engine removed."
+        );
+    }
+
+    /**
+     * يطلب من محركات الاكتشاف البحث عن مزودين مناسبين.
+     *
+     * المزود لا يدخل النظام إلا بعد:
+     * - وجوده فعلياً.
+     * - نجاح isConfigured().
+     * - نجاح registerProvider().
+     */
+    public synchronized JarvisResult<List<String>> discoverProviders(
+            GenerationRequest request
+    ) {
+        if (request == null || !request.isValid()) {
+            return failure(
+                    JarvisError.Type.VALIDATION_FAILED,
+                    "Generation request is invalid."
+            );
+        }
+
+        if (!securityBoundary.isActive()) {
+            return failure(
+                    JarvisError.Type.NOT_AUTHORIZED,
+                    "Owner security boundary is not active."
+            );
+        }
+
+        if (discoveryEngines.isEmpty()) {
+            return JarvisResult.success(
+                    Collections.<String>emptyList(),
+                    "No provider discovery engine is registered."
+            );
+        }
+
+        Set<String> discoveredIds =
+                new LinkedHashSet<>();
+
+        for (ProviderDiscovery discovery :
+                new ArrayList<>(discoveryEngines)) {
+
+            if (discovery == null ||
+                    !discovery.isAvailable()) {
+                continue;
+            }
+
+            try {
+                List<CodeGeneratorProvider> discovered =
+                        discovery.discover(request);
+
+                if (discovered == null) {
+                    continue;
+                }
+
+                for (CodeGeneratorProvider provider :
+                        discovered) {
+
+                    if (provider == null) {
+                        continue;
+                    }
+
+                    if (!provider.isConfigured()) {
+                        continue;
+                    }
+
+                    String id =
+                            normalize(provider.getId());
+
+                    if (id.isEmpty()) {
+                        continue;
+                    }
+
+                    providers.put(id, provider);
+
+                    discoveredIds.add(id);
+
+                    if (preferredProviderId == null &&
+                            provider.isAvailable()) {
+
+                        preferredProviderId = id;
+                    }
+                }
+
+            } catch (Exception ignored) {
+                /*
+                 * فشل مصدر اكتشاف واحد لا يوقف بقية المصادر.
+                 */
+            }
+        }
+
+        return JarvisResult.success(
+                new ArrayList<>(discoveredIds),
+                discoveredIds.isEmpty()
+                        ? "No usable code generation providers discovered."
+                        : "Code generation providers discovered."
+        );
+    }
+
+    /**
+     * حذف مزود.
      */
     public synchronized JarvisResult<Void> removeProvider(
             String providerId
     ) {
-
-        String id =
-                normalize(providerId);
+        String id = normalize(providerId);
 
         if (id.isEmpty()) {
             return failure(
@@ -148,7 +273,6 @@ public final class CodeGenerationEngine {
         }
 
         if (id.equals(preferredProviderId)) {
-
             preferredProviderId =
                     providers.isEmpty()
                             ? null
@@ -164,14 +288,12 @@ public final class CodeGenerationEngine {
     }
 
     /**
-     * تحديد المصدر المفضل.
+     * اختيار مزود مفضل.
      */
     public synchronized JarvisResult<Void> setPreferredProvider(
             String providerId
     ) {
-
-        String id =
-                normalize(providerId);
+        String id = normalize(providerId);
 
         CodeGeneratorProvider provider =
                 providers.get(id);
@@ -199,15 +321,11 @@ public final class CodeGenerationEngine {
     }
 
     /**
-     * اختيار أفضل مصدر متوفر.
+     * اختيار أفضل مزود.
      */
     private CodeGeneratorProvider selectProvider(
             GenerationRequest request
     ) {
-
-        /*
-         * 1. المصدر المطلوب في الطلب.
-         */
         if (request != null &&
                 !request.getPreferredProviderId().isEmpty()) {
 
@@ -218,14 +336,10 @@ public final class CodeGenerationEngine {
 
             if (requested != null &&
                     requested.isAvailable()) {
-
                 return requested;
             }
         }
 
-        /*
-         * 2. المصدر المفضل.
-         */
         if (preferredProviderId != null) {
 
             CodeGeneratorProvider preferred =
@@ -235,16 +349,11 @@ public final class CodeGenerationEngine {
 
             if (preferred != null &&
                     preferred.isAvailable()) {
-
                 return preferred;
             }
         }
 
-        /*
-         * 3. أعلى أولوية بين المصادر المتوفرة.
-         */
-        CodeGeneratorProvider best =
-                null;
+        CodeGeneratorProvider best = null;
 
         for (CodeGeneratorProvider provider :
                 providers.values()) {
@@ -268,12 +377,12 @@ public final class CodeGenerationEngine {
     /**
      * توليد الكود.
      *
-     * لا توجد كتابة للمشروع هنا.
+     * إذا لم يكن هناك مزود معروف، يحاول اكتشاف مزودين
+     * قبل إعلان عدم توفر التوليد.
      */
     public synchronized JarvisResult<GeneratedCode> generate(
             GenerationRequest request
     ) {
-
         if (request == null ||
                 !request.isValid()) {
 
@@ -293,6 +402,17 @@ public final class CodeGenerationEngine {
 
         CodeGeneratorProvider provider =
                 selectProvider(request);
+
+        /*
+         * إذا لم يوجد مصدر، نحاول الاكتشاف تلقائياً.
+         */
+        if (provider == null &&
+                !discoveryEngines.isEmpty()) {
+
+            discoverProviders(request);
+
+            provider = selectProvider(request);
+        }
 
         if (provider == null) {
 
@@ -395,8 +515,8 @@ public final class CodeGenerationEngine {
         } catch (Exception e) {
 
             String message =
-                    "Code generation failed: "
-                            + safeMessage(e);
+                    "Code generation failed: " +
+                            safeMessage(e);
 
             saveRecord(
                     new GenerationRecord(
@@ -422,15 +542,12 @@ public final class CodeGenerationEngine {
 
     /**
      * تحويل الكود المولد إلى ChangeSet.
-     *
-     * لا تتم الكتابة هنا.
      */
     public JarvisResult<SourceEvolutionEngine.ChangeSet>
     createChangeSet(
             GenerationRequest request,
             GeneratedCode generatedCode
     ) {
-
         if (request == null ||
                 !request.isValid()) {
 
@@ -540,15 +657,13 @@ public final class CodeGenerationEngine {
     }
 
     /**
-     * التحقق البنيوي للكود المولد.
+     * التحقق البنيوي للكود.
      */
     public JarvisResult<Void> validateGeneratedCode(
             GenerationRequest request,
             GeneratedCode generatedCode
     ) {
-
         if (generatedCode == null) {
-
             return failure(
                     JarvisError.Type.VALIDATION_FAILED,
                     "Generated code cannot be null."
@@ -556,7 +671,6 @@ public final class CodeGenerationEngine {
         }
 
         if (generatedCode.getGenerationId().isEmpty()) {
-
             return failure(
                     JarvisError.Type.VALIDATION_FAILED,
                     "Generation ID cannot be empty."
@@ -564,7 +678,6 @@ public final class CodeGenerationEngine {
         }
 
         if (generatedCode.getProviderId().isEmpty()) {
-
             return failure(
                     JarvisError.Type.VALIDATION_FAILED,
                     "Provider ID cannot be empty."
@@ -572,7 +685,6 @@ public final class CodeGenerationEngine {
         }
 
         if (generatedCode.getFiles().isEmpty()) {
-
             return failure(
                     JarvisError.Type.VALIDATION_FAILED,
                     "Generated code contains no files."
@@ -595,9 +707,7 @@ public final class CodeGenerationEngine {
             }
 
             String path =
-                    normalizePath(
-                            file.getPath()
-                    );
+                    normalizePath(file.getPath());
 
             if (!paths.add(path)) {
 
@@ -627,10 +737,6 @@ public final class CodeGenerationEngine {
             }
         }
 
-        /*
-         * إذا كان الطلب محدداً بمسارات مسموحة،
-         * لا يسمح للكود بالخروج منها.
-         */
         if (request != null &&
                 !request.getAllowedPaths().isEmpty()) {
 
@@ -656,14 +762,10 @@ public final class CodeGenerationEngine {
         );
     }
 
-    /**
-     * التحقق من أن المسار داخل المجال المسموح.
-     */
     private boolean isAllowedPath(
             String path,
             Set<String> allowedPaths
     ) {
-
         for (String allowed :
                 allowedPaths) {
 
@@ -671,9 +773,7 @@ public final class CodeGenerationEngine {
                     normalizePath(allowed);
 
             if (path.equals(normalized) ||
-                    path.startsWith(
-                            normalized + "/"
-                    )) {
+                    path.startsWith(normalized + "/")) {
 
                 return true;
             }
@@ -683,29 +783,20 @@ public final class CodeGenerationEngine {
     }
 
     /**
-     * حماية الملفات الحساسة.
-     *
-     * Security Boundary لا يمكن للكود المولد
-     * أن يعدله مباشرة.
+     * حماية Security Boundary وManifest.
      */
     private boolean isProtectedPath(
             String path
     ) {
-
         String lower =
                 normalizePath(path)
                         .toLowerCase();
 
         String[] protectedFragments = {
-
                 "security/",
-
                 "/security/",
-
                 "ownersecurityboundary",
-
                 "owner_security",
-
                 "androidmanifest.xml"
         };
 
@@ -720,13 +811,9 @@ public final class CodeGenerationEngine {
         return false;
     }
 
-    /**
-     * إنشاء ID فريد للتغيير.
-     */
     private String buildChangeSetId(
             GenerationRequest request
     ) {
-
         String seed =
                 request.getCapabilityId()
                         + "|"
@@ -736,21 +823,16 @@ public final class CodeGenerationEngine {
                         + "|"
                         + System.currentTimeMillis();
 
-        return "generated_"
-                + sha256(seed)
-                .substring(0, 16);
+        return "generated_" +
+                sha256(seed).substring(0, 16);
     }
 
     private String sha256(
             String value
     ) {
-
         try {
-
             MessageDigest digest =
-                    MessageDigest.getInstance(
-                            "SHA-256"
-                    );
+                    MessageDigest.getInstance("SHA-256");
 
             byte[] bytes =
                     digest.digest(
@@ -763,7 +845,6 @@ public final class CodeGenerationEngine {
                     new StringBuilder();
 
             for (byte b : bytes) {
-
                 builder.append(
                         String.format(
                                 "%02x",
@@ -775,7 +856,6 @@ public final class CodeGenerationEngine {
             return builder.toString();
 
         } catch (Exception e) {
-
             return Integer.toHexString(
                     value.hashCode()
             );
@@ -785,25 +865,20 @@ public final class CodeGenerationEngine {
     private void saveRecord(
             GenerationRecord record
     ) {
-
-        lastRecord =
-                record;
+        lastRecord = record;
     }
 
     private String normalize(
             String value
     ) {
-
         return value == null
                 ? ""
-                : value.trim()
-                        .toLowerCase();
+                : value.trim().toLowerCase();
     }
 
     private String normalizePath(
             String path
     ) {
-
         if (path == null) {
             return "";
         }
@@ -811,20 +886,13 @@ public final class CodeGenerationEngine {
         return path
                 .trim()
                 .replace('\\', '/')
-                .replaceAll(
-                        "^\\./+",
-                        ""
-                )
-                .replaceAll(
-                        "/+",
-                        "/"
-                );
+                .replaceAll("^\\./+", "")
+                .replaceAll("/+", "/");
     }
 
     private String safeMessage(
             Exception e
     ) {
-
         if (e == null ||
                 e.getMessage() == null) {
 
@@ -838,7 +906,6 @@ public final class CodeGenerationEngine {
             JarvisError.Type type,
             String message
     ) {
-
         return JarvisResult.failure(
                 JarvisError.of(
                         type,
@@ -849,7 +916,6 @@ public final class CodeGenerationEngine {
     }
 
     public synchronized List<String> getProviderIds() {
-
         return Collections.unmodifiableList(
                 new ArrayList<>(
                         providers.keySet()
@@ -859,6 +925,10 @@ public final class CodeGenerationEngine {
 
     public synchronized int getProviderCount() {
         return providers.size();
+    }
+
+    public synchronized int getDiscoveryEngineCount() {
+        return discoveryEngines.size();
     }
 
     public String getPreferredProviderId() {
@@ -878,14 +948,7 @@ public final class CodeGenerationEngine {
     }
 
     /**
-     * عقد أي مصدر توليد.
-     *
-     * يمكن لاحقاً ربط:
-     *
-     * Local AI
-     * Remote AI
-     * Open-source model
-     * JARVIS Native Generator
+     * عقد مزود توليد الكود.
      */
     public interface CodeGeneratorProvider {
 
@@ -905,7 +968,28 @@ public final class CodeGenerationEngine {
     }
 
     /**
-     * طلب توليد كود.
+     * عقد اكتشاف مزودي توليد الكود.
+     *
+     * الطبقات العليا تقدر تربط هنا:
+     * - الإنترنت
+     * - مصادر مفتوحة
+     * - API discovery
+     * - Local AI
+     * - مستقبل JARVIS Native Generator
+     */
+    public interface ProviderDiscovery {
+
+        String getId();
+
+        boolean isAvailable();
+
+        List<CodeGeneratorProvider> discover(
+                GenerationRequest request
+        );
+    }
+
+    /**
+     * طلب التوليد.
      */
     public static final class GenerationRequest {
 
@@ -933,22 +1017,11 @@ public final class CodeGenerationEngine {
                 Set<String> requiredTools,
                 Set<String> successCriteria
         ) {
-
-            this.capabilityId =
-                    safe(capabilityId);
-
-            this.goal =
-                    safe(goal);
-
-            this.description =
-                    safe(description);
-
-            this.reason =
-                    safe(reason);
-
-            this.projectContext =
-                    safe(projectContext);
-
+            this.capabilityId = safe(capabilityId);
+            this.goal = safe(goal);
+            this.description = safe(description);
+            this.reason = safe(reason);
+            this.projectContext = safe(projectContext);
             this.preferredProviderId =
                     safe(preferredProviderId);
 
@@ -966,7 +1039,6 @@ public final class CodeGenerationEngine {
         }
 
         public boolean isValid() {
-
             return !capabilityId.isEmpty() &&
                     !goal.isEmpty() &&
                     !reason.isEmpty();
@@ -997,28 +1069,24 @@ public final class CodeGenerationEngine {
         }
 
         public Set<String> getAllowedPaths() {
-
             return Collections.unmodifiableSet(
                     allowedPaths
             );
         }
 
         public Set<String> getRequiredFiles() {
-
             return Collections.unmodifiableSet(
                     requiredFiles
             );
         }
 
         public Set<String> getRequiredTools() {
-
             return Collections.unmodifiableSet(
                     requiredTools
             );
         }
 
         public Set<String> getSuccessCriteria() {
-
             return Collections.unmodifiableSet(
                     successCriteria
             );
@@ -1027,7 +1095,6 @@ public final class CodeGenerationEngine {
         private static String safe(
                 String value
         ) {
-
             return value == null
                     ? ""
                     : value.trim();
@@ -1036,7 +1103,6 @@ public final class CodeGenerationEngine {
         private static Set<String> copy(
                 Set<String> source
         ) {
-
             Set<String> result =
                     new LinkedHashSet<>();
 
@@ -1064,7 +1130,7 @@ public final class CodeGenerationEngine {
     }
 
     /**
-     * الكود الذي رجع من مصدر التوليد.
+     * الكود الناتج.
      */
     public static final class GeneratedCode {
 
@@ -1079,7 +1145,6 @@ public final class CodeGenerationEngine {
                 String explanation,
                 List<GeneratedFile> files
         ) {
-
             this.generationId =
                     safe(generationId);
 
@@ -1093,7 +1158,6 @@ public final class CodeGenerationEngine {
                     new ArrayList<>();
 
             if (files != null) {
-
                 for (GeneratedFile file :
                         files) {
 
@@ -1103,8 +1167,7 @@ public final class CodeGenerationEngine {
                 }
             }
 
-            this.files =
-                    copy;
+            this.files = copy;
         }
 
         public String getGenerationId() {
@@ -1120,7 +1183,6 @@ public final class CodeGenerationEngine {
         }
 
         public List<GeneratedFile> getFiles() {
-
             return Collections.unmodifiableList(
                     files
             );
@@ -1129,7 +1191,6 @@ public final class CodeGenerationEngine {
         private static String safe(
                 String value
         ) {
-
             return value == null
                     ? ""
                     : value.trim();
@@ -1137,7 +1198,7 @@ public final class CodeGenerationEngine {
     }
 
     /**
-     * ملف واحد ناتج عن التوليد.
+     * ملف مولد.
      */
     public static final class GeneratedFile {
 
@@ -1153,7 +1214,6 @@ public final class CodeGenerationEngine {
                 SourceEvolutionEngine.FileChange.Operation operation,
                 String content
         ) {
-
             this.path =
                     path == null
                             ? ""
@@ -1206,7 +1266,6 @@ public final class CodeGenerationEngine {
 
         public SourceEvolutionEngine.FileChange.Operation
         getOperation() {
-
             return operation;
         }
 
@@ -1216,7 +1275,7 @@ public final class CodeGenerationEngine {
     }
 
     /**
-     * سجل آخر عملية توليد.
+     * سجل التوليد.
      */
     public static final class GenerationRecord {
 
@@ -1224,7 +1283,6 @@ public final class CodeGenerationEngine {
         private final String providerId;
         private final boolean success;
         private final String message;
-
         private final long startedAt;
         private final long finishedAt;
 
@@ -1236,7 +1294,6 @@ public final class CodeGenerationEngine {
                 long startedAt,
                 long finishedAt
         ) {
-
             this.capabilityId =
                     capabilityId;
 
@@ -1281,9 +1338,7 @@ public final class CodeGenerationEngine {
         }
 
         public long getDurationMillis() {
-
-            return finishedAt -
-                    startedAt;
+            return finishedAt - startedAt;
         }
     }
 }
