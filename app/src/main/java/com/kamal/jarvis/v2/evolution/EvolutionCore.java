@@ -23,7 +23,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * -> DISCOVERY
  * -> PLANNING
  * -> EXECUTION / PERMISSION / BUILD
- * -> EVOLUTION
+ * -> CODE GENERATION
+ * -> SOURCE EVOLUTION
+ * -> BUILD
+ * -> TEST
  * -> VERIFICATION
  * -> ACTIVATION
  * -> READY
@@ -32,6 +35,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * JarvisBrain يمكنه تمرير المعرفة الخارجية الموثقة
  * عبر ToolInput بدون جعل EvolutionCore مرتبطاً مباشرة
  * بـ KnowledgeLearningEngine.
+ *
+ * Code generation integration:
+ * CodeGenerationEngine مسؤول عن اختيار مصدر توليد
+ * الكود، التحقق من الملفات الناتجة، وتحويلها إلى
+ * SourceEvolutionEngine.ChangeSet.
+ *
+ * الكتابة الفعلية للمشروع لا تتم مباشرة هنا.
+ * EvolutionOrchestrator هو المسؤول عن تطبيق ChangeSet
+ * ثم البناء والاختبار والتحقق والاسترجاع عند الفشل.
  */
 public final class EvolutionCore {
 
@@ -42,6 +54,7 @@ public final class EvolutionCore {
     private final CapabilityExecutor executor;
     private final EvolutionOrchestrator orchestrator;
     private final CapabilityActivation activation;
+    private final CodeGenerationEngine codeGenerationEngine;
 
     private final Map<String, EvolutionRecord> records =
             new ConcurrentHashMap<>();
@@ -105,6 +118,11 @@ public final class EvolutionCore {
                         : new CapabilityActivation(
                                 toolRegistry
                         );
+
+        this.codeGenerationEngine =
+                new CodeGenerationEngine(
+                        orchestrator.getSecurityBoundary()
+                );
     }
 
     public synchronized JarvisResult<EvolutionAnalysis> analyze(
@@ -353,6 +371,13 @@ public final class EvolutionCore {
 
         /*
          * BUILD CAPABILITY
+         *
+         * إذا كان عندنا Provider حقيقي داخل
+         * CodeGenerationEngine، نحاول توليد الكود
+         * وتحويله إلى ChangeSet.
+         *
+         * إذا لم يوجد Provider بعد، يبقى المسار
+         * القديم محفوظاً ولا يتم اختراع نجاح وهمي.
          */
         if (plan.getAction()
                 == CapabilityPlan.Action.BUILD_CAPABILITY) {
@@ -398,6 +423,178 @@ public final class EvolutionCore {
                 );
             }
 
+            /*
+             * CODE GENERATION PATH
+             *
+             * لا نستعمله إلا إذا كان هناك Provider
+             * مسجل ومتاح.
+             */
+            if (codeGenerationEngine != null &&
+                    codeGenerationEngine.getProviderCount() > 0) {
+
+                state =
+                        EvolutionState.CODE_GENERATING;
+
+                CodeGenerationEngine.GenerationRequest
+                        generationRequest;
+
+                try {
+
+                    generationRequest =
+                            new CodeGenerationEngine.GenerationRequest(
+                                    spec.getCapabilityId(),
+                                    spec.getGoal(),
+                                    spec.getDescription(),
+                                    "Generate implementation for capability: "
+                                            + spec.getCapabilityId(),
+                                    "",
+                                    null,
+                                    spec.getAllowedFiles(),
+                                    spec.getRequiredFiles(),
+                                    spec.getRequiredTools(),
+                                    spec.getSuccessCriteria()
+                            );
+
+                } catch (Exception exception) {
+
+                    state =
+                            EvolutionState.FAILED;
+
+                    return JarvisResult.failure(
+                            JarvisError.fromException(
+                                    JarvisError.Type.EVOLUTION_FAILED,
+                                    "Failed to create code generation request.",
+                                    CORE_ID,
+                                    exception
+                            )
+                    );
+                }
+
+                JarvisResult<
+                        CodeGenerationEngine.GenerationRecord
+                        > generationResult =
+                        codeGenerationEngine.generate(
+                                generationRequest
+                        );
+
+                if (generationResult == null ||
+                        !generationResult.isSuccess()) {
+
+                    state =
+                            EvolutionState.FAILED;
+
+                    return generationResult == null
+                            ? failure(
+                                    JarvisError.Type.EVOLUTION_FAILED,
+                                    "Code generation returned no result."
+                            )
+                            : JarvisResult.failure(
+                                    generationResult.getError()
+                            );
+                }
+
+                CodeGenerationEngine.GenerationRecord
+                        generationRecord =
+                        generationResult.getData();
+
+                if (generationRecord == null ||
+                        generationRecord.getGeneratedCode() == null) {
+
+                    state =
+                            EvolutionState.FAILED;
+
+                    return failure(
+                            JarvisError.Type.EVOLUTION_FAILED,
+                            "Code generation produced no validated code."
+                    );
+                }
+
+                CodeGenerationEngine.GeneratedCode
+                        generatedCode =
+                        generationRecord.getGeneratedCode();
+
+                JarvisResult<
+                        SourceEvolutionEngine.ChangeSet
+                        > changeSetResult =
+                        codeGenerationEngine.createChangeSet(
+                                generationRequest,
+                                generatedCode
+                        );
+
+                if (changeSetResult == null ||
+                        !changeSetResult.isSuccess()) {
+
+                    state =
+                            EvolutionState.FAILED;
+
+                    return changeSetResult == null
+                            ? failure(
+                                    JarvisError.Type.EVOLUTION_FAILED,
+                                    "Generated code could not be converted into a ChangeSet."
+                            )
+                            : JarvisResult.failure(
+                                    changeSetResult.getError()
+                            );
+                }
+
+                SourceEvolutionEngine.ChangeSet
+                        changeSet =
+                        changeSetResult.getData();
+
+                if (changeSet == null ||
+                        !changeSet.isValid()) {
+
+                    state =
+                            EvolutionState.FAILED;
+
+                    return failure(
+                            JarvisError.Type.VALIDATION_FAILED,
+                            "Generated ChangeSet is invalid."
+                    );
+                }
+
+                state =
+                        EvolutionState.APPLYING_SOURCE_CHANGES;
+
+                JarvisResult<
+                        EvolutionOrchestrator.EvolutionRecord
+                        > evolutionResult =
+                        orchestrator.evolve(
+                                spec,
+                                changeSet
+                        );
+
+                if (evolutionResult == null ||
+                        !evolutionResult.isSuccess()) {
+
+                    state =
+                            EvolutionState.FAILED;
+
+                    return evolutionResult == null
+                            ? failure(
+                                    JarvisError.Type.EVOLUTION_FAILED,
+                                    "EvolutionOrchestrator returned no result after code generation."
+                            )
+                            : JarvisResult.failure(
+                                    evolutionResult.getError()
+                            );
+                }
+
+                return finishEvolution(
+                        requirement,
+                        plan,
+                        spec,
+                        evolutionResult
+                );
+            }
+
+            /*
+             * FALLBACK
+             *
+             * Provider system موجود ولكن لا يوجد Provider
+             * حقيقي بعد، لذلك نستعمل مسار Evolution
+             * الحالي بدون ادعاء أن الكود تم توليده.
+             */
             JarvisResult<
                     EvolutionOrchestrator.EvolutionRecord
                     > evolutionResult =
@@ -421,97 +618,11 @@ public final class EvolutionCore {
                         );
             }
 
-            EvolutionOrchestrator.EvolutionRecord
-                    evolutionRecord =
-                    evolutionResult.getData();
-
-            if (evolutionRecord == null) {
-
-                state =
-                        EvolutionState.FAILED;
-
-                return failure(
-                        JarvisError.Type.EVOLUTION_FAILED,
-                        "Evolution returned no record."
-                );
-            }
-
-            if (!evolutionRecord.isReady()) {
-
-                state =
-                        EvolutionState.FAILED;
-
-                return failure(
-                        JarvisError.Type.EVOLUTION_FAILED,
-                        "Evolution completed without producing a ready capability."
-                );
-            }
-
-            CapabilityActivation.ActivationRecord
-                    activationRecord = null;
-
-            if (activation != null) {
-
-                JarvisResult<
-                        CapabilityActivation.ActivationRecord
-                        > activationResult =
-                        activation.activate(
-                                spec
-                        );
-
-                if (activationResult != null &&
-                        activationResult.isSuccess()) {
-
-                    activationRecord =
-                            activationResult.getData();
-
-                    if (activationRecord == null ||
-                            !activationRecord.isActive()) {
-
-                        state =
-                                EvolutionState.FAILED;
-
-                        return failure(
-                                JarvisError.Type.EVOLUTION_FAILED,
-                                "Capability activation returned an invalid active state."
-                        );
-                    }
-
-                    state =
-                            EvolutionState.ACTIVATED;
-
-                } else {
-
-                    state =
-                            EvolutionState.READY;
-                }
-
-            } else {
-
-                state =
-                        EvolutionState.READY;
-            }
-
-            saveRecord(
-                    requirement.getCapabilityId(),
-                    evolutionRecord,
-                    activationRecord
-            );
-
-            EvolutionExecutionResult built =
-                    EvolutionExecutionResult.built(
-                            plan,
-                            evolutionRecord,
-                            activationRecord,
-                            activationRecord != null
-                                    && activationRecord.isActive()
-                                    ? "Capability was built, verified and activated."
-                                    : "Capability was built and verified. Runtime activation is waiting for an executable tool."
-                    );
-
-            return JarvisResult.success(
-                    built,
-                    built.getMessage()
+            return finishEvolution(
+                    requirement,
+                    plan,
+                    spec,
+                    evolutionResult
             );
         }
 
@@ -522,6 +633,112 @@ public final class EvolutionCore {
                 JarvisError.Type.TOOL_UNAVAILABLE,
                 "No valid execution or evolution path is available for capability: "
                         + requirement.getCapabilityId()
+        );
+    }
+
+    private JarvisResult<EvolutionExecutionResult> finishEvolution(
+            CapabilityRequirement requirement,
+            CapabilityPlan plan,
+            CapabilitySpec spec,
+            JarvisResult<
+                    EvolutionOrchestrator.EvolutionRecord
+                    > evolutionResult
+    ) {
+
+        EvolutionOrchestrator.EvolutionRecord
+                evolutionRecord =
+                evolutionResult.getData();
+
+        if (evolutionRecord == null) {
+
+            state =
+                    EvolutionState.FAILED;
+
+            return failure(
+                    JarvisError.Type.EVOLUTION_FAILED,
+                    "Evolution returned no record."
+            );
+        }
+
+        if (!evolutionRecord.isReady()) {
+
+            state =
+                    EvolutionState.FAILED;
+
+            return failure(
+                    JarvisError.Type.EVOLUTION_FAILED,
+                    "Evolution completed without producing a ready capability."
+            );
+        }
+
+        CapabilityActivation.ActivationRecord
+                activationRecord = null;
+
+        if (activation != null) {
+
+            state =
+                    EvolutionState.ACTIVATING;
+
+            JarvisResult<
+                    CapabilityActivation.ActivationRecord
+                    > activationResult =
+                    activation.activate(
+                            spec
+                    );
+
+            if (activationResult != null &&
+                    activationResult.isSuccess()) {
+
+                activationRecord =
+                        activationResult.getData();
+
+                if (activationRecord == null ||
+                        !activationRecord.isActive()) {
+
+                    state =
+                            EvolutionState.FAILED;
+
+                    return failure(
+                            JarvisError.Type.EVOLUTION_FAILED,
+                            "Capability activation returned an invalid active state."
+                    );
+                }
+
+                state =
+                        EvolutionState.ACTIVATED;
+
+            } else {
+
+                state =
+                        EvolutionState.READY;
+            }
+
+        } else {
+
+            state =
+                    EvolutionState.READY;
+        }
+
+        saveRecord(
+                requirement.getCapabilityId(),
+                evolutionRecord,
+                activationRecord
+        );
+
+        EvolutionExecutionResult built =
+                EvolutionExecutionResult.built(
+                        plan,
+                        evolutionRecord,
+                        activationRecord,
+                        activationRecord != null
+                                && activationRecord.isActive()
+                                ? "Capability was built, verified and activated."
+                                : "Capability was built and verified. Runtime activation is waiting for an executable tool."
+                );
+
+        return JarvisResult.success(
+                built,
+                built.getMessage()
         );
     }
 
@@ -1162,6 +1379,12 @@ public final class EvolutionCore {
                 EvolutionState.BUILDING
                 ||
                 state ==
+                EvolutionState.CODE_GENERATING
+                ||
+                state ==
+                EvolutionState.APPLYING_SOURCE_CHANGES
+                ||
+                state ==
                 EvolutionState.ACTIVATING;
     }
 
@@ -1200,6 +1423,10 @@ public final class EvolutionCore {
         return orchestrator;
     }
 
+    public CodeGenerationEngine getCodeGenerationEngine() {
+        return codeGenerationEngine;
+    }
+
     public static String getCoreId() {
         return CORE_ID;
     }
@@ -1217,6 +1444,10 @@ public final class EvolutionCore {
         BUILD_REQUIRED,
 
         BUILDING,
+
+        CODE_GENERATING,
+
+        APPLYING_SOURCE_CHANGES,
 
         ACTIVATING,
 
