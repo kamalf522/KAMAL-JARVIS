@@ -178,7 +178,6 @@ public final class CodeProviderDiscoveryBridge
                             || !endpoint.isUsable()) {
                         continue;
                     }
-
                     String providerId =
                             endpoint.providerId();
 
@@ -358,7 +357,6 @@ public final class CodeProviderDiscoveryBridge
                 new LinkedHashSet<>();
 
         try {
-
             URI uri =
                     URI.create(sourceUrl);
 
@@ -898,6 +896,7 @@ public final class CodeProviderDiscoveryBridge
 
             builder.append(
                     "\n\nREQUIRED FILES:\n"
+            );
             );
 
             appendSet(
@@ -1617,7 +1616,6 @@ public final class CodeProviderDiscoveryBridge
     private static boolean looksLikeJson(
             String value
     ) {
-
         if (value == null) {
             return false;
         }
